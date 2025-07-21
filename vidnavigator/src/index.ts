@@ -33,7 +33,7 @@ interface ApiSuccessResponse<T> {
 }
 //endregion
 
-export class VidNavigatorSDK {
+export class VidNavigatorClient {
   private client: AxiosInstance;
 
   constructor(config: SDKConfig) {
