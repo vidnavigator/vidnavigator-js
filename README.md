@@ -12,7 +12,6 @@ vidnavigator-js/
 │   ├── package.json       # SDK package configuration
 │   └── README.md          # SDK documentation
 ├── test.js                # 🧪 Local testing script
-├── openapi.json           # 📋 API specification
 └── README.md              # 📖 This file
 ```
 
