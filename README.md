@@ -54,9 +54,9 @@ npm install ./vidnavigator
 
 Then use in your code:
 ```js
-const { VidNavigatorSDK } = require('vidnavigator');
+const { VidNavigatorClient } = require('vidnavigator');
 
-const sdk = new VidNavigatorSDK({
+const sdk = new VidNavigatorClient({
   apiKey: process.env.VIDNAVIGATOR_API_KEY
 });
 

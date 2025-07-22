@@ -8,8 +8,6 @@ import {
   TranscriptSegmentJSON,
   FileInfo,
   FileInfoJSON,
-  UploadedFileInfo,
-  UploadedFileInfoJSON,
   AnalysisResult,
   AnalysisResultJSON,
   VideoSearchResult,
@@ -163,18 +161,18 @@ export class VidNavigatorClient {
   }
 
   async analyzeFile(payload: { file_id: string; query?: string }): Promise<{
-    file_info: UploadedFileInfo;
+    file_info: FileInfo;
     transcript: TranscriptSegment[];
     transcript_analysis: AnalysisResult;
   }> {
     const response = await this.request<ApiSuccessResponse<{
-      file_info: UploadedFileInfoJSON;
+      file_info: FileInfoJSON;
       transcript: TranscriptSegmentJSON[];
       transcript_analysis: AnalysisResultJSON;
     }>>('POST', '/analyze/file', payload);
 
     return {
-      file_info: UploadedFileInfo.fromJSON(response.data.file_info),
+      file_info: FileInfo.fromJSON(response.data.file_info),
       transcript: response.data.transcript.map(TranscriptSegment.fromJSON),
       transcript_analysis: AnalysisResult.fromJSON(response.data.transcript_analysis),
     };

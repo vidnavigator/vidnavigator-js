@@ -51,48 +51,4 @@ export class FileInfo {
   toJSON(): FileInfoJSON {
     return { ...this };
   }
-}
-
-export interface UploadedFileInfoJSON {
-    title?: string;
-    file_id: string;
-    filename: string;
-    file_size?: number;
-    file_type?: string;
-    duration?: number;
-    created_at: string;
-    original_file_date?: string;
-  }
-  
-  /**
-   * Represents the specific metadata for a newly uploaded file before it is fully processed.
-   */
-  export class UploadedFileInfo {
-    title?: string;
-    file_id: string;
-    filename: string;
-    file_size?: number;
-    file_type?: string;
-    duration?: number;
-    created_at: string;
-    original_file_date?: string;
-  
-    constructor(data: UploadedFileInfoJSON) {
-      this.title = data.title;
-      this.file_id = data.file_id;
-      this.filename = data.filename;
-      this.file_size = data.file_size;
-      this.file_type = data.file_type;
-      this.duration = data.duration;
-      this.created_at = data.created_at;
-      this.original_file_date = data.original_file_date;
-    }
-  
-    static fromJSON(json: UploadedFileInfoJSON): UploadedFileInfo {
-      return new UploadedFileInfo(json);
-    }
-  
-    toJSON(): UploadedFileInfoJSON {
-      return { ...this };
-    }
-  } 
+} 

@@ -25,9 +25,9 @@ yarn add vidnavigator
 First, initialize the SDK with your API key. It's recommended to store your key in an environment variable.
 
 ```ts
-import { VidNavigatorSDK } from 'vidnavigator';
+import { VidNavigatorClient } from 'vidnavigator';
 
-const sdk = new VidNavigatorSDK({
+const sdk = new VidNavigatorClient({
   apiKey: process.env.VIDNAVIGATOR_API_KEY!,
 });
 ```
@@ -37,9 +37,9 @@ Now you can easily call any of the API methods.
 ### Example: Get a Video Transcript
 
 ```ts
-import { VidNavigatorSDK, VideoInfo } from 'vidnavigator';
+import { VidNavigatorClient, VideoInfo } from 'vidnavigator';
 
-const sdk = new VidNavigatorSDK({ apiKey: 'YOUR_API_KEY' });
+const sdk = new VidNavigatorClient({ apiKey: 'YOUR_API_KEY' });
 
 async function getRickAstleyTranscript() {
   try {
@@ -64,9 +64,9 @@ getRickAstleyTranscript();
 ### Example: Upload and Analyze a File
 
 ```ts
-import { VidNavigatorSDK } from 'vidnavigator';
+import { VidNavigatorClient } from 'vidnavigator';
 
-const sdk = new VidNavigatorSDK({ apiKey: 'YOUR_API_KEY' });
+const sdk = new VidNavigatorClient({ apiKey: 'YOUR_API_KEY' });
 
 async function uploadAndAnalyze(filePath: string) {
   try {
