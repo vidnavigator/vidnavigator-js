@@ -41,12 +41,12 @@ node test.js
 
 ### 3. Use in Your Project
 
-#### Option A: Install from npm (when published)
+Install from npm:
 ```bash
 npm install vidnavigator
 ```
 
-#### Option B: Install locally for development
+Or, for local development, you can link the package:
 ```bash
 npm install ./vidnavigator
 ```
@@ -76,7 +76,6 @@ cd vidnavigator && npm run build
 ```bash
 node test.js
 ```
-
 ### Publishing to npm
 ```bash
 cd vidnavigator
@@ -92,3 +91,4 @@ npm publish
 ## License
 
 Apache-2.0
+

@@ -27,7 +27,7 @@ First, initialize the SDK with your API key. It's recommended to store your key 
 ```ts
 import { VidNavigatorClient } from 'vidnavigator';
 
-const sdk = new VidNavigatorClient({
+const vn = new VidNavigatorClient({
   apiKey: process.env.VIDNAVIGATOR_API_KEY!,
 });
 ```
@@ -39,11 +39,11 @@ Now you can easily call any of the API methods.
 ```ts
 import { VidNavigatorClient, VideoInfo } from 'vidnavigator';
 
-const sdk = new VidNavigatorClient({ apiKey: 'YOUR_API_KEY' });
+const vn = new VidNavigatorClient({ apiKey: 'YOUR_API_KEY' });
 
-async function getRickAstleyTranscript() {
+async function getTranscript() {
   try {
-    const { video_info, transcript } = await sdk.getTranscript({
+    const { video_info, transcript } = await vn.getTranscript({
       video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
     });
 
@@ -58,7 +58,7 @@ async function getRickAstleyTranscript() {
   }
 }
 
-getRickAstleyTranscript();
+getTranscript();
 ```
 
 ### Example: Upload and Analyze a File
@@ -66,19 +66,19 @@ getRickAstleyTranscript();
 ```ts
 import { VidNavigatorClient } from 'vidnavigator';
 
-const sdk = new VidNavigatorClient({ apiKey: 'YOUR_API_KEY' });
+const vn = new VidNavigatorClient({ apiKey: 'YOUR_API_KEY' });
 
 async function uploadAndAnalyze(filePath: string) {
   try {
     // Upload the file and wait for processing to complete
-    const { file_info } = await sdk.uploadFile({ 
+    const { file_info } = await vn.uploadFile({ 
       filePath, 
       wait_for_completion: true 
     });
     console.log(`File '${file_info.name}' uploaded successfully.`);
 
     // Analyze the uploaded file
-    const { transcript_analysis } = await sdk.analyzeFile({ 
+    const { transcript_analysis } = await vn.analyzeFile({ 
       file_id: file_info.id 
     });
     console.log('--- Analysis Summary ---');
@@ -97,27 +97,35 @@ uploadAndAnalyze('./my-meeting.mp4');
 All methods return a `Promise` that resolves with an object containing rich data models.
 
 ### Transcripts
-- `sdk.getTranscript(payload)`
+- `vn.getTranscript(payload)`
 
 ### Files
-- `sdk.getFiles([query])`
-- `sdk.getFile(file_id)`
-- `sdk.uploadFile(options)`
-- `sdk.deleteFile(file_id)`
+- `vn.getFiles([query])`
+- `vn.getFile(file_id)`
+- `vn.uploadFile(options)`
+- `vn.deleteFile(file_id)`
 
 ### Analysis
-- `sdk.analyzeVideo(payload)`
-- `sdk.analyzeFile(payload)`
+- `vn.analyzeVideo(payload)`
+- `vn.analyzeFile(payload)`
 
 ### Search
-- `sdk.searchVideos(payload)`
-- `sdk.searchFiles(payload)`
+- `vn.searchVideos(payload)`
+- `vn.searchFiles(payload)`
 
 ### System
-- `sdk.getUsage()`
-- `sdk.healthCheck()`
+- `vn.getUsage()`
+- `vn.healthCheck()`
 
 Please refer to the inline documentation in your IDE for detailed information on the payloads and return types for each method.
+
+
+## More Examples & Documentation
+
+For a comprehensive set of usage examples covering more SDK features, please see the [`test.py`](https://github.com/vidnavigator/vidnavigator-js/blob/main/test.js)
+
+For full API documentation, visit [docs.vidnavigator.com](https://docs.vidnavigator.com).
+
 
 ## License
 
