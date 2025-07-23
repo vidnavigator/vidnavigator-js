@@ -65,27 +65,14 @@ const { video_info, transcript } = await sdk.getTranscript({
 });
 ```
 
-## Development
-
-### Building
-```bash
-cd vidnavigator && npm run build
-```
-
 ### Testing
 ```bash
 node test.js
 ```
-### Publishing to npm
-```bash
-cd vidnavigator
-npm publish
-```
 
 ## API Documentation
 
-- Full API specification: `openapi.json`
-- SDK documentation: `vidnavigator/README.md`
+- SDK documentation: [docs.vidnavigator.com](https://docs.vidnavigator.com)
 - Test examples: `test.js`
 
 ## License
