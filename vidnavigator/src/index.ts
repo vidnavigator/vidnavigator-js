@@ -14,6 +14,8 @@ import {
   VideoSearchResultJSON,
   FileSearchResult,
   FileSearchResultJSON,
+  UsageData,
+  UsageDataJSON,
 } from './models';
 import {
   VidNavigatorError,
@@ -284,9 +286,9 @@ export class VidNavigatorClient {
   //endregion
 
   //region --- System ---
-  async getUsage(): Promise<any> {
-    const response = await this.request<ApiSuccessResponse<any>>('GET', '/usage');
-    return response.data;
+  async getUsage(): Promise<UsageData> {
+    const response = await this.request<ApiSuccessResponse<UsageDataJSON>>('GET', '/usage');
+    return UsageData.fromJSON(response.data);
   }
 
   async healthCheck(): Promise<any> {
