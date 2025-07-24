@@ -146,7 +146,9 @@ async function main() {
     console.log('  - Try uploading a file with: sdk.uploadFile({ filePath: "./your-file.mp4" })');
     console.log('  - Search through your files with: sdk.searchFiles({ query: "your search term" })');
     console.log('  - Analyze uploaded files with: sdk.analyzeFile({ file_id: "your-file-id" })');
-
+    console.log('  - Get a temporary URL for a file with: sdk.getFileUrl({ file_id: "your-file-id" })');
+    console.log('  - Retry a failed file with: sdk.retryFileProcessing({ file_id: "your-file-id" })');
+    console.log('  - Cancel a processing file with: sdk.cancelFileUpload({ file_id: "your-file-id" })');
   } catch (error) {
     console.error('💥 Unexpected error:', error);
   }

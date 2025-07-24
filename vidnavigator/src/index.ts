@@ -182,6 +182,30 @@ export class VidNavigatorClient {
       );
       return response.data;
   }
+
+  async getFileUrl(file_id: string): Promise<{ file_id: string; file_url: string }> {
+    const response = await this.request<ApiSuccessResponse<{ file_id: string; file_url: string }>>(
+        'GET',
+        `/file/${file_id}/url`
+    );
+    return response.data;
+  }
+
+  async retryFileProcessing(file_id: string): Promise<{ file_id: string; file_name: string; file_status: string; message: string }> {
+      const response = await this.request<ApiSuccessResponse<{ file_id: string; file_name: string; file_status: string; message: string }>>(
+          'POST',
+          `/file/${file_id}/retry`
+      );
+      return response.data;
+  }
+
+  async cancelFileUpload(file_id: string): Promise<{ file_id: string; file_name: string; message: string }> {
+      const response = await this.request<ApiSuccessResponse<{ file_id: string; file_name: string; message: string }>>(
+          'POST',
+          `/file/${file_id}/cancel`
+      );
+      return response.data;
+  }
   //endregion
 
   //region --- Analysis ---
