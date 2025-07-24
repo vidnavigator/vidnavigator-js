@@ -1,4 +1,12 @@
-const { VidNavigatorClient, VideoInfo, FileInfo, TranscriptSegment } = require('./vidnavigator');
+const {
+  VidNavigatorClient,
+  VideoInfo,
+  FileInfo,
+  TranscriptSegment,
+  AuthenticationError,
+  NotFoundError,
+  BadRequestError
+} = require('./vidnavigator');
 require('dotenv').config(); // Load environment variables from .env file
 
 async function main() {
@@ -32,7 +40,20 @@ async function main() {
       const usage = await client.getUsage();
       console.log('✅ Usage data retrieved:', usage);
     } catch (error) {
-      console.log('⚠️  Could not retrieve usage data:', error.response?.data?.message || error.message);
+      console.log('⚠️  Could not retrieve usage data:', error.message);
+    }
+    // Test for AuthenticationError
+    try {
+        console.log('🧪 Testing for AuthenticationError...');
+        const badClient = new VidNavigatorClient({ apiKey: 'invalid-api-key' });
+        await badClient.getUsage();
+    } catch (error) {
+        if (error instanceof AuthenticationError) {
+            console.log('✅ Correctly caught AuthenticationError:');
+            console.log(`   Status: ${error.status_code}, Message: ${error.error_message}`);
+        } else {
+            console.error('❌ Failed to catch AuthenticationError. Got:', error);
+        }
     }
     console.log();
 
@@ -60,9 +81,8 @@ async function main() {
         console.log(`     🎯 Is TranscriptSegment instance?`, segment instanceof TranscriptSegment);
       });
     } catch (error) {
-      console.log('❌ Transcript error:', error.response?.data?.message || error.message);
+      console.log('❌ Transcript error:', error.message);
     }
-    console.log();
 
     // Test 4: Analyze Video
     console.log('--- 4. Video Analysis Test ---');
@@ -106,7 +126,19 @@ async function main() {
         console.log('📭 No files uploaded yet');
       }
     } catch (error) {
-      console.log('❌ Files list error:', error.response?.data?.message || error.message);
+      console.log('❌ Files list error:', error.message);
+    }
+    // Test for NotFoundError
+    try {
+        console.log('🧪 Testing for NotFoundError...');
+        await client.getFile('non-existent-file-id');
+    } catch (error) {
+        if (error instanceof NotFoundError) {
+            console.log('✅ Correctly caught NotFoundError:');
+            console.log(`   Status: ${error.status_code}, Message: ${error.error_message}`);
+        } else {
+            console.error('❌ Failed to catch NotFoundError. Got:', error);
+        }
     }
 
     console.log('\n🎉 SDK Test completed successfully!');

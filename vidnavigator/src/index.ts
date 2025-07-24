@@ -15,8 +15,19 @@ import {
   FileSearchResult,
   FileSearchResultJSON,
 } from './models';
+import {
+  VidNavigatorError,
+  AuthenticationError,
+  BadRequestError,
+  AccessDeniedError,
+  NotFoundError,
+  RateLimitExceededError,
+  PaymentRequiredError,
+  ServerError,
+} from './errors';
 
 export * from './models';
+export * from './errors';
 
 //region --- Interfaces ---
 export interface SDKConfig {
@@ -50,14 +61,46 @@ export class VidNavigatorClient {
   }
 
   private async request<T>(method: 'GET' | 'POST' | 'DELETE' | 'PUT', url: string, data?: any, params?: any, extraHeaders?: any): Promise<T> {
-    const response = await this.client.request<T>({
-      method,
-      url,
-      data,
-      params,
-      headers: extraHeaders,
-    });
-    return response.data;
+    try {
+      const response = await this.client.request<T>({
+        method,
+        url,
+        data,
+        params,
+        headers: extraHeaders,
+      });
+      return response.data;
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response) {
+        const { status, data } = error.response;
+        const errorCode = data?.error?.code;
+        const errorMessage = data?.error?.message;
+        const errorDetails = data?.error?.details;
+        const message = `API request failed with status ${status}: ${errorMessage || error.message}`;
+
+        switch (status) {
+          case 400:
+            throw new BadRequestError(message, status, errorCode, errorMessage, errorDetails);
+          case 401:
+            throw new AuthenticationError(message, status, errorCode, errorMessage, errorDetails);
+          case 403:
+            throw new AccessDeniedError(message, status, errorCode, errorMessage, errorDetails);
+          case 404:
+            throw new NotFoundError(message, status, errorCode, errorMessage, errorDetails);
+          case 429:
+            throw new RateLimitExceededError(message, status, errorCode, errorMessage, errorDetails);
+          case 402:
+            throw new PaymentRequiredError(message, status, errorCode, errorMessage, errorDetails);
+          default:
+            if (status >= 500) {
+              throw new ServerError(message, status, errorCode, errorMessage, errorDetails);
+            }
+            throw new VidNavigatorError(message, status, errorCode, errorMessage, errorDetails);
+        }
+      }
+      // Re-throw other errors (e.g., network errors)
+      throw new VidNavigatorError(error.message);
+    }
   }
 
   //region --- Transcripts ---

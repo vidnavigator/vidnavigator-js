@@ -72,7 +72,7 @@ node test.js
 
 ## API Documentation
 
-- SDK documentation: [docs.vidnavigator.com](https://docs.vidnavigator.com)
+- SDK documentation: `vidnavigator/README.md`
 - Test examples: `test.js`
 
 ## License
