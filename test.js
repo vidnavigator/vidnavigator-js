@@ -84,8 +84,42 @@ async function main() {
       console.log('❌ Transcript error:', error.message);
     }
 
-    // Test 4: Analyze Video
-    console.log('--- 4. Video Analysis Test ---');
+    // Test for BadRequestError on getTranscript
+    try {
+        console.log('🧪 Testing for BadRequestError on getTranscript...');
+        await client.getTranscript({ video_url: 'not-a-valid-url' });
+    } catch (error) {
+        if (error instanceof BadRequestError) {
+            console.log('✅ Correctly caught BadRequestError:');
+            console.log(`   Status: ${error.status_code}, Message: ${error.error_message}`);
+        } else {
+            console.error('❌ Failed to catch BadRequestError. Got:', error);
+        }
+    }
+    console.log();
+
+    // Test 4: Transcribe Video
+    console.log('--- 4. Transcribe Video Test ---');
+    const testInstagramUrl = 'https://www.instagram.com/reel/C86ZvEaqRmo/';
+    console.log(`📺 Transcribing video from: ${testInstagramUrl}`);
+    try {
+      const { video_info, transcript } = await client.transcribeVideo({
+        video_url: testInstagramUrl,
+      });
+
+      console.log('✅ Video Info Retrieved:');
+      console.log(`  📛 Title: ${video_info.title}`);
+      console.log('\n📝 First 3 transcript segments:');
+      transcript.slice(0, 3).forEach((segment, index) => {
+        console.log(`  ${index + 1}. [${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]: ${segment.text}`);
+      });
+    } catch (error) {
+      console.log('❌ Transcription error:', error.message);
+    }
+    console.log();
+
+    // Test 5: Analyze Video
+    console.log('--- 5. Video Analysis Test ---');
     try {
       const analysis = await client.analyzeVideo({
         video_url: testVideoUrl,
@@ -107,8 +141,8 @@ async function main() {
     }
     console.log();
 
-    // Test 5: List Files
-    console.log('--- 5. List Uploaded Files ---');
+    // Test 6: List Files
+    console.log('--- 6. List Uploaded Files ---');
     try {
       const files = await client.getFiles({ limit: 5 });
       console.log('✅ Files retrieved:');

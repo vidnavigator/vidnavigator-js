@@ -1,6 +1,6 @@
 {
   "name": "vidnavigator",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Official JavaScript SDK for the VidNavigator Developer API",
   "author": "VidNavigator",
   "license": "Apache-2.0",

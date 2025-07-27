@@ -120,6 +120,21 @@ export class VidNavigatorClient {
       transcript: response.data.transcript.map(TranscriptSegment.fromJSON),
     };
   }
+
+  async transcribeVideo(payload: { video_url: string }): Promise<{
+    video_info: VideoInfo;
+    transcript: TranscriptSegment[];
+  }> {
+    const response = await this.request<ApiSuccessResponse<{
+      video_info: VideoInfoJSON;
+      transcript: TranscriptSegmentJSON[];
+    }>>('POST', '/transcribe', payload);
+
+    return {
+      video_info: VideoInfo.fromJSON(response.data.video_info),
+      transcript: response.data.transcript.map(TranscriptSegment.fromJSON),
+    };
+  }
   //endregion
 
   //region --- Files ---
