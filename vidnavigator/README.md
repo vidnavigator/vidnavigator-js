@@ -99,6 +99,9 @@ All methods return a `Promise` that resolves with an object containing rich data
 ### Transcripts
 - `vn.getTranscript(payload)`
 
+### Transcribe
+- `vn.transcribeVideo(payload)`
+
 ### Files
 - `vn.getFiles([query])`
 - `vn.getFile(file_id)`
