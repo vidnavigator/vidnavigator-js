@@ -3,7 +3,7 @@ export interface ServiceUsageJSON {
     limit: number | 'unlimited';
     remaining: number | 'unlimited';
     percentage: number;
-    unit: string;
+    unit?: string;
 }
 
 export class ServiceUsage {
@@ -11,7 +11,7 @@ export class ServiceUsage {
     public limit: number | 'unlimited';
     public remaining: number | 'unlimited';
     public percentage: number;
-    public unit: string;
+    public unit?: string;
 
     constructor(data: ServiceUsageJSON) {
         this.used = data.used;
@@ -60,60 +60,92 @@ export class StorageUsage {
     }
 }
 
+export type PlanInterval = 'month' | 'year';
+
 export interface UsageDataJSON {
-    current_period: {
-        start_date: string;
-        end_date: string;
+    usage_period: {
+        start: string;
+        end: string;
+    };
+    billing_period: {
+        start: string;
+        end: string;
+        interval: PlanInterval;
     };
     subscription: {
         plan_id: string;
         plan_name: string;
+        interval: PlanInterval;
+        status: string;
+        cancel_at_period_end: boolean;
     };
     usage: {
         video_transcripts: ServiceUsageJSON;
         video_searches: ServiceUsageJSON;
         video_analyses: ServiceUsageJSON;
         video_scene_analyses: ServiceUsageJSON;
+        youtube_channels_scans: ServiceUsageJSON;
         video_uploads: ServiceUsageJSON;
     };
     storage: StorageUsageJSON;
+    generated_at: string;
 }
 
 export class UsageData {
-    public currentPeriod: {
-        startDate: Date;
-        endDate: Date;
+    public usagePeriod: {
+        start: Date;
+        end: Date;
+    };
+    public billingPeriod: {
+        start: Date;
+        end: Date;
+        interval: PlanInterval;
     };
     public subscription: {
         planId: string;
         planName: string;
+        interval: PlanInterval;
+        status: string;
+        cancelAtPeriodEnd: boolean;
     };
     public usage: {
         videoTranscripts: ServiceUsage;
         videoSearches: ServiceUsage;
         videoAnalyses: ServiceUsage;
         videoSceneAnalyses: ServiceUsage;
+        youtubeChannelsScans: ServiceUsage;
         videoUploads: ServiceUsage;
     };
     public storage: StorageUsage;
+    public generatedAt: Date;
 
     constructor(data: UsageDataJSON) {
-        this.currentPeriod = {
-            startDate: new Date(data.current_period.start_date),
-            endDate: new Date(data.current_period.end_date),
+        this.usagePeriod = {
+            start: new Date(data.usage_period.start),
+            end: new Date(data.usage_period.end),
+        };
+        this.billingPeriod = {
+            start: new Date(data.billing_period.start),
+            end: new Date(data.billing_period.end),
+            interval: data.billing_period.interval,
         };
         this.subscription = {
             planId: data.subscription.plan_id,
             planName: data.subscription.plan_name,
+            interval: data.subscription.interval,
+            status: data.subscription.status,
+            cancelAtPeriodEnd: data.subscription.cancel_at_period_end,
         };
         this.usage = {
             videoTranscripts: ServiceUsage.fromJSON(data.usage.video_transcripts),
             videoSearches: ServiceUsage.fromJSON(data.usage.video_searches),
             videoAnalyses: ServiceUsage.fromJSON(data.usage.video_analyses),
             videoSceneAnalyses: ServiceUsage.fromJSON(data.usage.video_scene_analyses),
+            youtubeChannelsScans: ServiceUsage.fromJSON(data.usage.youtube_channels_scans),
             videoUploads: ServiceUsage.fromJSON(data.usage.video_uploads),
         };
         this.storage = StorageUsage.fromJSON(data.storage);
+        this.generatedAt = new Date(data.generated_at);
     }
 
     static fromJSON(data: UsageDataJSON): UsageData {
