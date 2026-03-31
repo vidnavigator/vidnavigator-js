@@ -122,7 +122,6 @@ console.log(usage?.total_tokens);
 ```ts
 const results = await vn.searchVideos({
   query: 'machine learning tutorial',
-  focus: 'relevance',
 });
 
 for (const r of results.results) {

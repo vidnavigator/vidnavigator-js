@@ -140,7 +140,7 @@ async function run() {
   console.log('--- searchVideos ---');
   try {
     const sr = await withTimeout(
-      client.searchVideos({ query: 'node.js tutorial', focus: 'relevance' }),
+      client.searchVideos({ query: 'nodejs tip' }),
       60000, 'searchVideos'
     );
     assert(typeof sr.query === 'string', 'searchVideos echoed query');
