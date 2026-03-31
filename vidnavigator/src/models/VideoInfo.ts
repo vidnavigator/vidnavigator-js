@@ -1,3 +1,5 @@
+import { VideoCarouselInfo, VideoCarouselInfoJSON } from './Carousel';
+
 export interface VideoInfoJSON {
   title?: string;
   description?: string;
@@ -13,6 +15,7 @@ export interface VideoInfoJSON {
   category?: string;
   available_languages?: string[];
   selected_language?: string;
+  carousel_info?: VideoCarouselInfoJSON;
 }
 
 /**
@@ -33,9 +36,19 @@ export class VideoInfo {
   category?: string;
   available_languages?: string[];
   selected_language?: string;
+  carousel_info?: VideoCarouselInfo;
 
-  constructor(data: Partial<VideoInfoJSON>) {
-    Object.assign(this, data);
+  constructor(
+    data: Partial<VideoInfoJSON> & { carousel_info?: VideoCarouselInfo | VideoCarouselInfoJSON }
+  ) {
+    const { carousel_info, ...rest } = data;
+    Object.assign(this, rest);
+    if (carousel_info !== undefined) {
+      this.carousel_info =
+        carousel_info instanceof VideoCarouselInfo
+          ? carousel_info
+          : VideoCarouselInfo.fromJSON(carousel_info);
+    }
   }
 
   /**

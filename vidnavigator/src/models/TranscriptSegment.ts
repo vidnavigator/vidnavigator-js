@@ -4,6 +4,22 @@ export interface TranscriptSegmentJSON {
   end: number;
 }
 
+/** Transcript from API: segment array (default) or plain string when transcript_text=true */
+export type TranscriptOutput = TranscriptSegment[] | string;
+
+export type TranscriptOutputJSON = TranscriptSegmentJSON[] | string;
+
+/**
+ * Parse API transcript field (segments or plain text).
+ */
+export function transcriptFromJSON(
+  raw: TranscriptOutputJSON | undefined
+): TranscriptOutput | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw === 'string') return raw;
+  return raw.map((s) => TranscriptSegment.fromJSON(s));
+}
+
 /**
  * Represents a single segment of a video or audio transcript.
  */

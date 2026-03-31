@@ -104,4 +104,47 @@ export class ServerError extends VidNavigatorError {
     this.name = 'ServerError';
     Object.setPrototypeOf(this, ServerError.prototype);
   }
+}
+
+/**
+ * Raised when storage quota is exceeded (HTTP 413).
+ */
+export class StorageQuotaExceededError extends VidNavigatorError {
+  constructor(message: string, status_code?: number, error_code?: string, error_message?: string, details?: any) {
+    super(message, status_code, error_code, error_message, details);
+    this.name = 'StorageQuotaExceededError';
+    Object.setPrototypeOf(this, StorageQuotaExceededError.prototype);
+  }
+}
+
+/**
+ * Raised when content is not available in the user's region (HTTP 451).
+ */
+export class GeoRestrictedError extends VidNavigatorError {
+  constructor(message: string, status_code?: number, error_code?: string, error_message?: string, details?: any) {
+    super(message, status_code, error_code, error_message, details);
+    this.name = 'GeoRestrictedError';
+    Object.setPrototypeOf(this, GeoRestrictedError.prototype);
+  }
+}
+
+/**
+ * Raised when the system is temporarily overloaded (HTTP 503), e.g. extraction overload.
+ */
+export class SystemOverloadError extends VidNavigatorError {
+  public readonly retry_after_seconds?: number;
+
+  constructor(
+    message: string,
+    status_code?: number,
+    error_code?: string,
+    error_message?: string,
+    details?: any,
+    retry_after_seconds?: number
+  ) {
+    super(message, status_code, error_code, error_message, details);
+    this.name = 'SystemOverloadError';
+    this.retry_after_seconds = retry_after_seconds;
+    Object.setPrototypeOf(this, SystemOverloadError.prototype);
+  }
 } 

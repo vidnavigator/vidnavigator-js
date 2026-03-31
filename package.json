@@ -1,0 +1,13 @@
+{
+  "scripts": {
+    "test": "node tests/unit.test.js && node tests/integration.test.js",
+    "test:unit": "node tests/unit.test.js",
+    "test:integration": "node tests/integration.test.js",
+    "test:files": "node tests/files.test.js",
+    "test:all": "node tests/unit.test.js && node tests/integration.test.js && node tests/files.test.js",
+    "verify-dist": "node scripts/verify-distribution.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.0"
+  }
+}

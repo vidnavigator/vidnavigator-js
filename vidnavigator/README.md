@@ -1,28 +1,42 @@
-# VidNavigator JavaScript SDK
+# VidNavigator SDK for JavaScript
 
-The official JavaScript SDK for the [VidNavigator Developer API](https://vidnavigator.com).
+The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](https://vidnavigator.com) — the fastest way to transcribe, analyze, search, and extract structured data from video and audio content.
 
-This SDK provides a convenient, fully-typed wrapper around the VidNavigator REST API, making it easy to integrate video transcription, analysis, and search into your Node.js applications.
+[![npm version](https://img.shields.io/npm/v/vidnavigator.svg)](https://www.npmjs.com/package/vidnavigator)
+[![License](https://img.shields.io/npm/l/vidnavigator.svg)](https://github.com/vidnavigator/vidnavigator-js/blob/main/LICENSE)
 
-## Features
+---
 
--   **Modern TypeScript:** Fully written in TypeScript for a great developer experience with autocompletion and type-safety.
--   **Rich Object Models:** API responses are automatically converted into intuitive classes (`VideoInfo`, `FileInfo`, `AnalysisResult`, etc.).
--   **Promise-based:** All asynchronous operations return Promises for easy integration with `async/await`.
--   **Minimal Dependencies:** Lightweight and relies only on `axios` for HTTP requests and `form-data` for uploads.
--   **Node.js Support:** Optimized for server-side use in Node.js 16+.
+## Highlights
+
+- **Full TypeScript support** — rich types, autocompletion, and compile-time safety out of the box.
+- **Typed response models** — API responses are mapped to intuitive classes (`VideoInfo`, `FileInfo`, `AnalysisResult`, `Namespace`, etc.) with static `fromJSON` constructors.
+- **Promise-based** — all methods return Promises, designed for `async`/`await`.
+- **Structured data extraction** — define a JSON schema and let the API extract typed fields from any transcript.
+- **Namespace organization** — group uploaded files into namespaces and scope searches accordingly.
+- **Comprehensive error handling** — dedicated error classes for every API error code (auth, rate-limit, quota, geo-restriction, and more).
+- **Lightweight** — only two runtime dependencies: `axios` and `form-data`.
+
+## Requirements
+
+- Node.js 16 or later
+- A VidNavigator API key ([get one here](https://vidnavigator.com))
 
 ## Installation
 
 ```bash
 npm install vidnavigator
-# or
+```
+
+```bash
 yarn add vidnavigator
 ```
 
-## Quick Start
+```bash
+pnpm add vidnavigator
+```
 
-First, initialize the SDK with your API key. It's recommended to store your key in an environment variable.
+## Quick Start
 
 ```ts
 import { VidNavigatorClient } from 'vidnavigator';
@@ -32,104 +46,233 @@ const vn = new VidNavigatorClient({
 });
 ```
 
-Now you can easily call any of the API methods.
-
-### Example: Get a Video Transcript
+### Transcribe a YouTube video
 
 ```ts
-import { VidNavigatorClient, VideoInfo } from 'vidnavigator';
+const { video_info, transcript } = await vn.getYouTubeTranscript({
+  video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
+  language: 'en',
+});
 
-const vn = new VidNavigatorClient({ apiKey: 'YOUR_API_KEY' });
+console.log(video_info.title);         // "Rick Astley - Never Gonna Give You Up"
+console.log(video_info.duration);      // 212
 
-async function getTranscript() {
-  try {
-    const { video_info, transcript } = await vn.getTranscript({
-      video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
-    });
-
-    console.log(`Title: ${video_info.title}`);
-    console.log(`Is this a VideoInfo object?`, video_info instanceof VideoInfo);
-    console.log('First 3 transcript segments:');
-    transcript.slice(0, 3).forEach(segment => {
-      console.log(`  [${segment.start.toFixed(2)}s]: ${segment.text}`);
-    });
-  } catch (error) {
-    console.error('Failed to get transcript:', error);
-  }
+// transcript is an array of timed segments by default
+for (const seg of transcript.slice(0, 3)) {
+  console.log(`[${seg.start.toFixed(1)}s] ${seg.text}`);
 }
-
-getTranscript();
 ```
 
-### Example: Upload and Analyze a File
+Pass `transcript_text: true` to receive the transcript as a single plain-text string instead of segments.
+
+### Transcribe any online video
 
 ```ts
-import { VidNavigatorClient } from 'vidnavigator';
+// Instagram, TikTok, Vimeo, X/Twitter, and more
+const { video_info, transcript } = await vn.getTranscript({
+  video_url: 'https://www.instagram.com/reel/C86ZvEaqRmo/',
+});
+```
 
-const vn = new VidNavigatorClient({ apiKey: 'YOUR_API_KEY' });
+### Upload and analyze a local file
 
-async function uploadAndAnalyze(filePath: string) {
-  try {
-    // Upload the file and wait for processing to complete
-    const { file_info } = await vn.uploadFile({ 
-      filePath, 
-      wait_for_completion: true 
-    });
-    console.log(`File '${file_info.name}' uploaded successfully.`);
+```ts
+const upload = await vn.uploadFile({
+  filePath: './meeting-recording.mp4',
+  wait_for_completion: true,
+  namespace_ids: ['ns_meetings'],     // optional: organize into a namespace
+});
 
-    // Analyze the uploaded file
-    const { transcript_analysis } = await vn.analyzeFile({ 
-      file_id: file_info.id 
-    });
-    console.log('--- Analysis Summary ---');
-    console.log(transcript_analysis.summary);
+if (upload.status === 'success') {
+  const { transcript_analysis } = await vn.analyzeFile({
+    file_id: upload.file_info.id,
+    query: 'What action items were discussed?',
+  });
 
-  } catch (error) {
-    console.error('Operation failed:', error);
-  }
+  console.log(transcript_analysis.summary);
+  console.log(transcript_analysis.query_answer?.answer);
 }
+```
 
-uploadAndAnalyze('./my-meeting.mp4');
+### Extract structured data
+
+Define a schema and let the API pull structured fields from any video or file transcript.
+
+```ts
+const { data, usage } = await vn.extractVideoData({
+  video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
+  schema: {
+    topic:    { type: 'String',  description: 'Main topic of the video' },
+    language: { type: 'String',  description: 'Primary spoken language (ISO 639-1)' },
+    tone:     { type: 'Enum',    description: 'Overall tone', enum: ['positive', 'negative', 'neutral', 'mixed'] },
+    duration_minutes: { type: 'Number', description: 'Approximate duration in minutes' },
+  },
+  what_to_extract: 'From the transcript, determine the topic, language, tone, and duration.',
+  include_usage: true,
+});
+
+console.log(data);
+// { topic: "A classic pop love song", language: "en", tone: "positive", duration_minutes: 3.5 }
+
+console.log(usage?.total_tokens);
+```
+
+### Search across your content
+
+```ts
+const results = await vn.searchVideos({
+  query: 'machine learning tutorial',
+  focus: 'relevance',
+});
+
+for (const r of results.results) {
+  console.log(`${r.title} (score: ${r.relevance_score})`);
+}
+```
+
+```ts
+const fileResults = await vn.searchFiles({
+  query: 'quarterly revenue discussion',
+  namespace_ids: ['ns_finance'],   // scope to a specific namespace
+});
+
+for (const r of fileResults.results) {
+  console.log(`${r.name} — namespaces: ${r.namespaces?.map(n => n.name).join(', ')}`);
+}
 ```
 
 ## API Reference
 
-All methods return a `Promise` that resolves with an object containing rich data models.
+All methods return a `Promise`. Responses are automatically parsed into typed model classes.
 
 ### Transcripts
-- `vn.getTranscript(payload)`
 
-### Transcribe
-- `vn.transcribeVideo(payload)`
+| Method | Description |
+|--------|-------------|
+| `getYouTubeTranscript(payload)` | Get transcript for a YouTube video |
+| `getTranscript(payload)` | Get transcript for non-YouTube online videos |
+| `transcribeVideo(payload)` | Speech-to-text transcription; supports `all_videos` for carousels |
+
+**Payload options:** `video_url`, `language`, `metadata_only`, `fallback_to_metadata`, `transcript_text`, `all_videos`
 
 ### Files
-- `vn.getFiles([query])`
-- `vn.getFile(file_id)`
-- `vn.uploadFile(options)`
-- `vn.deleteFile(file_id)`
+
+| Method | Description |
+|--------|-------------|
+| `getFiles(query?)` | List uploaded files (paginated). Filter by `status` or `namespace_id` |
+| `getFile(file_id, query?)` | Get file metadata and transcript |
+| `uploadFile(options)` | Upload audio/video. Options: `filePath`, `wait_for_completion`, `namespace_ids` |
+| `deleteFile(file_id)` | Delete a file |
+| `getFileUrl(file_id)` | Get a signed download URL |
+| `retryFileProcessing(file_id)` | Retry a failed processing job |
+| `cancelFileUpload(file_id)` | Cancel an in-progress upload |
+
+**Supported formats:** mp4, webm, mov, avi, wmv, flv, mkv, m4a, mp3, mpeg, mpga, wav
+
+### Namespaces
+
+Organize uploaded files into folders.
+
+| Method | Description |
+|--------|-------------|
+| `getNamespaces()` | List all namespaces |
+| `createNamespace({ name })` | Create a new namespace |
+| `updateNamespace(id, { name })` | Rename a namespace |
+| `deleteNamespace(id)` | Delete a namespace |
+| `updateFileNamespaces(file_id, { namespace_ids })` | Assign a file to namespaces |
 
 ### Analysis
-- `vn.analyzeVideo(payload)`
-- `vn.analyzeFile(payload)`
+
+| Method | Description |
+|--------|-------------|
+| `analyzeVideo(payload)` | Analyze an online video with an optional query |
+| `analyzeFile(payload)` | Analyze an uploaded file with an optional query |
+
+Returns `transcript_analysis` with `summary`, `people`, `places`, `key_subjects`, and `query_answer`.
+
+### Extraction
+
+| Method | Description |
+|--------|-------------|
+| `extractVideoData(payload)` | Extract structured data from an online video transcript |
+| `extractFileData(payload)` | Extract structured data from an uploaded file transcript |
+
+**Schema field types:** `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`
 
 ### Search
-- `vn.searchVideos(payload)`
-- `vn.searchFiles(payload)`
+
+| Method | Description |
+|--------|-------------|
+| `searchVideos(payload)` | Semantic search across indexed YouTube videos |
+| `searchFiles(payload)` | Semantic search across uploaded files, with optional `namespace_ids` scope |
 
 ### System
-- `vn.getUsage()`
-- `vn.healthCheck()`
 
-Please refer to the inline documentation in your IDE for detailed information on the payloads and return types for each method.
+| Method | Description |
+|--------|-------------|
+| `getUsage()` | Credits, activity counters, storage, and subscription info |
+| `healthCheck()` | API health status (no auth required) |
 
+## Error Handling
 
-## More Examples & Documentation
+Every API error is mapped to a specific exception class, all extending `VidNavigatorError`:
 
-For a comprehensive set of usage examples covering more SDK features, please see the [`test.py`](https://github.com/vidnavigator/vidnavigator-js/blob/main/test.js)
+```ts
+import {
+  VidNavigatorClient,
+  AuthenticationError,
+  BadRequestError,
+  NotFoundError,
+  RateLimitExceededError,
+} from 'vidnavigator';
 
-For full API documentation, visit [docs.vidnavigator.com](https://docs.vidnavigator.com).
+try {
+  await vn.getFile('nonexistent-id');
+} catch (error) {
+  if (error instanceof NotFoundError) {
+    console.log(error.status_code);    // 404
+    console.log(error.error_message);  // "File not found"
+  }
+}
+```
 
+| Error Class | HTTP Status | When |
+|-------------|:-----------:|------|
+| `AuthenticationError` | 401 | Invalid or missing API key |
+| `PaymentRequiredError` | 402 | Credit limit reached |
+| `AccessDeniedError` | 403 | Insufficient permissions |
+| `NotFoundError` | 404 | Resource does not exist |
+| `BadRequestError` | 400 | Invalid parameters |
+| `StorageQuotaExceededError` | 413 | Storage quota exceeded |
+| `RateLimitExceededError` | 429 | Too many requests |
+| `GeoRestrictedError` | 451 | Content unavailable in region |
+| `ServerError` | 5xx | Unexpected server error |
+| `SystemOverloadError` | 503 | Temporary overload (includes `retry_after_seconds`) |
+
+## Models
+
+The SDK ships typed model classes with static `fromJSON` constructors:
+
+| Class | Description |
+|-------|-------------|
+| `VideoInfo` | Video metadata (title, channel, duration, views, etc.) |
+| `FileInfo` | Uploaded file metadata (name, size, status, `namespace_ids`, `namespaces`) |
+| `TranscriptSegment` | Single transcript segment with `text`, `start`, `end` |
+| `AnalysisResult` | Analysis output: summary, people, places, key subjects, query answer |
+| `Namespace` | Full namespace object (id, name, timestamps) |
+| `NamespaceRef` | Lightweight namespace reference `{ id, name }` embedded in file responses |
+| `VideoSearchResult` | Extends `VideoInfo` with relevance score and search metadata |
+| `FileSearchResult` | Extends `FileInfo` with relevance score, timestamps, and signed URL |
+| `UsageData` | Credits, activity counters, storage metrics, subscription info |
+| `ExtractionTokenUsage` | Token usage breakdown for extraction calls |
+| `CarouselInfo` / `CarouselVideoResult` | Multi-video carousel response structure |
+
+## Links
+
+- [VidNavigator Website](https://vidnavigator.com)
+- [API Documentation](https://docs.vidnavigator.com)
+- [GitHub Repository](https://github.com/vidnavigator/vidnavigator-js)
 
 ## License
 
-[Apache-2.0](./LICENSE) 
+[Apache-2.0](./LICENSE)

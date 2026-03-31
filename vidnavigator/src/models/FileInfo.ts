@@ -1,3 +1,5 @@
+import { NamespaceRef, NamespaceRefJSON } from './Namespace';
+
 export type FileStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 export interface FileInfoJSON {
@@ -12,6 +14,8 @@ export interface FileInfoJSON {
   original_file_date?: string;
   has_transcript?: boolean;
   error_message?: string;
+  namespace_ids?: string[];
+  namespaces?: NamespaceRefJSON[];
 }
 
 /**
@@ -29,6 +33,8 @@ export class FileInfo {
   original_file_date?: string;
   has_transcript?: boolean;
   error_message?: string;
+  namespace_ids?: string[];
+  namespaces?: NamespaceRef[];
 
   constructor(data: FileInfoJSON) {
     this.id = data.id;
@@ -42,6 +48,8 @@ export class FileInfo {
     this.original_file_date = data.original_file_date;
     this.has_transcript = data.has_transcript;
     this.error_message = data.error_message;
+    this.namespace_ids = data.namespace_ids;
+    this.namespaces = data.namespaces?.map(NamespaceRef.fromJSON);
   }
 
   static fromJSON(json: FileInfoJSON): FileInfo {
