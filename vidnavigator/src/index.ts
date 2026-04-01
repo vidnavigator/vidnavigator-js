@@ -47,7 +47,7 @@ export * from './models';
 export * from './errors';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '1.0.0';
+export const SDK_VERSION = '1.0.1';
 
 //region --- Interfaces ---
 export interface SDKConfig {

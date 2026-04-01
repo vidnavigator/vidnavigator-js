@@ -8,7 +8,8 @@ console.log('=== Unit Tests ===\n');
 
 // --- SDK_VERSION ---
 assert(typeof sdk.SDK_VERSION === 'string' && sdk.SDK_VERSION.length > 0, 'SDK_VERSION is a non-empty string');
-assert(sdk.SDK_VERSION === '1.0.0', `SDK_VERSION is 1.0.0 (got ${sdk.SDK_VERSION})`);
+const pkg = require('../vidnavigator/package.json');
+assert(sdk.SDK_VERSION === pkg.version, `SDK_VERSION is ${pkg.version} (got ${sdk.SDK_VERSION})`);
 
 // --- VidNavigatorClient constructor ---
 assert(typeof sdk.VidNavigatorClient === 'function', 'VidNavigatorClient is exported');
