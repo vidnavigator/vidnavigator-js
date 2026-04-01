@@ -26,12 +26,12 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 | YouTube | Yes | - | - |
 | Instagram Reels | - | Yes | Yes |
 | Instagram Posts | - | Yes | Yes (`all_videos`) |
-| TikTok | - | Yes | - |
-| X / Twitter | - | Yes | - |
-| Vimeo | - | Yes | - |
-| Facebook | - | Yes | - |
-| Dailymotion | - | Yes | - |
-| Loom | - | Yes | - |
+| TikTok | Yes | Yes | - |
+| X / Twitter | Yes | Yes | - |
+| Vimeo | Yes | Yes | - |
+| Facebook | Yes | Yes | - |
+| Dailymotion | Yes | Yes | - |
+| Loom | Yes | Yes | - |
 | Uploaded files | Yes | Yes | - |
 
 > **Transcript** = fast caption/subtitle extraction. **Transcribe** = speech-to-text via AI models (works when captions are unavailable).
@@ -91,18 +91,18 @@ Pass `transcript_text: true` to get the full transcript as a single plain-text s
 
 ### 2. Instagram Reel / TikTok / X / Vimeo
 
-For any non-YouTube platform, use `getTranscript` (caption-based) or `transcribeVideo` (speech-to-text):
+For most non-YouTube platforms, you can use either `getTranscript` (fast, caption-based) or `transcribeVideo` (speech-to-text). **Note:** Instagram only supports `transcribeVideo`.
 
 ```ts
-// Instagram Reel
+// Instagram Reel (speech-to-text only)
 const { video_info, transcript } = await vn.transcribeVideo({
   video_url: 'https://www.instagram.com/reel/C86ZvEaqRmo/',
 });
 console.log(video_info.title);
 console.log(transcript[0].text);
 
-// TikTok
-const tiktok = await vn.transcribeVideo({
+// TikTok (can use getTranscript or transcribeVideo)
+const tiktok = await vn.getTranscript({
   video_url: 'https://www.tiktok.com/@user/video/1234567890',
 });
 
@@ -296,7 +296,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 | Method | Description |
 |--------|-------------|
 | `getYouTubeTranscript(payload)` | Get transcript for a YouTube video (fast, caption-based) |
-| `getTranscript(payload)` | Get transcript for non-YouTube videos (Vimeo, X/Twitter, TikTok, etc.) |
+| `getTranscript(payload)` | Get transcript for non-YouTube videos (Vimeo, X/Twitter, TikTok, etc. — note: Instagram not supported) |
 | `transcribeVideo(payload)` | Speech-to-text transcription via AI models; supports Instagram carousel with `all_videos` |
 
 **Common options:** `video_url`, `language`, `metadata_only`, `fallback_to_metadata`, `transcript_text`
