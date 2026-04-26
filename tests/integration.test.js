@@ -3,6 +3,8 @@
  * Requires VIDNAVIGATOR_API_KEY in .env.
  * Run: node tests/integration.test.js
  */
+const http = require('http');
+const https = require('https');
 const {
   sdk, makeClient, requireApiKey, withTimeout, logTranscriptPreview,
   assert, pass, fail, summary,
@@ -11,6 +13,39 @@ const {
 
 requireApiKey();
 const client = makeClient();
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getJson(url) {
+  const transport = url.startsWith('https:') ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = transport.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        getJson(res.headers.location).then(resolve, reject);
+        return;
+      }
+
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error(`GET ${url} failed with status ${res.statusCode}: ${body.slice(0, 200)}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(body));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    req.on('error', reject);
+  });
+}
 
 async function run() {
   console.log('=== Integration Tests ===\n');
@@ -29,7 +64,19 @@ async function run() {
     const u = await client.getUsage();
     assert(u instanceof sdk.UsageData, 'getUsage returns UsageData');
     assert(u.credits instanceof sdk.CreditsInfo, 'getUsage credits field');
-    assert(u.usage.videoTranscripts instanceof sdk.ActivityCount, 'getUsage activity count');
+    const activityCounts = [
+      u.usage.standardRequest,
+      u.usage.residentialRequest,
+      u.usage.searchRequest,
+      u.usage.analysisRequest,
+      u.usage.transcriptionHour,
+      u.usage.videoTranscripts,
+      u.usage.youtubeTranscripts,
+      u.usage.videoSearches,
+      u.usage.videoAnalyses,
+      u.usage.videoUploads,
+    ].filter(Boolean);
+    assert(activityCounts.some((count) => count instanceof sdk.ActivityCount), 'getUsage activity count');
     assert(u.channelsIndexed instanceof sdk.CapacityMetric, 'getUsage channelsIndexed');
   } catch (e) { fail('getUsage', e.message); }
 
@@ -121,6 +168,7 @@ async function run() {
       include_usage: true,
     });
     assert(extraction.data && typeof extraction.data.topic === 'string', 'extractVideoData data.topic');
+    assert(extraction.video_info instanceof sdk.VideoInfo, 'extractVideoData video_info');
     assert(extraction.usage instanceof sdk.ExtractionTokenUsage, 'extractVideoData usage');
     assert(typeof extraction.usage.total_tokens === 'number', 'extractVideoData total_tokens');
   } catch (e) { fail('extractVideoData', e.message); }
@@ -135,6 +183,79 @@ async function run() {
     });
     assert(light.usage === undefined, 'extractVideoData no usage');
   } catch (e) { fail('extractVideoData (no usage)', e.message); }
+
+  // ── Optional TikTok profile scrape ──
+  if (process.env.TEST_TIKTOK_PROFILE_URL) {
+    console.log('--- submitTikTokProfileScrape / getTikTokProfileScrape ---');
+    try {
+      await withTimeout((async () => {
+        const submitted = await client.submitTikTokProfileScrape({
+          profile_url: process.env.TEST_TIKTOK_PROFILE_URL,
+          max_posts: 2,
+        });
+        assert(submitted instanceof sdk.TikTokProfileScrapeSubmission, 'submitTikTokProfileScrape response type');
+        assert(typeof submitted.task_id === 'string' && submitted.task_id.length > 0, 'submitTikTokProfileScrape task_id');
+
+        let scrape = await client.getTikTokProfileScrape(submitted.task_id, { limit: 1 });
+        assert(scrape instanceof sdk.TikTokProfileTask, 'getTikTokProfileScrape response type');
+
+        const started = Date.now();
+        while (scrape.task_status === 'processing') {
+          console.log(`    polling TikTok scrape ${submitted.task_id}: processing (${Math.round((Date.now() - started) / 1000)}s)`);
+          await sleep(5000);
+          scrape = await client.getTikTokProfileScrape(submitted.task_id, { limit: 1 });
+        }
+
+        assert(scrape.task_status === 'completed', 'TikTok scrape completed');
+        assert(Array.isArray(scrape.videos), 'getTikTokProfileScrape videos array');
+        assert(scrape.pagination && typeof scrape.pagination.total_items === 'number', 'TikTok scrape pagination');
+        if (scrape.videos.length > 0) {
+          const [video] = scrape.videos;
+          assert(video instanceof sdk.TikTokVideo, 'TikTok scrape video type');
+          if (video.published_at !== null && video.published_at !== undefined) {
+            assert(video.published_at instanceof Date, 'TikTok video published_at Date');
+          }
+          if (video.views !== null && video.views !== undefined) {
+            assert(Number.isInteger(video.views), 'TikTok video views integer');
+          }
+          if (video.likes !== null && video.likes !== undefined) {
+            assert(Number.isInteger(video.likes), 'TikTok video likes integer');
+          }
+        }
+
+        if (scrape.pagination?.next_cursor) {
+          const secondPage = await client.getTikTokProfileScrape(submitted.task_id, {
+            limit: 1,
+            cursor: scrape.pagination.next_cursor,
+          });
+          assert(secondPage instanceof sdk.TikTokProfileTask, 'getTikTokProfileScrape cursor page type');
+          assert(Array.isArray(secondPage.videos), 'getTikTokProfileScrape cursor page videos');
+        }
+
+        if (scrape.download_url) {
+          const fullProfile = await getJson(scrape.download_url);
+          assert(Array.isArray(fullProfile.videos), 'TikTok download_url videos array');
+        } else {
+          pass('TikTok download_url not configured; paginated result verified');
+        }
+      })(), 600000, 'TikTok profile scrape');
+    } catch (e) { fail('TikTok profile scrape', e.message); }
+  } else {
+    console.log('--- TikTok profile scrape skipped (TEST_TIKTOK_PROFILE_URL not set) ---');
+  }
+
+  // ── Optional tweet statement extraction ──
+  if (process.env.TEST_TWEET_ID) {
+    console.log('--- getTweetStatement ---');
+    try {
+      const statement = await client.getTweetStatement({ tweet_id: process.env.TEST_TWEET_ID });
+      assert(statement instanceof sdk.TweetStatement, 'getTweetStatement response type');
+      assert(typeof statement.final_statement === 'string', 'getTweetStatement final_statement');
+      assert(typeof statement.statement_query === 'string', 'getTweetStatement statement_query');
+    } catch (e) { fail('getTweetStatement', e.message); }
+  } else {
+    console.log('--- getTweetStatement skipped (TEST_TWEET_ID not set) ---');
+  }
 
   // ── Search videos (with timeout) ──
   console.log('--- searchVideos ---');

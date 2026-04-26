@@ -121,12 +121,17 @@ export interface UsageDataJSON {
   };
   credits: CreditsInfoJSON;
   usage: {
-    video_transcripts: ActivityCountJSON;
-    youtube_transcripts: ActivityCountJSON;
-    video_searches: ActivityCountJSON;
-    video_analyses: ActivityCountJSON;
-    video_scene_analyses: ActivityCountJSON;
-    video_uploads: ActivityCountJSON;
+    standard_request?: ActivityCountJSON;
+    residential_request?: ActivityCountJSON;
+    search_request?: ActivityCountJSON;
+    analysis_request?: ActivityCountJSON;
+    transcription_hour?: ActivityCountJSON;
+    video_scene_analyses?: ActivityCountJSON;
+    video_transcripts?: ActivityCountJSON;
+    youtube_transcripts?: ActivityCountJSON;
+    video_searches?: ActivityCountJSON;
+    video_analyses?: ActivityCountJSON;
+    video_uploads?: ActivityCountJSON;
   };
   channels_indexed: CapacityMetricJSON;
   storage: StorageUsageJSON;
@@ -152,12 +157,17 @@ export class UsageData {
   };
   public credits: CreditsInfo;
   public usage: {
-    videoTranscripts: ActivityCount;
-    youtubeTranscripts: ActivityCount;
-    videoSearches: ActivityCount;
-    videoAnalyses: ActivityCount;
-    videoSceneAnalyses: ActivityCount;
-    videoUploads: ActivityCount;
+    standardRequest?: ActivityCount;
+    residentialRequest?: ActivityCount;
+    searchRequest?: ActivityCount;
+    analysisRequest?: ActivityCount;
+    transcriptionHour?: ActivityCount;
+    videoSceneAnalyses?: ActivityCount;
+    videoTranscripts?: ActivityCount;
+    youtubeTranscripts?: ActivityCount;
+    videoSearches?: ActivityCount;
+    videoAnalyses?: ActivityCount;
+    videoUploads?: ActivityCount;
   };
   public channelsIndexed: CapacityMetric;
   public storage: StorageUsage;
@@ -182,12 +192,17 @@ export class UsageData {
     };
     this.credits = CreditsInfo.fromJSON(data.credits);
     this.usage = {
-      videoTranscripts: ActivityCount.fromJSON(data.usage.video_transcripts),
-      youtubeTranscripts: ActivityCount.fromJSON(data.usage.youtube_transcripts),
-      videoSearches: ActivityCount.fromJSON(data.usage.video_searches),
-      videoAnalyses: ActivityCount.fromJSON(data.usage.video_analyses),
-      videoSceneAnalyses: ActivityCount.fromJSON(data.usage.video_scene_analyses),
-      videoUploads: ActivityCount.fromJSON(data.usage.video_uploads),
+      standardRequest: data.usage.standard_request ? ActivityCount.fromJSON(data.usage.standard_request) : undefined,
+      residentialRequest: data.usage.residential_request ? ActivityCount.fromJSON(data.usage.residential_request) : undefined,
+      searchRequest: data.usage.search_request ? ActivityCount.fromJSON(data.usage.search_request) : undefined,
+      analysisRequest: data.usage.analysis_request ? ActivityCount.fromJSON(data.usage.analysis_request) : undefined,
+      transcriptionHour: data.usage.transcription_hour ? ActivityCount.fromJSON(data.usage.transcription_hour) : undefined,
+      videoSceneAnalyses: data.usage.video_scene_analyses ? ActivityCount.fromJSON(data.usage.video_scene_analyses) : undefined,
+      videoTranscripts: data.usage.video_transcripts ? ActivityCount.fromJSON(data.usage.video_transcripts) : undefined,
+      youtubeTranscripts: data.usage.youtube_transcripts ? ActivityCount.fromJSON(data.usage.youtube_transcripts) : undefined,
+      videoSearches: data.usage.video_searches ? ActivityCount.fromJSON(data.usage.video_searches) : undefined,
+      videoAnalyses: data.usage.video_analyses ? ActivityCount.fromJSON(data.usage.video_analyses) : undefined,
+      videoUploads: data.usage.video_uploads ? ActivityCount.fromJSON(data.usage.video_uploads) : undefined,
     };
     this.channelsIndexed = CapacityMetric.fromJSON(data.channels_indexed);
     this.storage = StorageUsage.fromJSON(data.storage);

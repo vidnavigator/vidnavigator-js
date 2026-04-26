@@ -14,7 +14,10 @@ if (usePackedInstall) {
 }
 
 const sdk = usePackedInstall ? require('vidnavigator') : require('../vidnavigator');
-require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+require('dotenv').config({
+  path: path.resolve(__dirname, '..', '.env'),
+  override: true,
+});
 
 const MEDIA_DIR = path.resolve(__dirname, 'media');
 const TEST_VIDEO_FILE = path.join(MEDIA_DIR, 'video-test.mp4');
@@ -24,7 +27,14 @@ const TEST_INSTAGRAM_REEL = 'https://www.instagram.com/reel/C86ZvEaqRmo/';
 function makeClient(apiKey) {
   return new sdk.VidNavigatorClient({
     apiKey: apiKey || process.env.VIDNAVIGATOR_API_KEY,
+    baseURL: process.env.VIDNAVIGATOR_BASE_URL,
   });
+}
+
+function maskSecret(value) {
+  if (!value) return '(missing)';
+  if (value.length <= 8) return `${value.slice(0, 2)}...${value.slice(-2)}`;
+  return `${value.slice(0, 6)}...${value.slice(-4)} (${value.length} chars)`;
 }
 
 function requireApiKey() {
@@ -32,6 +42,8 @@ function requireApiKey() {
     console.error('Error: VIDNAVIGATOR_API_KEY not set in .env');
     process.exit(1);
   }
+  console.log('[tests] API base URL:', process.env.VIDNAVIGATOR_BASE_URL || 'https://api.vidnavigator.com/v1');
+  console.log('[tests] API key:', maskSecret(process.env.VIDNAVIGATOR_API_KEY));
 }
 
 function withTimeout(promise, ms, label) {

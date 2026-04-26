@@ -49,7 +49,10 @@ fs.writeFileSync(
   smokePath,
   `
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({
+  path: path.join(__dirname, '..', '.env'),
+  override: true,
+});
 const vn = require('vidnavigator');
 const installed = require('./node_modules/vidnavigator/package.json');
 
@@ -61,6 +64,9 @@ console.log('SDK_VERSION export:', vn.SDK_VERSION);
 const checks = [
   ['VidNavigatorClient', typeof vn.VidNavigatorClient === 'function'],
   ['getYouTubeTranscript', typeof vn.VidNavigatorClient.prototype.getYouTubeTranscript === 'function'],
+  ['submitTikTokProfileScrape', typeof vn.VidNavigatorClient.prototype.submitTikTokProfileScrape === 'function'],
+  ['getTikTokProfileScrape', typeof vn.VidNavigatorClient.prototype.getTikTokProfileScrape === 'function'],
+  ['getTweetStatement', typeof vn.VidNavigatorClient.prototype.getTweetStatement === 'function'],
   ['extractVideoData', typeof vn.VidNavigatorClient.prototype.extractVideoData === 'function'],
   ['extractFileData', typeof vn.VidNavigatorClient.prototype.extractFileData === 'function'],
   ['getNamespaces', typeof vn.VidNavigatorClient.prototype.getNamespaces === 'function'],
@@ -74,7 +80,10 @@ for (const [label, pass] of checks) {
 
 const key = process.env.VIDNAVIGATOR_API_KEY;
 if (key) {
-  const client = new vn.VidNavigatorClient({ apiKey: key });
+  const client = new vn.VidNavigatorClient({
+    apiKey: key,
+    baseURL: process.env.VIDNAVIGATOR_BASE_URL,
+  });
   client
     .healthCheck()
     .then((h) => {

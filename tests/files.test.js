@@ -142,6 +142,7 @@ async function run() {
     );
     assert(result.data && typeof result.data.summary_line === 'string', 'extractFileData data.summary_line');
     assert(result.data && typeof result.data.language === 'string', 'extractFileData data.language');
+    assert(result.file_info instanceof sdk.FileInfo, 'extractFileData file_info');
     assert(result.usage instanceof sdk.ExtractionTokenUsage, 'extractFileData usage');
     console.log('  data:', result.data);
     console.log('  tokens:', result.usage.total_tokens);

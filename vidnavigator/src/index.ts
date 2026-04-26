@@ -28,6 +28,13 @@ import {
   CarouselInfoJSON,
   CarouselVideoResult,
   CarouselVideoResultJSON,
+  TikTokProfileScrapeRequest,
+  TikTokProfileScrapeSubmission,
+  TikTokProfileScrapeSubmissionJSON,
+  TikTokProfileTask,
+  TikTokProfileTaskJSON,
+  TweetStatement,
+  TweetStatementJSON,
 } from './models';
 import {
   VidNavigatorError,
@@ -110,6 +117,8 @@ export type UploadFileResult = UploadFileSuccessResult | UploadFileAcceptedResul
 
 export interface ExtractDataResult {
   data: Record<string, unknown>;
+  video_info?: VideoInfo;
+  file_info?: FileInfo;
   usage?: ExtractionTokenUsage;
 }
 //endregion
@@ -232,7 +241,7 @@ export class VidNavigatorClient {
         video_info: VideoInfoJSON;
         transcript: TranscriptSegmentJSON[] | string;
       }>
-    >('POST', '/transcript/youtube', payload);
+    >('POST', '/youtube/transcript', payload);
 
     return {
       video_info: VideoInfo.fromJSON(response.data.video_info),
@@ -267,6 +276,32 @@ export class VidNavigatorClient {
       video_info: VideoInfo.fromJSON(single.video_info),
       transcript: transcriptFromJSON(single.transcript)!,
     };
+  }
+  //endregion
+
+  //region --- TikTok ---
+  async submitTikTokProfileScrape(
+    payload: TikTokProfileScrapeRequest
+  ): Promise<TikTokProfileScrapeSubmission> {
+    const response = await this.request<ApiSuccessResponse<TikTokProfileScrapeSubmissionJSON>>(
+      'POST',
+      '/tiktok/profile',
+      payload
+    );
+    return TikTokProfileScrapeSubmission.fromJSON(response.data);
+  }
+
+  async getTikTokProfileScrape(
+    task_id: string,
+    query?: { cursor?: string; limit?: number }
+  ): Promise<TikTokProfileTask> {
+    const response = await this.request<ApiSuccessResponse<TikTokProfileTaskJSON>>(
+      'GET',
+      `/tiktok/profile/${task_id}`,
+      undefined,
+      query
+    );
+    return TikTokProfileTask.fromJSON(response.data);
   }
   //endregion
 
@@ -530,6 +565,15 @@ export class VidNavigatorClient {
       transcript_analysis: AnalysisResult.fromJSON(response.data.transcript_analysis),
     };
   }
+
+  async getTweetStatement(payload: { tweet_id: string }): Promise<TweetStatement> {
+    const response = await this.request<ApiSuccessResponse<TweetStatementJSON>>(
+      'POST',
+      '/tweet/statement',
+      payload
+    );
+    return TweetStatement.fromJSON(response.data);
+  }
   //endregion
 
   //region --- Extraction ---
@@ -537,15 +581,18 @@ export class VidNavigatorClient {
     video_url: string;
     schema: ExtractionSchema;
     what_to_extract?: string;
+    transcribe?: boolean;
     include_usage?: boolean;
   }): Promise<ExtractDataResult> {
     const body = await this.request<{
       status: 'success';
       data: Record<string, unknown>;
+      video_info?: VideoInfoJSON;
       usage?: ExtractionTokenUsageJSON;
     }>('POST', '/extract/video', payload);
     return {
       data: body.data,
+      video_info: body.video_info ? VideoInfo.fromJSON(body.video_info) : undefined,
       usage: body.usage ? ExtractionTokenUsage.fromJSON(body.usage) : undefined,
     };
   }
@@ -559,10 +606,12 @@ export class VidNavigatorClient {
     const body = await this.request<{
       status: 'success';
       data: Record<string, unknown>;
+      file_info?: FileInfoJSON;
       usage?: ExtractionTokenUsageJSON;
     }>('POST', '/extract/file', payload);
     return {
       data: body.data,
+      file_info: body.file_info ? FileInfo.fromJSON(body.file_info) : undefined,
       usage: body.usage ? ExtractionTokenUsage.fromJSON(body.usage) : undefined,
     };
   }

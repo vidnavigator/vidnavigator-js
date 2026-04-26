@@ -10,6 +10,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 ## Why VidNavigator?
 
 - **Multi-platform transcription** — YouTube, Instagram Reels & carousel posts, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, and more.
+- **Async TikTok profile scraping** — scrape public profile videos in the background, then read results via cursor pagination or a signed `download_url`.
 - **Instagram carousel support** — select a specific video by index, or transcribe every video in a carousel post with one call.
 - **AI-powered analysis** — get summaries, people mentioned, places, key subjects, and direct answers to questions about any video or audio.
 - **Structured data extraction** — define a JSON schema and receive typed, structured fields extracted from any transcript (powered by LLMs).
@@ -112,7 +113,110 @@ const tweet = await vn.getTranscript({
 });
 ```
 
-### 3. Instagram carousel posts (multiple videos)
+### 3. TikTok profile scraping (async)
+
+TikTok profile scraping is asynchronous. First submit the profile URL, then poll the task until `task_status` is no longer `processing`. Once complete, you can either page through results with `getTikTokProfileScrape()` or fetch the full JSON from `download_url`.
+
+```ts
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const submitted = await vn.submitTikTokProfileScrape({
+  profile_url: 'https://www.tiktok.com/@tiktok',
+  max_posts: 250,
+  after_date: '2024-01-01',
+});
+
+let task = await vn.getTikTokProfileScrape(submitted.task_id, { limit: 50 });
+
+while (task.task_status === 'processing') {
+  await sleep(5000);
+  task = await vn.getTikTokProfileScrape(submitted.task_id, { limit: 50 });
+}
+
+if (task.task_status === 'failed') {
+  throw new Error(task.error_message || 'TikTok profile scrape failed');
+}
+
+console.log(`Matched ${task.stats?.videos_matched ?? task.pagination?.total_items ?? 0} videos`);
+```
+
+Use cursor pagination when you want to process videos page by page:
+
+```ts
+const videos = [];
+let cursor: string | undefined;
+
+do {
+  const page = await vn.getTikTokProfileScrape(submitted.task_id, {
+    limit: 100,
+    cursor,
+  });
+
+  videos.push(...page.videos);
+  cursor = page.pagination?.next_cursor ?? undefined;
+} while (cursor);
+
+console.log(`Loaded ${videos.length} TikTok videos`);
+```
+
+Use `download_url` when you want the entire profile result in one request. The URL is short-lived and points directly to the generated JSON file, so it can be fetched with any HTTP client.
+
+```ts
+if (!task.download_url) {
+  throw new Error('No download URL is available for this scrape');
+}
+
+const response = await fetch(task.download_url);
+const fullProfile = await response.json();
+const videos = fullProfile.videos ?? [];
+
+console.log(`Downloaded ${videos.length} videos for`, fullProfile.profile_url);
+```
+
+After you have the final video list, loop through each TikTok video URL and use the normal transcript or extraction APIs:
+
+```ts
+for (const video of videos) {
+  if (!video.url) continue;
+
+  console.log(video.published_at?.toISOString()); // Date parsed from API `published_at`
+
+  const { transcript } = await vn.getTranscript({
+    video_url: video.url,
+    transcript_text: true,
+    fallback_to_metadata: true,
+  });
+
+  console.log(video.title, transcript);
+}
+```
+
+```ts
+for (const video of videos) {
+  if (!video.url) continue;
+
+  const { data } = await vn.extractVideoData({
+    video_url: video.url,
+    schema: {
+      hook: { type: 'String', description: 'The opening hook or premise' },
+      products: { type: 'Array', description: 'Products or brands mentioned' },
+      sentiment: {
+        type: 'Enum',
+        description: 'Overall sentiment',
+        enum: ['positive', 'negative', 'neutral', 'mixed'],
+      },
+    },
+    what_to_extract: 'Extract creator messaging and product mentions.',
+    transcribe: true,
+  });
+
+  console.log(video.url, data);
+}
+```
+
+For large profiles, process videos sequentially or with a small concurrency limit so you do not exhaust credits or hit rate limits.
+
+### 4. Instagram carousel posts (multiple videos)
 
 Instagram carousel posts can contain multiple videos. You can select a specific video by index, or transcribe them all at once:
 
@@ -145,7 +249,7 @@ if ('carousel_info' in all) {
 }
 ```
 
-### 4. Upload and analyze a local file
+### 5. Upload and analyze a local file
 
 Upload audio or video files for transcription, analysis, and search. Supported formats: mp4, webm, mov, avi, wmv, flv, mkv, m4a, mp3, mpeg, mpga, wav.
 
@@ -179,7 +283,7 @@ console.log(transcript_analysis.query_answer?.answer);
 // "Three action items were discussed: 1) Finalize the hiring..."
 ```
 
-### 5. Extract structured data
+### 6. Extract structured data
 
 Define a schema and get back clean, structured data extracted from any video or file transcript. Powered by LLMs with token usage tracking.
 
@@ -224,7 +328,7 @@ const { data } = await vn.extractFileData({
 
 **Supported schema types:** `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`
 
-### 6. Semantic search
+### 7. Semantic search
 
 Search across your indexed YouTube channels and uploaded file libraries using AI-powered vector search with reranking.
 
@@ -253,7 +357,7 @@ for (const r of fileResults.results) {
 }
 ```
 
-### 7. Organize files with namespaces
+### 8. Organize files with namespaces
 
 ```ts
 // Create a namespace
@@ -273,7 +377,7 @@ const files = await vn.getFiles({ namespace_id: ns.id });
 const all = await vn.getNamespaces();
 ```
 
-### 8. Usage and credits
+### 9. Usage and credits
 
 ```ts
 const usage = await vn.getUsage();
@@ -300,6 +404,15 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 | `transcribeVideo(payload)` | Speech-to-text transcription via AI models; supports Instagram carousel with `all_videos` |
 
 **Common options:** `video_url`, `language`, `metadata_only`, `fallback_to_metadata`, `transcript_text`
+
+### TikTok
+
+| Method | Description |
+|--------|-------------|
+| `submitTikTokProfileScrape(payload)` | Start an async public TikTok profile scrape. Returns a `task_id` immediately |
+| `getTikTokProfileScrape(task_id, query?)` | Poll task status and retrieve a page of videos. Options: `cursor`, `limit` |
+
+Completed tasks include `videos`, `pagination`, optional scrape `stats`, and an optional short-lived `download_url` for retrieving the whole profile result as JSON. Date filters use `YYYY-MM-DD`; TikTok video `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
 
 ### Files
 
@@ -331,6 +444,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 |--------|-------------|
 | `analyzeVideo(payload)` | Analyze an online video with an optional natural language query |
 | `analyzeFile(payload)` | Analyze an uploaded file with an optional natural language query |
+| `getTweetStatement(payload)` | Extract a structured claim analysis from an X/Twitter tweet ID |
 
 Returns `transcript_analysis` containing:
 - `summary` — content overview
@@ -421,6 +535,10 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `ExtractionTokenUsage` | `prompt_tokens`, `completion_tokens`, `total_tokens` |
 | `CarouselInfo` | Carousel summary: total items, video/image count, transcribed count, total duration |
 | `CarouselVideoResult` | Per-video result in a carousel: index, status, video info, transcript |
+| `TikTokProfileScrapeSubmission` | Async scrape submission: `task_id`, status, profile URL, expiry |
+| `TikTokProfileTask` | TikTok profile scrape task with status, profile metadata, videos, pagination, `download_url` |
+| `TikTokVideo` | Public TikTok video metadata returned by profile scraping, including `published_at` as a `Date` and integer counters |
+| `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
 
 ## Links
 

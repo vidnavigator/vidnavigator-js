@@ -1,3 +1,6 @@
+import { FileInfoJSON } from './FileInfo';
+import { VideoInfoJSON } from './VideoInfo';
+
 export type ExtractionFieldType =
   | 'String'
   | 'Number'
@@ -27,6 +30,8 @@ export interface ExtractionTokenUsageJSON {
 export interface ExtractionResponseJSON {
   status: 'success';
   data: Record<string, unknown>;
+  video_info?: VideoInfoJSON;
+  file_info?: FileInfoJSON;
   usage?: ExtractionTokenUsageJSON;
 }
 

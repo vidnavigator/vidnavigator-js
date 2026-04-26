@@ -139,6 +139,57 @@ try {
   assert(u.total_tokens === 30, 'ExtractionTokenUsage.total_tokens');
 }
 
+// --- TikTok profile models ---
+{
+  const task = sdk.TikTokProfileTask.fromJSON({
+    task_id: 'task-1',
+    task_status: 'completed',
+    profile_url: 'https://www.tiktok.com/@tiktok',
+    filters: { max_posts: 10.9, after_date: '2026-04-01', before_date: '2026-04-30' },
+    stats: { videos_scanned: 2.8, videos_matched: 1.2, pages_consumed: 1.9 },
+    videos: [{
+      id: 'v1',
+      duration: 12.8,
+      timestamp: 1776892618.9,
+      published_at: '2026-04-22T21:16:58+00:00',
+      views: 100.9,
+      likes: 50.7,
+      reposts: 3.2,
+      comments: 4.8,
+      url: 'https://www.tiktok.com/@tiktok/video/1',
+    }],
+    pagination: { limit: 50.7, offset: 0.1, total_items: 1.9, has_next: false, has_prev: false },
+  });
+  assert(task instanceof sdk.TikTokProfileTask, 'TikTokProfileTask instance');
+  assert(task.videos[0] instanceof sdk.TikTokVideo, 'TikTokProfileTask.videos parsed');
+  assert(task.videos[0].published_at instanceof Date, 'TikTokVideo.published_at parsed as Date');
+  assert(task.videos[0].published_at.toISOString() === '2026-04-22T21:16:58.000Z', 'TikTokVideo.published_at value');
+  assert(Number.isInteger(task.videos[0].views) && task.videos[0].views === 100, 'TikTokVideo.views integer');
+  assert(Number.isInteger(task.videos[0].likes) && task.videos[0].likes === 50, 'TikTokVideo.likes integer');
+  assert(Number.isInteger(task.stats.videos_scanned) && task.stats.videos_scanned === 2, 'TikTokProfileTask.stats integers');
+  assert(task.pagination.total_items === 1, 'TikTokProfileTask.pagination');
+  assert(task.filters.after_date === '2026-04-01', 'TikTokProfileTask filters use YYYY-MM-DD');
+}
+
+// --- TweetStatement ---
+{
+  const statement = sdk.TweetStatement.fromJSON({
+    final_statement: 'The author claims something testable.',
+    statement_query: 'testable claim',
+    topics: ['topic'],
+    entities: ['Entity'],
+    claim_type: 'factual_claim',
+    intent: 'inform',
+    tone: 'serious',
+    emotion: 'curiosity',
+    authority: 'data_driven',
+    tweet_text: 'A tweet',
+  });
+  assert(statement instanceof sdk.TweetStatement, 'TweetStatement instance');
+  assert(statement.claim_type === 'factual_claim', 'TweetStatement.claim_type');
+  assert(statement.topics.length === 1, 'TweetStatement.topics');
+}
+
 // --- UsageData (credits model) ---
 {
   const ud = sdk.UsageData.fromJSON({
@@ -237,7 +288,9 @@ try {
     'retryFileProcessing', 'cancelFileUpload',
     'getNamespaces', 'createNamespace', 'updateNamespace', 'deleteNamespace', 'updateFileNamespaces',
     'analyzeVideo', 'analyzeFile',
+    'getTweetStatement',
     'extractVideoData', 'extractFileData',
+    'submitTikTokProfileScrape', 'getTikTokProfileScrape',
     'searchVideos', 'searchFiles',
     'getUsage', 'healthCheck',
   ];
@@ -249,4 +302,112 @@ try {
   }
 }
 
-process.exit(summary());
+async function runClientMethodTests() {
+  const client = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
+  const calls = [];
+  client.request = async (method, url, data, params) => {
+    calls.push({ method, url, data, params });
+    if (url === '/youtube/transcript') {
+      return {
+        status: 'success',
+        data: {
+          video_info: { title: 'YT', url: 'https://youtube.com/watch?v=test' },
+          transcript: 'hello',
+        },
+      };
+    }
+    if (url === '/tiktok/profile' && method === 'POST') {
+      return {
+        status: 'success',
+        data: {
+          task_id: 'task-1',
+          task_status: 'processing',
+          profile_url: data.profile_url,
+          check_status_url: '/v1/tiktok/profile/task-1',
+        },
+      };
+    }
+    if (url === '/tiktok/profile/task-1' && method === 'GET') {
+      return {
+        status: 'success',
+        data: {
+          task_id: 'task-1',
+          task_status: 'completed',
+          videos: [{ id: 'v1' }],
+          pagination: { limit: 1, offset: 0, total_items: 1, has_next: false, has_prev: false },
+        },
+      };
+    }
+    if (url === '/tweet/statement') {
+      return {
+        status: 'success',
+        data: {
+          final_statement: 'A claim',
+          statement_query: 'claim',
+          claim_type: 'factual_claim',
+        },
+      };
+    }
+    if (url === '/extract/video') {
+      return {
+        status: 'success',
+        data: { topic: 'testing' },
+        video_info: { title: 'Video', url: data.video_url },
+        usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+      };
+    }
+    if (url === '/extract/file') {
+      return {
+        status: 'success',
+        data: { summary: 'testing' },
+        file_info: {
+          id: data.file_id,
+          name: 'file.mp4',
+          status: 'completed',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      };
+    }
+    throw new Error(`Unexpected request: ${method} ${url}`);
+  };
+
+  const yt = await client.getYouTubeTranscript({ video_url: 'https://youtube.com/watch?v=test' });
+  assert(yt.video_info instanceof sdk.VideoInfo, 'getYouTubeTranscript parses VideoInfo');
+  assert(calls[calls.length - 1].url === '/youtube/transcript', 'getYouTubeTranscript uses /youtube/transcript');
+
+  const submitted = await client.submitTikTokProfileScrape({ profile_url: 'https://www.tiktok.com/@tiktok' });
+  assert(submitted instanceof sdk.TikTokProfileScrapeSubmission, 'submitTikTokProfileScrape parses submission');
+  assert(calls[calls.length - 1].url === '/tiktok/profile', 'submitTikTokProfileScrape path');
+
+  const scrape = await client.getTikTokProfileScrape('task-1', { limit: 1 });
+  assert(scrape instanceof sdk.TikTokProfileTask, 'getTikTokProfileScrape parses task');
+  assert(calls[calls.length - 1].params.limit === 1, 'getTikTokProfileScrape query params');
+
+  const tweet = await client.getTweetStatement({ tweet_id: '123' });
+  assert(tweet instanceof sdk.TweetStatement, 'getTweetStatement parses TweetStatement');
+  assert(calls[calls.length - 1].url === '/tweet/statement', 'getTweetStatement path');
+
+  const videoExtraction = await client.extractVideoData({
+    video_url: 'https://example.com/video',
+    schema: { topic: { type: 'String', description: 'Topic' } },
+    transcribe: false,
+    include_usage: true,
+  });
+  assert(videoExtraction.video_info instanceof sdk.VideoInfo, 'extractVideoData parses video_info');
+  assert(videoExtraction.usage instanceof sdk.ExtractionTokenUsage, 'extractVideoData parses usage');
+  assert(calls[calls.length - 1].data.transcribe === false, 'extractVideoData sends transcribe');
+
+  const fileExtraction = await client.extractFileData({
+    file_id: 'file-1',
+    schema: { summary: { type: 'String', description: 'Summary' } },
+  });
+  assert(fileExtraction.file_info instanceof sdk.FileInfo, 'extractFileData parses file_info');
+}
+
+runClientMethodTests()
+  .then(() => process.exit(summary()))
+  .catch((e) => {
+    fail('client method tests', e.message);
+    process.exit(summary());
+  });
