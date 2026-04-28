@@ -1,10 +1,10 @@
 export interface TikTokProfileScrapeRequest {
   profile_url: string;
   max_posts?: number;
-  /** Format: YYYY-MM-DD */
-  after_date?: string;
-  /** Format: YYYY-MM-DD */
-  before_date?: string;
+  /** Format: YYYY-MM-DD or ISO datetime with timezone */
+  after_datetime?: string;
+  /** Format: YYYY-MM-DD or ISO datetime with timezone */
+  before_datetime?: string;
   min_likes?: number;
   max_likes?: number;
 }
@@ -29,8 +29,8 @@ function normalizeFilters(filters: TikTokProfileFilters | undefined): TikTokProf
   if (!filters) return undefined;
   return {
     max_posts: toInteger(filters.max_posts),
-    after_date: filters.after_date,
-    before_date: filters.before_date,
+    after_datetime: filters.after_datetime,
+    before_datetime: filters.before_datetime,
     min_likes: toInteger(filters.min_likes),
     max_likes: toInteger(filters.max_likes),
   };
@@ -148,8 +148,8 @@ export class TikTokVideo {
 
 export interface TikTokProfileFilters {
   max_posts?: number | null;
-  after_date?: string | null;
-  before_date?: string | null;
+  after_datetime?: string | null;
+  before_datetime?: string | null;
   min_likes?: number | null;
   max_likes?: number | null;
 }

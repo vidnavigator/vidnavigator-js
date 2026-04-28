@@ -95,9 +95,32 @@ If this passes, the tarball is safe to publish.
 
 ### 4. Publish
 
+Before publishing, authenticate npm with a valid token (recommended) or interactive login.
+
+#### Recommended: token-based auth
+
+1. In npmjs.com, generate a new access token for your account:
+   - Prefer an **Automation** token, or a granular token with publish permission.
+   - If your account/package enforces 2FA for publish, the token must support publish without OTP (bypass 2FA) or publish will fail with `E403`.
+2. Add the token to your local npm config:
+
+```bash
+npm config set //registry.npmjs.org/:_authToken "YOUR_NPM_TOKEN"
+```
+
+3. Verify auth:
+
+```bash
+npm whoami --registry https://registry.npmjs.org/
+```
+
+If this fails (`E401`), token/login is invalid or expired.
+
+#### Publish command
+
 ```bash
 cd vidnavigator
-npm publish
+npm publish --registry https://registry.npmjs.org/
 ```
 
 Or for a dry run first:
@@ -106,6 +129,15 @@ Or for a dry run first:
 cd vidnavigator
 npm publish --dry-run
 ```
+
+#### Common publish failures
+
+- `E401 Unauthorized` on `npm whoami`: not authenticated (expired/invalid token).
+- `E403 ... Two-factor authentication ... is required`: account/package policy requires publish 2FA, and current token does not satisfy it.
+- `E403` when using a scoped package name: token/user may not have publish rights for that scope.
+- Accidentally publishing under a different name/scope than intended:
+  - Existing package in this repo is `vidnavigator` (unscoped).
+  - If you switch to a scoped name like `@scope/vidnavigator`, you are publishing a different package.
 
 ### 5. Tag and push
 

@@ -14,7 +14,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 - **Instagram carousel support** — select a specific video by index, or transcribe every video in a carousel post with one call.
 - **AI-powered analysis** — get summaries, people mentioned, places, key subjects, and direct answers to questions about any video or audio.
 - **Structured data extraction** — define a JSON schema and receive typed, structured fields extracted from any transcript (powered by LLMs).
-- **Semantic search** — vector-based search with AI reranking across your indexed YouTube channels and uploaded file libraries.
+- **AI search and reranking** — YouTube search and file search with AI ranking/reranking and rich result metadata.
 - **File management with namespaces** — upload audio/video files, organize them into namespaces, and scope searches and analysis by folder.
 - **Full TypeScript support** — rich types, autocompletion, and compile-time safety out of the box.
 - **Comprehensive error handling** — dedicated error classes for every API error code (`AuthenticationError`, `RateLimitExceededError`, `GeoRestrictedError`, and more).
@@ -123,7 +123,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const submitted = await vn.submitTikTokProfileScrape({
   profile_url: 'https://www.tiktok.com/@tiktok',
   max_posts: 250,
-  after_date: '2024-01-01',
+  after_datetime: '2024-01-01',
 });
 
 let task = await vn.getTikTokProfileScrape(submitted.task_id, { limit: 50 });
@@ -330,10 +330,10 @@ const { data } = await vn.extractFileData({
 
 ### 7. Semantic search
 
-Search across your indexed YouTube channels and uploaded file libraries using AI-powered vector search with reranking.
+Search YouTube videos and uploaded files with AI-powered ranking/reranking.
 
 ```ts
-// Search indexed YouTube videos
+// Search YouTube videos
 const videoResults = await vn.searchVideos({
   query: 'how to deploy a Node.js app',
 });
@@ -412,7 +412,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 | `submitTikTokProfileScrape(payload)` | Start an async public TikTok profile scrape. Returns a `task_id` immediately |
 | `getTikTokProfileScrape(task_id, query?)` | Poll task status and retrieve a page of videos. Options: `cursor`, `limit` |
 
-Completed tasks include `videos`, `pagination`, optional scrape `stats`, and an optional short-lived `download_url` for retrieving the whole profile result as JSON. Date filters use `YYYY-MM-DD`; TikTok video `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
+Completed tasks include `videos`, `pagination`, optional scrape `stats`, and an optional short-lived `download_url` for retrieving the whole profile result as JSON. Datetime filters use `after_datetime` and `before_datetime`, each accepting either `YYYY-MM-DD` or full ISO datetime strings with timezone; TikTok video `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
 
 ### Files
 
@@ -468,7 +468,7 @@ Returns `transcript_analysis` containing:
 
 | Method | Description |
 |--------|-------------|
-| `searchVideos(payload)` | Semantic search across indexed YouTube channels |
+| `searchVideos(payload)` | Search YouTube videos with AI ranking/reranking |
 | `searchFiles(payload)` | Semantic search across uploaded files, with optional `namespace_ids` scope |
 
 Results include `relevance_score`, `transcript_summary`, `people`, `places`, `key_subjects`, `query_answer`, `timestamps`, and `relevant_text`.

@@ -145,7 +145,11 @@ try {
     task_id: 'task-1',
     task_status: 'completed',
     profile_url: 'https://www.tiktok.com/@tiktok',
-    filters: { max_posts: 10.9, after_date: '2026-04-01', before_date: '2026-04-30' },
+    filters: {
+      max_posts: 10.9,
+      after_datetime: '2026-04-01',
+      before_datetime: '2026-04-30T23:59:59+00:00',
+    },
     stats: { videos_scanned: 2.8, videos_matched: 1.2, pages_consumed: 1.9 },
     videos: [{
       id: 'v1',
@@ -168,7 +172,11 @@ try {
   assert(Number.isInteger(task.videos[0].likes) && task.videos[0].likes === 50, 'TikTokVideo.likes integer');
   assert(Number.isInteger(task.stats.videos_scanned) && task.stats.videos_scanned === 2, 'TikTokProfileTask.stats integers');
   assert(task.pagination.total_items === 1, 'TikTokProfileTask.pagination');
-  assert(task.filters.after_date === '2026-04-01', 'TikTokProfileTask filters use YYYY-MM-DD');
+  assert(task.filters.after_datetime === '2026-04-01', 'TikTokProfileTask filters accept YYYY-MM-DD');
+  assert(
+    task.filters.before_datetime === '2026-04-30T23:59:59+00:00',
+    'TikTokProfileTask filters accept ISO datetime'
+  );
 }
 
 // --- TweetStatement ---
