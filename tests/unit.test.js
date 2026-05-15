@@ -2,6 +2,8 @@
  * Unit tests — no network calls, pure model / error / export verification.
  * Run: node tests/unit.test.js
  */
+const fs = require('fs');
+const path = require('path');
 const { sdk, assert, summary } = require('./helpers');
 
 console.log('=== Unit Tests ===\n');
@@ -179,6 +181,55 @@ try {
   );
 }
 
+// --- TikTok search models ---
+{
+  const submitted = sdk.TikTokSearchSubmission.fromJSON({
+    task_id: 'search-1',
+    task_status: 'processing',
+    query: 'ai tools',
+    max_results: 25.9,
+    parallel_search_slices: 2.7,
+  });
+  assert(submitted instanceof sdk.TikTokSearchSubmission, 'TikTokSearchSubmission instance');
+  assert(submitted.max_results === 25, 'TikTokSearchSubmission max_results integer');
+  assert(submitted.parallel_search_slices === 2, 'TikTokSearchSubmission parallel_search_slices integer');
+
+  const task = sdk.TikTokSearchTask.fromJSON({
+    task_id: 'search-1',
+    task_status: 'completed',
+    query: 'ai tools',
+    parallel_search_slices: 2.7,
+    filters: {
+      after_datetime: '2026-04-01',
+      min_likes: 10.9,
+      max_views: 1000.7,
+    },
+    stats: { pages_fetched: 3.8, results_count: 20.2, next_search_cursor: 123.9 },
+    results: [{
+      id: 'v1',
+      item_type: 0.9,
+      description: 'demo',
+      timestamp: 1776892618.9,
+      published_at: '2026-04-22T21:16:58+00:00',
+      stats: { views: 100.9, likes: 50.7, comments: 4.8, shares: 3.2, collects: 2.9 },
+      music: { id: 'm1', title: 'sound', duration: 12.8 },
+      duration: 13.9,
+      hashtags: ['ai'],
+      url: 'https://www.tiktok.com/@creator/video/1',
+    }],
+    pagination: { limit: 50.7, offset: 0.1, total_items: 1.9, has_next: false, has_prev: false },
+  });
+  assert(task instanceof sdk.TikTokSearchTask, 'TikTokSearchTask instance');
+  assert(task.results[0] instanceof sdk.TikTokSearchResult, 'TikTokSearchTask.results parsed');
+  assert(task.results[0].published_at instanceof Date, 'TikTokSearchResult.published_at parsed as Date');
+  assert(task.results[0].published_at.toISOString() === '2026-04-22T21:16:58.000Z', 'TikTokSearchResult.published_at value');
+  assert(task.results[0].stats.views === 100, 'TikTokSearchResult stats integers');
+  assert(task.results[0].music.duration === 12, 'TikTokSearchResult music duration integer');
+  assert(task.filters.min_likes === 10, 'TikTokSearchTask filters integers');
+  assert(task.stats.pages_fetched === 3, 'TikTokSearchTask stats integers');
+  assert(task.pagination.total_items === 1, 'TikTokSearchTask pagination');
+}
+
 // --- TweetStatement ---
 {
   const statement = sdk.TweetStatement.fromJSON({
@@ -299,6 +350,7 @@ try {
     'getTweetStatement',
     'extractVideoData', 'extractFileData',
     'submitTikTokProfileScrape', 'getTikTokProfileScrape',
+    'submitTikTokSearch', 'getTikTokSearch',
     'searchVideos', 'searchFiles',
     'getUsage', 'healthCheck',
   ];
@@ -313,8 +365,8 @@ try {
 async function runClientMethodTests() {
   const client = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
   const calls = [];
-  client.request = async (method, url, data, params) => {
-    calls.push({ method, url, data, params });
+  client.request = async (method, url, data, params, extraHeaders) => {
+    calls.push({ method, url, data, params, extraHeaders });
     if (url === '/youtube/transcript') {
       return {
         status: 'success',
@@ -342,6 +394,29 @@ async function runClientMethodTests() {
           task_id: 'task-1',
           task_status: 'completed',
           videos: [{ id: 'v1' }],
+          pagination: { limit: 1, offset: 0, total_items: 1, has_next: false, has_prev: false },
+        },
+      };
+    }
+    if (url === '/tiktok/search' && method === 'POST') {
+      return {
+        status: 'success',
+        data: {
+          task_id: 'search-1',
+          task_status: 'processing',
+          query: data.query,
+          check_status_url: '/v1/tiktok/search/search-1',
+        },
+      };
+    }
+    if (url === '/tiktok/search/search-1' && method === 'GET') {
+      return {
+        status: 'success',
+        data: {
+          task_id: 'search-1',
+          task_status: 'completed',
+          query: 'ai tools',
+          results: [{ id: 'v1', published_at: '2026-04-22T21:16:58+00:00' }],
           pagination: { limit: 1, offset: 0, total_items: 1, has_next: false, has_prev: false },
         },
       };
@@ -392,6 +467,15 @@ async function runClientMethodTests() {
   assert(scrape instanceof sdk.TikTokProfileTask, 'getTikTokProfileScrape parses task');
   assert(calls[calls.length - 1].params.limit === 1, 'getTikTokProfileScrape query params');
 
+  const searchSubmitted = await client.submitTikTokSearch({ query: 'ai tools', parallel_search_slices: 2 });
+  assert(searchSubmitted instanceof sdk.TikTokSearchSubmission, 'submitTikTokSearch parses submission');
+  assert(calls[calls.length - 1].url === '/tiktok/search', 'submitTikTokSearch path');
+
+  const search = await client.getTikTokSearch('search-1', { limit: 1 });
+  assert(search instanceof sdk.TikTokSearchTask, 'getTikTokSearch parses task');
+  assert(search.results[0] instanceof sdk.TikTokSearchResult, 'getTikTokSearch parses results');
+  assert(calls[calls.length - 1].params.limit === 1, 'getTikTokSearch query params');
+
   const tweet = await client.getTweetStatement({ tweet_id: '123' });
   assert(tweet instanceof sdk.TweetStatement, 'getTweetStatement parses TweetStatement');
   assert(calls[calls.length - 1].url === '/tweet/statement', 'getTweetStatement path');
@@ -405,6 +489,24 @@ async function runClientMethodTests() {
   assert(videoExtraction.video_info instanceof sdk.VideoInfo, 'extractVideoData parses video_info');
   assert(videoExtraction.usage instanceof sdk.ExtractionTokenUsage, 'extractVideoData parses usage');
   assert(calls[calls.length - 1].data.transcribe === false, 'extractVideoData sends transcribe');
+
+  const schemaPath = path.join(__dirname, 'tmp-extraction-schema.json');
+  fs.writeFileSync(schemaPath, JSON.stringify({ topic: { type: 'String', description: 'Topic' } }));
+  try {
+    const multipartExtraction = await client.extractVideoData({
+      video_url: 'https://example.com/video',
+      schemaFilePath: schemaPath,
+      include_usage: true,
+    });
+    assert(multipartExtraction.video_info instanceof sdk.VideoInfo, 'extractVideoData multipart parses video_info');
+    assert(typeof calls[calls.length - 1].data.getHeaders === 'function', 'extractVideoData multipart sends FormData');
+    assert(
+      calls[calls.length - 1].extraHeaders['content-type'].startsWith('multipart/form-data'),
+      'extractVideoData multipart content type'
+    );
+  } finally {
+    fs.unlinkSync(schemaPath);
+  }
 
   const fileExtraction = await client.extractFileData({
     file_id: 'file-1',

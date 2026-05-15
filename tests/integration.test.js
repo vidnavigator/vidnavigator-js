@@ -244,6 +244,61 @@ async function run() {
     console.log('--- TikTok profile scrape skipped (TEST_TIKTOK_PROFILE_URL not set) ---');
   }
 
+  // ── Optional TikTok keyword search ──
+  if (process.env.TEST_TIKTOK_SEARCH_QUERY) {
+    console.log('--- submitTikTokSearch / getTikTokSearch ---');
+    try {
+      await withTimeout((async () => {
+        const submitted = await client.submitTikTokSearch({
+          query: process.env.TEST_TIKTOK_SEARCH_QUERY,
+          max_results: 5,
+          parallel_search_slices: 1,
+        });
+        assert(submitted instanceof sdk.TikTokSearchSubmission, 'submitTikTokSearch response type');
+        assert(typeof submitted.task_id === 'string' && submitted.task_id.length > 0, 'submitTikTokSearch task_id');
+
+        let search = await client.getTikTokSearch(submitted.task_id, { limit: 2 });
+        assert(search instanceof sdk.TikTokSearchTask, 'getTikTokSearch response type');
+
+        const started = Date.now();
+        while (search.task_status === 'processing') {
+          console.log(`    polling TikTok search ${submitted.task_id}: processing (${Math.round((Date.now() - started) / 1000)}s)`);
+          await sleep(5000);
+          search = await client.getTikTokSearch(submitted.task_id, { limit: 2 });
+        }
+
+        assert(search.task_status === 'completed', 'TikTok search completed');
+        assert(Array.isArray(search.results), 'getTikTokSearch results array');
+        assert(search.pagination && typeof search.pagination.total_items === 'number', 'TikTok search pagination');
+        if (search.results.length > 0) {
+          const [result] = search.results;
+          assert(result instanceof sdk.TikTokSearchResult, 'TikTok search result type');
+          if (result.published_at !== null && result.published_at !== undefined) {
+            assert(result.published_at instanceof Date, 'TikTok search published_at Date');
+          }
+        }
+
+        if (search.pagination?.next_cursor) {
+          const secondPage = await client.getTikTokSearch(submitted.task_id, {
+            limit: 2,
+            cursor: search.pagination.next_cursor,
+          });
+          assert(secondPage instanceof sdk.TikTokSearchTask, 'getTikTokSearch cursor page type');
+          assert(Array.isArray(secondPage.results), 'getTikTokSearch cursor page results');
+        }
+
+        if (search.download_url) {
+          const fullSearch = await getJson(search.download_url);
+          assert(Array.isArray(fullSearch.results), 'TikTok search download_url results array');
+        } else {
+          pass('TikTok search download_url not configured; paginated result verified');
+        }
+      })(), 600000, 'TikTok keyword search');
+    } catch (e) { fail('TikTok keyword search', e.message); }
+  } else {
+    console.log('--- TikTok keyword search skipped (TEST_TIKTOK_SEARCH_QUERY not set) ---');
+  }
+
   // ── Optional tweet statement extraction ──
   if (process.env.TEST_TWEET_ID) {
     console.log('--- getTweetStatement ---');

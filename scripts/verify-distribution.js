@@ -66,6 +66,8 @@ const checks = [
   ['getYouTubeTranscript', typeof vn.VidNavigatorClient.prototype.getYouTubeTranscript === 'function'],
   ['submitTikTokProfileScrape', typeof vn.VidNavigatorClient.prototype.submitTikTokProfileScrape === 'function'],
   ['getTikTokProfileScrape', typeof vn.VidNavigatorClient.prototype.getTikTokProfileScrape === 'function'],
+  ['submitTikTokSearch', typeof vn.VidNavigatorClient.prototype.submitTikTokSearch === 'function'],
+  ['getTikTokSearch', typeof vn.VidNavigatorClient.prototype.getTikTokSearch === 'function'],
   ['getTweetStatement', typeof vn.VidNavigatorClient.prototype.getTweetStatement === 'function'],
   ['extractVideoData', typeof vn.VidNavigatorClient.prototype.extractVideoData === 'function'],
   ['extractFileData', typeof vn.VidNavigatorClient.prototype.extractFileData === 'function'],

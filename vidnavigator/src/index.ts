@@ -33,6 +33,11 @@ import {
   TikTokProfileScrapeSubmissionJSON,
   TikTokProfileTask,
   TikTokProfileTaskJSON,
+  TikTokSearchRequest,
+  TikTokSearchSubmission,
+  TikTokSearchSubmissionJSON,
+  TikTokSearchTask,
+  TikTokSearchTaskJSON,
   TweetStatement,
   TweetStatementJSON,
 } from './models';
@@ -54,7 +59,7 @@ export * from './models';
 export * from './errors';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '1.0.2';
+export const SDK_VERSION = '1.0.3';
 
 //region --- Interfaces ---
 export interface SDKConfig {
@@ -121,6 +126,38 @@ export interface ExtractDataResult {
   file_info?: FileInfo;
   usage?: ExtractionTokenUsage;
 }
+
+export type ExtractVideoDataPayload = {
+  video_url: string;
+  schema: ExtractionSchema;
+  what_to_extract?: string;
+  transcribe?: boolean;
+  include_usage?: boolean;
+};
+
+export type ExtractVideoDataMultipartPayload = {
+  video_url: string;
+  /** Path to a JSON or YAML schema file. The API accepts either a raw schema or a full extraction request object. */
+  schemaFilePath: string;
+  what_to_extract?: string;
+  transcribe?: boolean;
+  include_usage?: boolean;
+};
+
+export type ExtractFileDataPayload = {
+  file_id: string;
+  schema: ExtractionSchema;
+  what_to_extract?: string;
+  include_usage?: boolean;
+};
+
+export type ExtractFileDataMultipartPayload = {
+  file_id: string;
+  /** Path to a JSON or YAML schema file. The API accepts either a raw schema or a full extraction request object. */
+  schemaFilePath: string;
+  what_to_extract?: string;
+  include_usage?: boolean;
+};
 //endregion
 
 function parseApiErrorPayload(data: any): {
@@ -135,6 +172,12 @@ function parseApiErrorPayload(data: any): {
     data?.message ??
     (typeof errorField === 'object' ? errorField?.message : undefined);
   return { errorCode, errorMessage, details: data };
+}
+
+function appendOptionalFormField(form: FormData, name: string, value: string | number | boolean | undefined): void {
+  if (value !== undefined) {
+    form.append(name, String(value));
+  }
 }
 
 export class VidNavigatorClient {
@@ -302,6 +345,28 @@ export class VidNavigatorClient {
       query
     );
     return TikTokProfileTask.fromJSON(response.data);
+  }
+
+  async submitTikTokSearch(payload: TikTokSearchRequest): Promise<TikTokSearchSubmission> {
+    const response = await this.request<ApiSuccessResponse<TikTokSearchSubmissionJSON>>(
+      'POST',
+      '/tiktok/search',
+      payload
+    );
+    return TikTokSearchSubmission.fromJSON(response.data);
+  }
+
+  async getTikTokSearch(
+    task_id: string,
+    query?: { cursor?: string; limit?: number }
+  ): Promise<TikTokSearchTask> {
+    const response = await this.request<ApiSuccessResponse<TikTokSearchTaskJSON>>(
+      'GET',
+      `/tiktok/search/${task_id}`,
+      undefined,
+      query
+    );
+    return TikTokSearchTask.fromJSON(response.data);
   }
   //endregion
 
@@ -577,13 +642,30 @@ export class VidNavigatorClient {
   //endregion
 
   //region --- Extraction ---
-  async extractVideoData(payload: {
-    video_url: string;
-    schema: ExtractionSchema;
-    what_to_extract?: string;
-    transcribe?: boolean;
-    include_usage?: boolean;
-  }): Promise<ExtractDataResult> {
+  async extractVideoData(
+    payload: ExtractVideoDataPayload | ExtractVideoDataMultipartPayload
+  ): Promise<ExtractDataResult> {
+    if ('schemaFilePath' in payload) {
+      const form = new FormData();
+      form.append('video_url', payload.video_url);
+      form.append('schema', fs.createReadStream(payload.schemaFilePath));
+      appendOptionalFormField(form, 'what_to_extract', payload.what_to_extract);
+      appendOptionalFormField(form, 'transcribe', payload.transcribe);
+      appendOptionalFormField(form, 'include_usage', payload.include_usage);
+
+      const body = await this.request<{
+        status: 'success';
+        data: Record<string, unknown>;
+        video_info?: VideoInfoJSON;
+        usage?: ExtractionTokenUsageJSON;
+      }>('POST', '/extract/video', form, undefined, form.getHeaders());
+      return {
+        data: body.data,
+        video_info: body.video_info ? VideoInfo.fromJSON(body.video_info) : undefined,
+        usage: body.usage ? ExtractionTokenUsage.fromJSON(body.usage) : undefined,
+      };
+    }
+
     const body = await this.request<{
       status: 'success';
       data: Record<string, unknown>;
@@ -597,12 +679,29 @@ export class VidNavigatorClient {
     };
   }
 
-  async extractFileData(payload: {
-    file_id: string;
-    schema: ExtractionSchema;
-    what_to_extract?: string;
-    include_usage?: boolean;
-  }): Promise<ExtractDataResult> {
+  async extractFileData(
+    payload: ExtractFileDataPayload | ExtractFileDataMultipartPayload
+  ): Promise<ExtractDataResult> {
+    if ('schemaFilePath' in payload) {
+      const form = new FormData();
+      form.append('file_id', payload.file_id);
+      form.append('schema', fs.createReadStream(payload.schemaFilePath));
+      appendOptionalFormField(form, 'what_to_extract', payload.what_to_extract);
+      appendOptionalFormField(form, 'include_usage', payload.include_usage);
+
+      const body = await this.request<{
+        status: 'success';
+        data: Record<string, unknown>;
+        file_info?: FileInfoJSON;
+        usage?: ExtractionTokenUsageJSON;
+      }>('POST', '/extract/file', form, undefined, form.getHeaders());
+      return {
+        data: body.data,
+        file_info: body.file_info ? FileInfo.fromJSON(body.file_info) : undefined,
+        usage: body.usage ? ExtractionTokenUsage.fromJSON(body.usage) : undefined,
+      };
+    }
+
     const body = await this.request<{
       status: 'success';
       data: Record<string, unknown>;

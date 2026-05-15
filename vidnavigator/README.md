@@ -10,7 +10,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 ## Why VidNavigator?
 
 - **Multi-platform transcription** — YouTube, Instagram Reels & carousel posts, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, and more.
-- **Async TikTok profile scraping** — scrape public profile videos in the background, then read results via cursor pagination or a signed `download_url`.
+- **Async TikTok profile scraping and keyword search** — collect public TikTok videos in the background, then read results via cursor pagination or a signed `download_url`.
 - **Instagram carousel support** — select a specific video by index, or transcribe every video in a carousel post with one call.
 - **AI-powered analysis** — get summaries, people mentioned, places, key subjects, and direct answers to questions about any video or audio.
 - **Structured data extraction** — define a JSON schema and receive typed, structured fields extracted from any transcript (powered by LLMs).
@@ -216,7 +216,33 @@ for (const video of videos) {
 
 For large profiles, process videos sequentially or with a small concurrency limit so you do not exhaust credits or hit rate limits.
 
-### 4. Instagram carousel posts (multiple videos)
+### 4. TikTok keyword search (async)
+
+TikTok keyword search follows the same async pattern as profile scraping: submit a search, then poll by `task_id` until results are ready.
+
+```ts
+const submitted = await vn.submitTikTokSearch({
+  query: 'ai tools',
+  max_results: 100,
+  parallel_search_slices: 2,
+  after_datetime: '2024-01-01',
+});
+
+let task = await vn.getTikTokSearch(submitted.task_id, { limit: 50 });
+
+while (task.task_status === 'processing') {
+  await sleep(5000);
+  task = await vn.getTikTokSearch(submitted.task_id, { limit: 50 });
+}
+
+for (const result of task.results) {
+  console.log(result.published_at?.toISOString(), result.url, result.stats?.views);
+}
+```
+
+Use `parallel_search_slices` from `2` to `4` when you need broader collection than TikTok's natural single-chain cap. Billing scales with the number of slices, so keep it at `1` unless you need the wider result set.
+
+### 5. Instagram carousel posts (multiple videos)
 
 Instagram carousel posts can contain multiple videos. You can select a specific video by index, or transcribe them all at once:
 
@@ -249,7 +275,7 @@ if ('carousel_info' in all) {
 }
 ```
 
-### 5. Upload and analyze a local file
+### 6. Upload and analyze a local file
 
 Upload audio or video files for transcription, analysis, and search. Supported formats: mp4, webm, mov, avi, wmv, flv, mkv, m4a, mp3, mpeg, mpga, wav.
 
@@ -283,7 +309,7 @@ console.log(transcript_analysis.query_answer?.answer);
 // "Three action items were discussed: 1) Finalize the hiring..."
 ```
 
-### 6. Extract structured data
+### 7. Extract structured data
 
 Define a schema and get back clean, structured data extracted from any video or file transcript. Powered by LLMs with token usage tracking.
 
@@ -326,9 +352,19 @@ const { data } = await vn.extractFileData({
 });
 ```
 
+For larger schemas, pass a JSON or YAML schema file with multipart form-data:
+
+```ts
+const { data } = await vn.extractVideoData({
+  video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
+  schemaFilePath: './schemas/video-extraction.yaml',
+  include_usage: true,
+});
+```
+
 **Supported schema types:** `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`
 
-### 7. Semantic search
+### 8. Semantic search
 
 Search YouTube videos and uploaded files with AI-powered ranking/reranking.
 
@@ -357,7 +393,7 @@ for (const r of fileResults.results) {
 }
 ```
 
-### 8. Organize files with namespaces
+### 9. Organize files with namespaces
 
 ```ts
 // Create a namespace
@@ -377,7 +413,7 @@ const files = await vn.getFiles({ namespace_id: ns.id });
 const all = await vn.getNamespaces();
 ```
 
-### 9. Usage and credits
+### 10. Usage and credits
 
 ```ts
 const usage = await vn.getUsage();
@@ -411,8 +447,10 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 |--------|-------------|
 | `submitTikTokProfileScrape(payload)` | Start an async public TikTok profile scrape. Returns a `task_id` immediately |
 | `getTikTokProfileScrape(task_id, query?)` | Poll task status and retrieve a page of videos. Options: `cursor`, `limit` |
+| `submitTikTokSearch(payload)` | Start an async TikTok keyword search. Returns a `task_id` immediately |
+| `getTikTokSearch(task_id, query?)` | Poll search status and retrieve a page of results. Options: `cursor`, `limit` |
 
-Completed tasks include `videos`, `pagination`, optional scrape `stats`, and an optional short-lived `download_url` for retrieving the whole profile result as JSON. Datetime filters use `after_datetime` and `before_datetime`, each accepting either `YYYY-MM-DD` or full ISO datetime strings with timezone; TikTok video `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
+Completed profile tasks include `videos`; completed search tasks include `results`. Both include `pagination`, optional `stats`, and an optional short-lived `download_url` for retrieving the whole result as JSON. Datetime filters use `after_datetime` and `before_datetime`, each accepting either `YYYY-MM-DD` or full ISO datetime strings with timezone; TikTok `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
 
 ### Files
 
@@ -460,7 +498,7 @@ Returns `transcript_analysis` containing:
 | `extractVideoData(payload)` | Extract structured data from an online video transcript |
 | `extractFileData(payload)` | Extract structured data from an uploaded file transcript |
 
-**Options:** `schema` (required), `what_to_extract` (optional guidance), `include_usage` (token tracking)
+**Options:** `schema` (required for JSON requests), `schemaFilePath` (JSON/YAML schema file via multipart form-data), `what_to_extract` (optional guidance), `include_usage` (token tracking)
 
 **Schema field types:** `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`
 
@@ -538,6 +576,9 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokProfileScrapeSubmission` | Async scrape submission: `task_id`, status, profile URL, expiry |
 | `TikTokProfileTask` | TikTok profile scrape task with status, profile metadata, videos, pagination, `download_url` |
 | `TikTokVideo` | Public TikTok video metadata returned by profile scraping, including `published_at` as a `Date` and integer counters |
+| `TikTokSearchSubmission` | Async TikTok keyword search submission: `task_id`, query, slice count, expiry |
+| `TikTokSearchTask` | TikTok keyword search task with status, results, pagination, `download_url` |
+| `TikTokSearchResult` | Normalized TikTok keyword result, including `published_at` as a `Date` and integer counters |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
 
 ## Links

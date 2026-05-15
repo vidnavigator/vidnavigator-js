@@ -9,6 +9,20 @@ export interface TikTokProfileScrapeRequest {
   max_likes?: number;
 }
 
+export interface TikTokSearchRequest {
+  query: string;
+  max_results?: number;
+  parallel_search_slices?: number;
+  /** Format: YYYY-MM-DD or ISO datetime with timezone */
+  after_datetime?: string;
+  /** Format: YYYY-MM-DD or ISO datetime with timezone */
+  before_datetime?: string;
+  min_likes?: number;
+  max_likes?: number;
+  min_views?: number;
+  max_views?: number;
+}
+
 function toInteger(value: number | null | undefined): number | null | undefined {
   if (value === null || value === undefined) return value;
   return Math.trunc(value);
@@ -36,12 +50,35 @@ function normalizeFilters(filters: TikTokProfileFilters | undefined): TikTokProf
   };
 }
 
+function normalizeSearchFilters(
+  filters: TikTokSearchFilters | undefined
+): TikTokSearchFilters | undefined {
+  if (!filters) return undefined;
+  return {
+    after_datetime: filters.after_datetime,
+    before_datetime: filters.before_datetime,
+    min_likes: toInteger(filters.min_likes),
+    max_likes: toInteger(filters.max_likes),
+    min_views: toInteger(filters.min_views),
+    max_views: toInteger(filters.max_views),
+  };
+}
+
 function normalizeStats(stats: TikTokProfileStats | undefined): TikTokProfileStats | undefined {
   if (!stats) return undefined;
   return {
     videos_scanned: toOptionalInteger(stats.videos_scanned),
     videos_matched: toOptionalInteger(stats.videos_matched),
     pages_consumed: toOptionalInteger(stats.pages_consumed),
+  };
+}
+
+function normalizeSearchStats(stats: TikTokSearchStats | undefined): TikTokSearchStats | undefined {
+  if (!stats) return undefined;
+  return {
+    pages_fetched: toOptionalInteger(stats.pages_fetched),
+    results_count: toOptionalInteger(stats.results_count),
+    next_search_cursor: toInteger(stats.next_search_cursor),
   };
 }
 
@@ -88,6 +125,46 @@ export class TikTokProfileScrapeSubmission {
 
   static fromJSON(json: TikTokProfileScrapeSubmissionJSON): TikTokProfileScrapeSubmission {
     return new TikTokProfileScrapeSubmission(json);
+  }
+}
+
+export interface TikTokSearchSubmissionJSON {
+  task_id: string;
+  task_status: 'processing';
+  query: string;
+  max_results?: number;
+  parallel_search_slices?: number;
+  filters?: Record<string, unknown>;
+  expires_at?: string;
+  check_status_url?: string;
+  message?: string;
+}
+
+export class TikTokSearchSubmission {
+  task_id: string;
+  task_status: 'processing';
+  query: string;
+  max_results?: number;
+  parallel_search_slices?: number;
+  filters?: Record<string, unknown>;
+  expires_at?: string;
+  check_status_url?: string;
+  message?: string;
+
+  constructor(data: TikTokSearchSubmissionJSON) {
+    this.task_id = data.task_id;
+    this.task_status = data.task_status;
+    this.query = data.query;
+    this.max_results = toOptionalInteger(data.max_results);
+    this.parallel_search_slices = toOptionalInteger(data.parallel_search_slices);
+    this.filters = data.filters;
+    this.expires_at = data.expires_at;
+    this.check_status_url = data.check_status_url;
+    this.message = data.message;
+  }
+
+  static fromJSON(json: TikTokSearchSubmissionJSON): TikTokSearchSubmission {
+    return new TikTokSearchSubmission(json);
   }
 }
 
@@ -170,6 +247,102 @@ export interface TikTokProfilePagination {
   prev_cursor?: string | null;
 }
 
+export interface TikTokSearchAuthor {
+  id?: string | null;
+  unique_id?: string | null;
+  nickname?: string | null;
+  sec_uid?: string | null;
+}
+
+export interface TikTokSearchResultStats {
+  views?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+  collects?: number | null;
+}
+
+export interface TikTokSearchMusic {
+  id?: string | null;
+  title?: string | null;
+  author_name?: string | null;
+  duration?: number | null;
+}
+
+export interface TikTokSearchResultJSON {
+  id?: string | null;
+  item_type?: number | null;
+  description?: string | null;
+  timestamp?: number | null;
+  published_at?: string | null;
+  author?: TikTokSearchAuthor;
+  stats?: TikTokSearchResultStats;
+  music?: TikTokSearchMusic;
+  duration?: number | null;
+  hashtags?: string[];
+  url?: string | null;
+}
+
+export class TikTokSearchResult {
+  id?: string | null;
+  item_type?: number | null;
+  description?: string | null;
+  timestamp?: number | null;
+  published_at?: Date | null;
+  author?: TikTokSearchAuthor;
+  stats?: TikTokSearchResultStats;
+  music?: TikTokSearchMusic;
+  duration?: number | null;
+  hashtags?: string[];
+  url?: string | null;
+
+  constructor(data: TikTokSearchResultJSON) {
+    this.id = data.id;
+    this.item_type = toInteger(data.item_type);
+    this.description = data.description;
+    this.timestamp = toInteger(data.timestamp);
+    this.published_at = toNullableDate(data.published_at);
+    this.author = data.author;
+    this.stats = data.stats
+      ? {
+          views: toInteger(data.stats.views),
+          likes: toInteger(data.stats.likes),
+          comments: toInteger(data.stats.comments),
+          shares: toInteger(data.stats.shares),
+          collects: toInteger(data.stats.collects),
+        }
+      : undefined;
+    this.music = data.music
+      ? {
+          ...data.music,
+          duration: toInteger(data.music.duration),
+        }
+      : undefined;
+    this.duration = toInteger(data.duration);
+    this.hashtags = data.hashtags;
+    this.url = data.url;
+  }
+
+  static fromJSON(json: TikTokSearchResultJSON): TikTokSearchResult {
+    return new TikTokSearchResult(json);
+  }
+}
+
+export interface TikTokSearchFilters {
+  after_datetime?: string | null;
+  before_datetime?: string | null;
+  min_likes?: number | null;
+  max_likes?: number | null;
+  min_views?: number | null;
+  max_views?: number | null;
+}
+
+export interface TikTokSearchStats {
+  pages_fetched?: number;
+  results_count?: number;
+  next_search_cursor?: number | null;
+}
+
 export interface TikTokProfileTaskJSON {
   task_id: string;
   task_status: 'processing' | 'completed' | 'failed';
@@ -219,5 +392,57 @@ export class TikTokProfileTask {
 
   static fromJSON(json: TikTokProfileTaskJSON): TikTokProfileTask {
     return new TikTokProfileTask(json);
+  }
+}
+
+export interface TikTokSearchTaskJSON {
+  task_id: string;
+  task_status: 'processing' | 'completed' | 'failed';
+  query?: string;
+  parallel_search_slices?: number;
+  filters?: TikTokSearchFilters;
+  stats?: TikTokSearchStats;
+  results?: TikTokSearchResultJSON[];
+  pagination?: TikTokProfilePagination;
+  download_url?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  completed_at?: string | null;
+  expires_at?: string | null;
+}
+
+export class TikTokSearchTask {
+  task_id: string;
+  task_status: 'processing' | 'completed' | 'failed';
+  query?: string;
+  parallel_search_slices?: number;
+  filters?: TikTokSearchFilters;
+  stats?: TikTokSearchStats;
+  results: TikTokSearchResult[];
+  pagination?: TikTokProfilePagination;
+  download_url?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  completed_at?: string | null;
+  expires_at?: string | null;
+
+  constructor(data: TikTokSearchTaskJSON) {
+    this.task_id = data.task_id;
+    this.task_status = data.task_status;
+    this.query = data.query;
+    this.parallel_search_slices = toOptionalInteger(data.parallel_search_slices);
+    this.filters = normalizeSearchFilters(data.filters);
+    this.stats = normalizeSearchStats(data.stats);
+    this.results = data.results?.map(TikTokSearchResult.fromJSON) ?? [];
+    this.pagination = normalizePagination(data.pagination);
+    this.download_url = data.download_url;
+    this.error_message = data.error_message;
+    this.created_at = data.created_at;
+    this.completed_at = data.completed_at;
+    this.expires_at = data.expires_at;
+  }
+
+  static fromJSON(json: TikTokSearchTaskJSON): TikTokSearchTask {
+    return new TikTokSearchTask(json);
   }
 }
