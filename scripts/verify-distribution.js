@@ -63,7 +63,11 @@ console.log('SDK_VERSION export:', vn.SDK_VERSION);
 
 const checks = [
   ['VidNavigatorClient', typeof vn.VidNavigatorClient === 'function'],
-  ['getYouTubeTranscript', typeof vn.VidNavigatorClient.prototype.getYouTubeTranscript === 'function'],
+  ['getTranscript', typeof vn.VidNavigatorClient.prototype.getTranscript === 'function'],
+  ['getYouTubeTranscript (deprecated alias)', typeof vn.VidNavigatorClient.prototype.getYouTubeTranscript === 'function'],
+  ['searchYouTube', typeof vn.VidNavigatorClient.prototype.searchYouTube === 'function'],
+  ['searchVideos (deprecated alias)', typeof vn.VidNavigatorClient.prototype.searchVideos === 'function'],
+  ['UsageBlock export', typeof vn.UsageBlock === 'function'],
   ['submitTikTokProfileScrape', typeof vn.VidNavigatorClient.prototype.submitTikTokProfileScrape === 'function'],
   ['getTikTokProfileScrape', typeof vn.VidNavigatorClient.prototype.getTikTokProfileScrape === 'function'],
   ['submitTikTokSearch', typeof vn.VidNavigatorClient.prototype.submitTikTokSearch === 'function'],

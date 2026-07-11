@@ -141,6 +141,53 @@ try {
   assert(u.total_tokens === 30, 'ExtractionTokenUsage.total_tokens');
 }
 
+// --- UsageBlock (charges-based, tokens under analysis_request) ---
+{
+  const ub = sdk.UsageBlock.fromJSON({
+    charges: [
+      { service_type: 'residential_request', quantity: 1, credits: 1 },
+      {
+        service_type: 'analysis_request',
+        quantity: 2,
+        credits: 2,
+        tokens: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 },
+      },
+    ],
+    total_credits: 3,
+    credits_remaining_after: 497,
+  });
+  assert(ub instanceof sdk.UsageBlock, 'UsageBlock instance');
+  assert(Array.isArray(ub.charges) && ub.charges.length === 2, 'UsageBlock.charges array');
+  assert(ub.charges[0] instanceof sdk.UsageCharge, 'UsageBlock.charges[0] is UsageCharge');
+  assert(ub.total_credits === 3, 'UsageBlock.total_credits');
+  assert(ub.credits_remaining_after === 497, 'UsageBlock.credits_remaining_after');
+
+  const analysis = ub.charge_for('analysis_request');
+  assert(analysis && analysis.service_type === 'analysis_request', 'UsageBlock.charge_for(analysis_request)');
+  assert(ub.chargeFor('residential_request').credits === 1, 'UsageBlock.chargeFor alias');
+  assert(ub.charge_for('search_request') === undefined, 'UsageBlock.charge_for missing meter');
+
+  const tokens = ub.analysis_tokens;
+  assert(tokens && tokens.total_tokens === 1500, 'UsageBlock.analysis_tokens reads analysis_request tokens');
+  assert(ub.analysisTokens.prompt_tokens === 1200, 'UsageBlock.analysisTokens alias');
+}
+
+// --- UsageBlock (legacy flat token fallback + waived) ---
+{
+  const ub = sdk.UsageBlock.fromJSON({
+    charges: [{ service_type: 'transcription_hour', quantity: 0.1, credits: 0, waived: true, credits_saved: 5 }],
+    total_credits: 0,
+    waived: { credits_saved: 5 },
+    prompt_tokens: 10,
+    completion_tokens: 5,
+    total_tokens: 15,
+  });
+  assert(ub.waived && ub.waived.credits_saved === 5, 'UsageBlock.waived.credits_saved');
+  assert(ub.charges[0].waived === true, 'UsageCharge.waived');
+  const tokens = ub.analysis_tokens;
+  assert(tokens && tokens.total_tokens === 15, 'UsageBlock.analysis_tokens falls back to flat token fields');
+}
+
 // --- TikTok profile models ---
 {
   const task = sdk.TikTokProfileTask.fromJSON({
@@ -351,6 +398,7 @@ try {
     'extractVideoData', 'extractFileData',
     'submitTikTokProfileScrape', 'getTikTokProfileScrape',
     'submitTikTokSearch', 'getTikTokSearch',
+    'getTranscript', 'searchYouTube',
     'searchVideos', 'searchFiles',
     'getUsage', 'healthCheck',
   ];
@@ -367,13 +415,44 @@ async function runClientMethodTests() {
   const calls = [];
   client.request = async (method, url, data, params, extraHeaders) => {
     calls.push({ method, url, data, params, extraHeaders });
-    if (url === '/youtube/transcript') {
+    if (url === '/transcript') {
       return {
         status: 'success',
         data: {
-          video_info: { title: 'YT', url: 'https://youtube.com/watch?v=test' },
+          video_info: { title: 'Any', url: data.video_url },
           transcript: 'hello',
         },
+        usage: data.include_usage
+          ? {
+              charges: [{ service_type: 'residential_request', quantity: 1, credits: 1 }],
+              total_credits: 1,
+              credits_remaining_after: 499,
+            }
+          : undefined,
+      };
+    }
+    if (url === '/youtube/search' && method === 'POST') {
+      return {
+        status: 'success',
+        data: {
+          results: [{ title: 'R1', url: 'https://youtube.com/watch?v=r1', relevance_score: 0.9 }],
+          query: data.query,
+          total_found: 1,
+        },
+        usage: data.include_usage
+          ? {
+              charges: [
+                { service_type: 'residential_request', quantity: 1, credits: 1 },
+                {
+                  service_type: 'analysis_request',
+                  quantity: 1,
+                  credits: 1,
+                  tokens: { prompt_tokens: 900, completion_tokens: 100, total_tokens: 1000 },
+                },
+              ],
+              total_credits: 2,
+            }
+          : undefined,
       };
     }
     if (url === '/tiktok/profile' && method === 'POST') {
@@ -396,6 +475,12 @@ async function runClientMethodTests() {
           videos: [{ id: 'v1' }],
           pagination: { limit: 1, offset: 0, total_items: 1, has_next: false, has_prev: false },
         },
+        usage: params && params.include_usage === 'true'
+          ? {
+              charges: [{ service_type: 'standard_request', quantity: 2, credits: 2 }],
+              total_credits: 2,
+            }
+          : undefined,
       };
     }
     if (url === '/tiktok/search' && method === 'POST') {
@@ -419,6 +504,12 @@ async function runClientMethodTests() {
           results: [{ id: 'v1', published_at: '2026-04-22T21:16:58+00:00' }],
           pagination: { limit: 1, offset: 0, total_items: 1, has_next: false, has_prev: false },
         },
+        usage: params && params.include_usage === 'true'
+          ? {
+              charges: [{ service_type: 'residential_request', quantity: 3, credits: 3 }],
+              total_credits: 3,
+            }
+          : undefined,
       };
     }
     if (url === '/tweet/statement') {
@@ -436,7 +527,17 @@ async function runClientMethodTests() {
         status: 'success',
         data: { topic: 'testing' },
         video_info: { title: 'Video', url: data.video_url },
-        usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+        usage: {
+          charges: [
+            {
+              service_type: 'analysis_request',
+              quantity: 1,
+              credits: 1,
+              tokens: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+            },
+          ],
+          total_credits: 1,
+        },
       };
     }
     if (url === '/extract/file') {
@@ -455,26 +556,51 @@ async function runClientMethodTests() {
     throw new Error(`Unexpected request: ${method} ${url}`);
   };
 
-  const yt = await client.getYouTubeTranscript({ video_url: 'https://youtube.com/watch?v=test' });
-  assert(yt.video_info instanceof sdk.VideoInfo, 'getYouTubeTranscript parses VideoInfo');
-  assert(calls[calls.length - 1].url === '/youtube/transcript', 'getYouTubeTranscript uses /youtube/transcript');
+  // getTranscript hits the single /transcript endpoint and parses usage when requested.
+  const tr = await client.getTranscript({ video_url: 'https://twitter.com/u/status/1', include_usage: true });
+  assert(tr.video_info instanceof sdk.VideoInfo, 'getTranscript parses VideoInfo');
+  assert(calls[calls.length - 1].url === '/transcript', 'getTranscript uses /transcript');
+  assert(calls[calls.length - 1].data.include_usage === true, 'getTranscript sends include_usage in body');
+  assert(tr.usage instanceof sdk.UsageBlock, 'getTranscript parses usage as UsageBlock');
+  assert(tr.usage.total_credits === 1, 'getTranscript usage.total_credits');
+
+  // getYouTubeTranscript is a deprecated alias that forwards to /transcript with a warning.
+  {
+    const originalWarn = console.warn;
+    let warned = '';
+    console.warn = (msg) => { warned += msg; };
+    try {
+      const yt = await client.getYouTubeTranscript({ video_url: 'https://youtube.com/watch?v=test' });
+      assert(yt.video_info instanceof sdk.VideoInfo, 'getYouTubeTranscript (alias) parses VideoInfo');
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert(calls[calls.length - 1].url === '/transcript', 'getYouTubeTranscript alias forwards to /transcript');
+    assert(/deprecated/i.test(warned) && /getTranscript/.test(warned), 'getYouTubeTranscript emits deprecation warning');
+  }
 
   const submitted = await client.submitTikTokProfileScrape({ profile_url: 'https://www.tiktok.com/@tiktok' });
   assert(submitted instanceof sdk.TikTokProfileScrapeSubmission, 'submitTikTokProfileScrape parses submission');
   assert(calls[calls.length - 1].url === '/tiktok/profile', 'submitTikTokProfileScrape path');
 
-  const scrape = await client.getTikTokProfileScrape('task-1', { limit: 1 });
+  const scrape = await client.getTikTokProfileScrape('task-1', { limit: 1, include_usage: true });
   assert(scrape instanceof sdk.TikTokProfileTask, 'getTikTokProfileScrape parses task');
   assert(calls[calls.length - 1].params.limit === 1, 'getTikTokProfileScrape query params');
+  assert(calls[calls.length - 1].params.include_usage === 'true', 'getTikTokProfileScrape sends include_usage query param');
+  assert(scrape.usage instanceof sdk.UsageBlock, 'getTikTokProfileScrape attaches usage on completed task');
+  assert(scrape.usage.charge_for('standard_request').quantity === 2, 'getTikTokProfileScrape usage charge');
 
   const searchSubmitted = await client.submitTikTokSearch({ query: 'ai tools', parallel_search_slices: 2 });
   assert(searchSubmitted instanceof sdk.TikTokSearchSubmission, 'submitTikTokSearch parses submission');
   assert(calls[calls.length - 1].url === '/tiktok/search', 'submitTikTokSearch path');
 
-  const search = await client.getTikTokSearch('search-1', { limit: 1 });
+  const search = await client.getTikTokSearch('search-1', { limit: 1, include_usage: true });
   assert(search instanceof sdk.TikTokSearchTask, 'getTikTokSearch parses task');
   assert(search.results[0] instanceof sdk.TikTokSearchResult, 'getTikTokSearch parses results');
   assert(calls[calls.length - 1].params.limit === 1, 'getTikTokSearch query params');
+  assert(calls[calls.length - 1].params.include_usage === 'true', 'getTikTokSearch sends include_usage query param');
+  assert(search.usage instanceof sdk.UsageBlock, 'getTikTokSearch attaches usage on completed task');
+  assert(search.usage.charge_for('residential_request').quantity === 3, 'getTikTokSearch usage charge');
 
   const tweet = await client.getTweetStatement({ tweet_id: '123' });
   assert(tweet instanceof sdk.TweetStatement, 'getTweetStatement parses TweetStatement');
@@ -487,8 +613,13 @@ async function runClientMethodTests() {
     include_usage: true,
   });
   assert(videoExtraction.video_info instanceof sdk.VideoInfo, 'extractVideoData parses video_info');
-  assert(videoExtraction.usage instanceof sdk.ExtractionTokenUsage, 'extractVideoData parses usage');
+  assert(videoExtraction.usage instanceof sdk.UsageBlock, 'extractVideoData parses usage as UsageBlock');
+  assert(
+    videoExtraction.usage.analysis_tokens && videoExtraction.usage.analysis_tokens.total_tokens === 3,
+    'extractVideoData usage.analysis_tokens from analysis_request charge'
+  );
   assert(calls[calls.length - 1].data.transcribe === false, 'extractVideoData sends transcribe');
+  assert(calls[calls.length - 1].data.include_usage === true, 'extractVideoData sends include_usage in body');
 
   const schemaPath = path.join(__dirname, 'tmp-extraction-schema.json');
   fs.writeFileSync(schemaPath, JSON.stringify({ topic: { type: 'String', description: 'Topic' } }));
@@ -513,6 +644,36 @@ async function runClientMethodTests() {
     schema: { summary: { type: 'String', description: 'Summary' } },
   });
   assert(fileExtraction.file_info instanceof sdk.FileInfo, 'extractFileData parses file_info');
+
+  // searchYouTube hits /youtube/search, forwards focus/max_results/include_usage, parses usage.
+  const yts = await client.searchYouTube({
+    query: 'react hooks',
+    focus: 'popularity',
+    max_results: 2,
+    include_usage: true,
+  });
+  assert(calls[calls.length - 1].url === '/youtube/search', 'searchYouTube uses /youtube/search');
+  assert(calls[calls.length - 1].data.max_results === 2, 'searchYouTube sends max_results');
+  assert(calls[calls.length - 1].data.focus === 'popularity', 'searchYouTube sends focus');
+  assert(calls[calls.length - 1].data.include_usage === true, 'searchYouTube sends include_usage in body');
+  assert(yts.results[0] instanceof sdk.VideoSearchResult, 'searchYouTube parses results');
+  assert(yts.usage instanceof sdk.UsageBlock, 'searchYouTube parses usage as UsageBlock');
+  assert(yts.usage.analysis_tokens.total_tokens === 1000, 'searchYouTube usage.analysis_tokens');
+
+  // searchVideos is a deprecated alias forwarding to /youtube/search with a warning.
+  {
+    const originalWarn = console.warn;
+    let warned = '';
+    console.warn = (msg) => { warned += msg; };
+    try {
+      const legacy = await client.searchVideos({ query: 'legacy path' });
+      assert(legacy.results[0] instanceof sdk.VideoSearchResult, 'searchVideos (alias) parses results');
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert(calls[calls.length - 1].url === '/youtube/search', 'searchVideos alias forwards to /youtube/search');
+    assert(/deprecated/i.test(warned) && /searchYouTube/.test(warned), 'searchVideos emits deprecation warning');
+  }
 }
 
 runClientMethodTests()

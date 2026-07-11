@@ -90,35 +90,45 @@ async function run() {
     assert(e instanceof sdk.AuthenticationError, 'AuthenticationError thrown');
   }
 
-  // ── YouTube transcript ──
-  console.log('--- getYouTubeTranscript ---');
+  // ── Transcript (single /transcript endpoint) ──
+  console.log('--- getTranscript ---');
   try {
-    const { video_info, transcript } = await client.getYouTubeTranscript({
+    const { video_info, transcript } = await client.getTranscript({
       video_url: TEST_YOUTUBE_URL,
       language: 'en',
     });
-    assert(video_info instanceof sdk.VideoInfo, 'getYouTubeTranscript VideoInfo');
-    assert(Array.isArray(transcript) && transcript.length > 0, 'getYouTubeTranscript segments');
-    assert(transcript[0] instanceof sdk.TranscriptSegment, 'getYouTubeTranscript segment type');
-  } catch (e) { fail('getYouTubeTranscript', e.message); }
+    assert(video_info instanceof sdk.VideoInfo, 'getTranscript VideoInfo');
+    assert(Array.isArray(transcript) && transcript.length > 0, 'getTranscript segments');
+    assert(transcript[0] instanceof sdk.TranscriptSegment, 'getTranscript segment type');
+  } catch (e) { fail('getTranscript', e.message); }
 
-  // ── YouTube transcript_text ──
-  console.log('--- getYouTubeTranscript (transcript_text) ---');
+  // ── Transcript with per-call usage ──
+  console.log('--- getTranscript (include_usage) ---');
   try {
-    const { transcript } = await client.getYouTubeTranscript({
+    const { transcript, usage } = await client.getTranscript({
       video_url: TEST_YOUTUBE_URL,
       transcript_text: true,
+      include_usage: true,
     });
     assert(typeof transcript === 'string' && transcript.length > 0, 'transcript_text returns string');
-  } catch (e) { fail('transcript_text', e.message); }
+    assert(usage instanceof sdk.UsageBlock, 'getTranscript usage is UsageBlock');
+    assert(Array.isArray(usage.charges) && usage.charges.length > 0, 'getTranscript usage.charges populated');
+    assert(typeof usage.total_credits === 'number', 'getTranscript usage.total_credits');
+  } catch (e) { fail('getTranscript (include_usage)', e.message); }
 
-  // ── BadRequest on YouTube endpoint ──
-  console.log('--- BadRequestError (YouTube) ---');
+  // ── Invalid URL on transcript endpoint ──
+  // The single /transcript endpoint auto-detects the platform, so a malformed URL
+  // surfaces as a 400 (bad request) or 404 (video unavailable) depending on routing.
+  console.log('--- transcript error (invalid URL) ---');
   try {
-    await client.getYouTubeTranscript({ video_url: 'not-a-url' });
-    fail('BadRequestError thrown');
+    await client.getTranscript({ video_url: 'not-a-url' });
+    fail('transcript invalid URL throws');
   } catch (e) {
-    assert(e instanceof sdk.BadRequestError, 'BadRequestError thrown');
+    assert(
+      e instanceof sdk.BadRequestError || e instanceof sdk.NotFoundError,
+      'transcript invalid URL throws BadRequestError or NotFoundError',
+      `got ${e && e.name}`
+    );
   }
 
   // ── Transcribe ──
@@ -157,8 +167,8 @@ async function run() {
     pass('getNamespaces OK (' + nsList.length + ' found)');
   } catch (e) { fail('getNamespaces', e.message); }
 
-  // ── Extract video ──
-  console.log('--- extractVideoData ---');
+  // ── Extract video with per-call usage (tokens via analysis_tokens) ──
+  console.log('--- extractVideoData (include_usage) ---');
   try {
     const extraction = await client.extractVideoData({
       video_url: TEST_YOUTUBE_URL,
@@ -169,8 +179,11 @@ async function run() {
     });
     assert(extraction.data && typeof extraction.data.topic === 'string', 'extractVideoData data.topic');
     assert(extraction.video_info instanceof sdk.VideoInfo, 'extractVideoData video_info');
-    assert(extraction.usage instanceof sdk.ExtractionTokenUsage, 'extractVideoData usage');
-    assert(typeof extraction.usage.total_tokens === 'number', 'extractVideoData total_tokens');
+    assert(extraction.usage instanceof sdk.UsageBlock, 'extractVideoData usage is UsageBlock');
+    // Live API returns charges-based usage; tokens live under the analysis_request charge.
+    const tokens = extraction.usage.analysis_tokens;
+    assert(tokens && typeof tokens.total_tokens === 'number', 'extractVideoData analysis_tokens.total_tokens');
+    assert(!!extraction.usage.charge_for('analysis_request'), 'extractVideoData has analysis_request charge');
   } catch (e) { fail('extractVideoData', e.message); }
 
   // ── Extract video (no usage) ──
@@ -196,18 +209,21 @@ async function run() {
         assert(submitted instanceof sdk.TikTokProfileScrapeSubmission, 'submitTikTokProfileScrape response type');
         assert(typeof submitted.task_id === 'string' && submitted.task_id.length > 0, 'submitTikTokProfileScrape task_id');
 
-        let scrape = await client.getTikTokProfileScrape(submitted.task_id, { limit: 1 });
+        let scrape = await client.getTikTokProfileScrape(submitted.task_id, { limit: 1, include_usage: true });
         assert(scrape instanceof sdk.TikTokProfileTask, 'getTikTokProfileScrape response type');
 
         const started = Date.now();
         while (scrape.task_status === 'processing') {
           console.log(`    polling TikTok scrape ${submitted.task_id}: processing (${Math.round((Date.now() - started) / 1000)}s)`);
           await sleep(5000);
-          scrape = await client.getTikTokProfileScrape(submitted.task_id, { limit: 1 });
+          scrape = await client.getTikTokProfileScrape(submitted.task_id, { limit: 1, include_usage: true });
         }
 
         assert(scrape.task_status === 'completed', 'TikTok scrape completed');
         assert(Array.isArray(scrape.videos), 'getTikTokProfileScrape videos array');
+        if (scrape.usage) {
+          assert(scrape.usage instanceof sdk.UsageBlock, 'getTikTokProfileScrape usage is UsageBlock on completion');
+        }
         assert(scrape.pagination && typeof scrape.pagination.total_items === 'number', 'TikTok scrape pagination');
         if (scrape.videos.length > 0) {
           const [video] = scrape.videos;
@@ -257,18 +273,21 @@ async function run() {
         assert(submitted instanceof sdk.TikTokSearchSubmission, 'submitTikTokSearch response type');
         assert(typeof submitted.task_id === 'string' && submitted.task_id.length > 0, 'submitTikTokSearch task_id');
 
-        let search = await client.getTikTokSearch(submitted.task_id, { limit: 2 });
+        let search = await client.getTikTokSearch(submitted.task_id, { limit: 2, include_usage: true });
         assert(search instanceof sdk.TikTokSearchTask, 'getTikTokSearch response type');
 
         const started = Date.now();
         while (search.task_status === 'processing') {
           console.log(`    polling TikTok search ${submitted.task_id}: processing (${Math.round((Date.now() - started) / 1000)}s)`);
           await sleep(5000);
-          search = await client.getTikTokSearch(submitted.task_id, { limit: 2 });
+          search = await client.getTikTokSearch(submitted.task_id, { limit: 2, include_usage: true });
         }
 
         assert(search.task_status === 'completed', 'TikTok search completed');
         assert(Array.isArray(search.results), 'getTikTokSearch results array');
+        if (search.usage) {
+          assert(search.usage instanceof sdk.UsageBlock, 'getTikTokSearch usage is UsageBlock on completion');
+        }
         assert(search.pagination && typeof search.pagination.total_items === 'number', 'TikTok search pagination');
         if (search.results.length > 0) {
           const [result] = search.results;
@@ -312,20 +331,24 @@ async function run() {
     console.log('--- getTweetStatement skipped (TEST_TWEET_ID not set) ---');
   }
 
-  // ── Search videos (with timeout) ──
-  console.log('--- searchVideos ---');
+  // ── Search YouTube (with max_results + timeout) ──
+  console.log('--- searchYouTube ---');
   try {
     const sr = await withTimeout(
-      client.searchVideos({ query: 'nodejs tip' }),
-      60000, 'searchVideos'
+      client.searchYouTube({ query: 'nodejs tip', max_results: 2, focus: 'relevance', include_usage: true }),
+      120000, 'searchYouTube'
     );
-    assert(typeof sr.query === 'string', 'searchVideos echoed query');
-    assert(typeof sr.total_found === 'number', 'searchVideos total_found');
-    assert(Array.isArray(sr.results), 'searchVideos results array');
+    assert(typeof sr.query === 'string', 'searchYouTube echoed query');
+    assert(typeof sr.total_found === 'number', 'searchYouTube total_found');
+    assert(Array.isArray(sr.results), 'searchYouTube results array');
+    assert(sr.results.length <= 2, 'searchYouTube respects max_results');
     if (sr.results.length > 0) {
-      assert(sr.results[0] instanceof sdk.VideoSearchResult, 'searchVideos result type');
+      assert(sr.results[0] instanceof sdk.VideoSearchResult, 'searchYouTube result type');
     }
-  } catch (e) { fail('searchVideos', e.message); }
+    if (sr.usage) {
+      assert(sr.usage instanceof sdk.UsageBlock, 'searchYouTube usage is UsageBlock');
+    }
+  } catch (e) { fail('searchYouTube', e.message); }
 
   // ── Search files (with timeout) ──
   console.log('--- searchFiles ---');

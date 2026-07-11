@@ -1,3 +1,5 @@
+import { UsageBlock } from './Usage';
+
 export interface TikTokProfileScrapeRequest {
   profile_url: string;
   max_posts?: number;
@@ -373,6 +375,8 @@ export class TikTokProfileTask {
   created_at?: string | null;
   completed_at?: string | null;
   expires_at?: string | null;
+  /** Per-call usage, populated only when polled with `include_usage=true` and `task_status=completed`. */
+  usage?: UsageBlock;
 
   constructor(data: TikTokProfileTaskJSON) {
     this.task_id = data.task_id;
@@ -425,6 +429,8 @@ export class TikTokSearchTask {
   created_at?: string | null;
   completed_at?: string | null;
   expires_at?: string | null;
+  /** Per-call usage, populated only when polled with `include_usage=true` and `task_status=completed`. */
+  usage?: UsageBlock;
 
   constructor(data: TikTokSearchTaskJSON) {
     this.task_id = data.task_id;

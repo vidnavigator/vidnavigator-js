@@ -1,5 +1,132 @@
 export type UnlimitedOrNumber = number | 'unlimited';
 
+/** Meters that can appear in a per-call {@link UsageBlock}. */
+export type UsageServiceType =
+  | 'standard_request'
+  | 'residential_request'
+  | 'transcription_hour'
+  | 'analysis_request'
+  | 'search_request'
+  | 'scene_analysis_hour';
+
+export interface UsageTokens {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
+export interface UsageChargeJSON {
+  service_type: UsageServiceType;
+  quantity: number;
+  credits: number;
+  waived?: boolean;
+  credits_saved?: number;
+  tokens?: UsageTokens;
+}
+
+/** A single consolidated meter charge within a per-call usage block. */
+export class UsageCharge {
+  service_type: UsageServiceType;
+  quantity: number;
+  credits: number;
+  waived?: boolean;
+  credits_saved?: number;
+  tokens?: UsageTokens;
+
+  constructor(data: UsageChargeJSON) {
+    this.service_type = data.service_type;
+    this.quantity = data.quantity;
+    this.credits = data.credits;
+    this.waived = data.waived;
+    this.credits_saved = data.credits_saved;
+    this.tokens = data.tokens;
+  }
+
+  static fromJSON(json: UsageChargeJSON): UsageCharge {
+    return new UsageCharge(json);
+  }
+}
+
+export interface UsageBlockJSON {
+  charges?: UsageChargeJSON[];
+  total_credits?: number;
+  credits_remaining_after?: number;
+  waived?: { credits_saved: number };
+  /** Legacy flat token fields. Some /extract/* responses may still echo these. */
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
+/**
+ * Per-call usage disclosure returned when a request is made with `include_usage=true`.
+ * Lists every meter charged during the request plus the credits actually deducted.
+ *
+ * LLM token counts live nested inside the `analysis_request` charge; use the
+ * {@link UsageBlock.analysis_tokens} accessor to read them (it falls back to the
+ * legacy flat token fields when present).
+ */
+export class UsageBlock {
+  charges: UsageCharge[];
+  total_credits?: number;
+  credits_remaining_after?: number;
+  waived?: { credits_saved: number };
+  /** Legacy flat token fields, only present on some /extract/* responses. */
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+
+  constructor(data: UsageBlockJSON) {
+    this.charges = (data.charges ?? []).map(UsageCharge.fromJSON);
+    this.total_credits = data.total_credits;
+    this.credits_remaining_after = data.credits_remaining_after;
+    this.waived = data.waived;
+    this.prompt_tokens = data.prompt_tokens;
+    this.completion_tokens = data.completion_tokens;
+    this.total_tokens = data.total_tokens;
+  }
+
+  /** Return the consolidated charge entry for a given meter, if present. */
+  charge_for(service_type: UsageServiceType): UsageCharge | undefined {
+    return this.charges.find((c) => c.service_type === service_type);
+  }
+
+  /** camelCase alias for {@link UsageBlock.charge_for}. */
+  chargeFor(service_type: UsageServiceType): UsageCharge | undefined {
+    return this.charge_for(service_type);
+  }
+
+  /**
+   * LLM token tally for this request. Reads the `tokens` object from the
+   * `analysis_request` charge, falling back to legacy flat token fields.
+   */
+  get analysis_tokens(): UsageTokens | undefined {
+    const analysis = this.charge_for('analysis_request');
+    if (analysis?.tokens) return analysis.tokens;
+    if (
+      this.prompt_tokens !== undefined ||
+      this.completion_tokens !== undefined ||
+      this.total_tokens !== undefined
+    ) {
+      return {
+        prompt_tokens: this.prompt_tokens,
+        completion_tokens: this.completion_tokens,
+        total_tokens: this.total_tokens,
+      };
+    }
+    return undefined;
+  }
+
+  /** camelCase alias for {@link UsageBlock.analysis_tokens}. */
+  get analysisTokens(): UsageTokens | undefined {
+    return this.analysis_tokens;
+  }
+
+  static fromJSON(json: UsageBlockJSON): UsageBlock {
+    return new UsageBlock(json);
+  }
+}
+
 export interface CreditsInfoJSON {
   monthly_total: UnlimitedOrNumber;
   monthly_remaining: UnlimitedOrNumber;

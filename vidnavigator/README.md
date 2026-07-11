@@ -67,10 +67,12 @@ const vn = new VidNavigatorClient({
 
 ## Examples
 
-### 1. YouTube transcript
+### 1. Get a transcript (any platform)
+
+There is a single `getTranscript` method that auto-detects the platform (YouTube, Vimeo, X/Twitter, TikTok, Facebook, Dailymotion, Loom, and more) from the URL.
 
 ```ts
-const { video_info, transcript } = await vn.getYouTubeTranscript({
+const { video_info, transcript } = await vn.getTranscript({
   video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
   language: 'en',
 });
@@ -90,9 +92,11 @@ for (const seg of transcript.slice(0, 3)) {
 
 Pass `transcript_text: true` to get the full transcript as a single plain-text string instead of segments.
 
+> **Deprecated:** `getYouTubeTranscript()` still works but is deprecated — it now forwards to `getTranscript()` and emits a deprecation warning. Use `getTranscript()` instead.
+
 ### 2. Instagram Reel / TikTok / X / Vimeo
 
-For most non-YouTube platforms, you can use either `getTranscript` (fast, caption-based) or `transcribeVideo` (speech-to-text). **Note:** Instagram only supports `transcribeVideo`.
+For most non-Instagram platforms, you can use either `getTranscript` (fast, caption-based) or `transcribeVideo` (speech-to-text). **Note:** Instagram only supports `transcribeVideo`.
 
 ```ts
 // Instagram Reel (speech-to-text only)
@@ -311,7 +315,7 @@ console.log(transcript_analysis.query_answer?.answer);
 
 ### 7. Extract structured data
 
-Define a schema and get back clean, structured data extracted from any video or file transcript. Powered by LLMs with token usage tracking.
+Define a schema and get back clean, structured data extracted from any video or file transcript. Powered by LLMs with per-call usage tracking (see [Per-call usage](#per-call-usage)).
 
 ```ts
 const { data, usage } = await vn.extractVideoData({
@@ -335,7 +339,9 @@ console.log(data);
 //   key_quotes: ["Never gonna give you up", "Never gonna let you down", ...]
 // }
 
-console.log(usage?.total_tokens); // 847
+// LLM token counts live under the analysis_request charge:
+console.log(usage?.analysis_tokens?.total_tokens); // 847
+console.log(usage?.total_credits);                 // 2
 ```
 
 Also works on uploaded files:
@@ -370,14 +376,22 @@ Search YouTube videos and uploaded files with AI-powered ranking/reranking.
 
 ```ts
 // Search YouTube videos
-const videoResults = await vn.searchVideos({
+const videoResults = await vn.searchYouTube({
   query: 'how to deploy a Node.js app',
+  focus: 'relevance',   // 'relevance' (default) | 'popularity' | 'brevity'
+  max_results: 5,       // caps how many candidates are analysed (and the cost)
+  include_usage: true,  // attach a per-call usage block
 });
 
 console.log(`Found ${videoResults.total_found} results`);
 for (const r of videoResults.results) {
   console.log(`${r.title} — score: ${r.relevance_score}`);
   console.log(`  ${r.transcript_summary}`);
+}
+
+// If credits run out mid-search, a partial result is returned instead of throwing:
+if (videoResults.status === 'partial') {
+  console.log('Partial results:', videoResults.error_code); // "insufficient_credits_video_search"
 }
 
 // Search uploaded files — optionally scoped to a namespace
@@ -392,6 +406,8 @@ for (const r of fileResults.results) {
   console.log(`  Namespaces: ${r.namespaces?.map(n => n.name).join(', ')}`);
 }
 ```
+
+> **Deprecated:** `searchVideos()` still works but is deprecated — it now forwards to `searchYouTube()` (the `/search/video` endpoint moved to `/youtube/search`) and emits a deprecation warning. Use `searchYouTube()` instead.
 
 ### 9. Organize files with namespaces
 
@@ -425,6 +441,36 @@ console.log(`Storage: ${usage.storage.used_formatted} / ${usage.storage.limit_fo
 console.log(`Channels indexed: ${usage.channelsIndexed.used} / ${usage.channelsIndexed.limit}`);
 ```
 
+### Per-call usage
+
+Pass `include_usage: true` to most endpoints (`getTranscript`, `transcribeVideo`, `analyzeVideo`, `analyzeFile`, `extractVideoData`, `extractFileData`, `searchYouTube`, `searchFiles`) to receive a `usage` block describing exactly what the request cost. For the TikTok pollers (`getTikTokProfileScrape`, `getTikTokSearch`), pass `include_usage: true` in the options object — usage is populated once `task_status === 'completed'`.
+
+The `usage` field is a `UsageBlock`:
+
+```ts
+const { usage } = await vn.getTranscript({
+  video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
+  include_usage: true,
+});
+
+if (usage) {
+  console.log(usage.total_credits);            // net credits deducted by this request
+  console.log(usage.credits_remaining_after);  // balance after the request (when provided)
+
+  // Every meter that fired, consolidated to one entry per service_type:
+  for (const charge of usage.charges) {
+    console.log(charge.service_type, charge.quantity, charge.credits, charge.waived);
+  }
+
+  // Convenience accessors:
+  const residential = usage.charge_for('residential_request'); // matching charge entry or undefined
+  const tokens = usage.analysis_tokens;                         // { prompt_tokens, completion_tokens, total_tokens }
+  console.log(tokens?.total_tokens);
+}
+```
+
+`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*`, `/analyze/*`, and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived via a cache-hit sponsorship, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
+
 ---
 
 ## API Reference
@@ -435,20 +481,20 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 
 | Method | Description |
 |--------|-------------|
-| `getYouTubeTranscript(payload)` | Get transcript for a YouTube video (fast, caption-based) |
-| `getTranscript(payload)` | Get transcript for non-YouTube videos (Vimeo, X/Twitter, TikTok, etc. — note: Instagram not supported) |
+| `getTranscript(payload)` | Get a transcript for any supported video; auto-detects the platform from the URL (note: Instagram uses `transcribeVideo`) |
+| `getYouTubeTranscript(payload)` | **Deprecated** — forwards to `getTranscript()` |
 | `transcribeVideo(payload)` | Speech-to-text transcription via AI models; supports Instagram carousel with `all_videos` |
 
-**Common options:** `video_url`, `language`, `metadata_only`, `fallback_to_metadata`, `transcript_text`
+**Common options:** `video_url`, `language`, `metadata_only`, `fallback_to_metadata`, `transcript_text`, `include_usage`
 
 ### TikTok
 
 | Method | Description |
 |--------|-------------|
 | `submitTikTokProfileScrape(payload)` | Start an async public TikTok profile scrape. Returns a `task_id` immediately |
-| `getTikTokProfileScrape(task_id, query?)` | Poll task status and retrieve a page of videos. Options: `cursor`, `limit` |
+| `getTikTokProfileScrape(task_id, query?)` | Poll task status and retrieve a page of videos. Options: `cursor`, `limit`, `include_usage` |
 | `submitTikTokSearch(payload)` | Start an async TikTok keyword search. Returns a `task_id` immediately |
-| `getTikTokSearch(task_id, query?)` | Poll search status and retrieve a page of results. Options: `cursor`, `limit` |
+| `getTikTokSearch(task_id, query?)` | Poll search status and retrieve a page of results. Options: `cursor`, `limit`, `include_usage` |
 
 Completed profile tasks include `videos`; completed search tasks include `results`. Both include `pagination`, optional `stats`, and an optional short-lived `download_url` for retrieving the whole result as JSON. Datetime filters use `after_datetime` and `before_datetime`, each accepting either `YYYY-MM-DD` or full ISO datetime strings with timezone; TikTok `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
 
@@ -498,7 +544,7 @@ Returns `transcript_analysis` containing:
 | `extractVideoData(payload)` | Extract structured data from an online video transcript |
 | `extractFileData(payload)` | Extract structured data from an uploaded file transcript |
 
-**Options:** `schema` (required for JSON requests), `schemaFilePath` (JSON/YAML schema file via multipart form-data), `what_to_extract` (optional guidance), `include_usage` (token tracking)
+**Options:** `schema` (required for JSON requests), `schemaFilePath` (JSON/YAML schema file via multipart form-data), `what_to_extract` (optional guidance), `include_usage` (attach a per-call `UsageBlock`; read LLM tokens via `usage.analysis_tokens`)
 
 **Schema field types:** `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`
 
@@ -506,10 +552,13 @@ Returns `transcript_analysis` containing:
 
 | Method | Description |
 |--------|-------------|
-| `searchVideos(payload)` | Search YouTube videos with AI ranking/reranking |
+| `searchYouTube(payload)` | Search YouTube videos with AI ranking/reranking |
+| `searchVideos(payload)` | **Deprecated** — forwards to `searchYouTube()` |
 | `searchFiles(payload)` | Semantic search across uploaded files, with optional `namespace_ids` scope |
 
-Results include `relevance_score`, `transcript_summary`, `people`, `places`, `key_subjects`, `query_answer`, `timestamps`, and `relevant_text`.
+**`searchYouTube` options:** `query` (required), `use_enhanced_search` (default `true`), `start_year`, `end_year`, `focus` (`'relevance'` (default) \| `'popularity'` \| `'brevity'`), `duration`, `max_results` (caps candidates analysed & cost; defaults to your plan ceiling), `include_usage`.
+
+Results include `relevance_score`, `transcript_summary`, `people`, `places`, `key_subjects`, `query_answer`, `timestamps`, and `relevant_text`. If credits run out mid-search the API returns a partial result: `searchYouTube` surfaces it as `{ status: 'partial', error_code: 'insufficient_credits_video_search', results, usage? }` instead of throwing.
 
 ### System
 
@@ -569,8 +618,10 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `NamespaceRef` | Lightweight `{ id, name }` reference embedded in file and search responses |
 | `VideoSearchResult` | Extends `VideoInfo` with `relevance_score`, `transcript_summary`, search metadata |
 | `FileSearchResult` | Extends `FileInfo` with `relevance_score`, `query_answer`, timestamps, signed URL |
-| `UsageData` | Credits info, per-service activity counts, storage metrics, subscription details |
-| `ExtractionTokenUsage` | `prompt_tokens`, `completion_tokens`, `total_tokens` |
+| `UsageData` | Account-level usage from `getUsage()`: credits info, per-service activity counts, storage metrics, subscription details |
+| `UsageBlock` | Per-call usage returned when `include_usage: true`: `charges[]`, `total_credits`, `credits_remaining_after`, `waived`, plus `charge_for(service_type)` and `analysis_tokens` accessors |
+| `UsageCharge` | A single consolidated meter charge: `service_type`, `quantity`, `credits`, `waived`, `credits_saved`, and (on `analysis_request`) `tokens` |
+| `ExtractionTokenUsage` | Legacy flat token usage (`prompt_tokens`, `completion_tokens`, `total_tokens`) — extraction now returns a `UsageBlock`; prefer `usage.analysis_tokens` |
 | `CarouselInfo` | Carousel summary: total items, video/image count, transcribed count, total duration |
 | `CarouselVideoResult` | Per-video result in a carousel: index, status, video info, transcript |
 | `TikTokProfileScrapeSubmission` | Async scrape submission: `task_id`, status, profile URL, expiry |

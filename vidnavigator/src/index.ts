@@ -22,8 +22,8 @@ import {
   NamespaceRef,
   NamespaceRefJSON,
   ExtractionSchema,
-  ExtractionTokenUsage,
-  ExtractionTokenUsageJSON,
+  UsageBlock,
+  UsageBlockJSON,
   CarouselInfo,
   CarouselInfoJSON,
   CarouselVideoResult,
@@ -59,7 +59,7 @@ export * from './models';
 export * from './errors';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '1.0.4';
+export const SDK_VERSION = '1.0.5';
 
 //region --- Interfaces ---
 export interface SDKConfig {
@@ -71,6 +71,7 @@ export interface SDKConfig {
 interface ApiSuccessResponse<T> {
   status: 'success';
   data: T;
+  usage?: UsageBlockJSON;
 }
 
 export type TranscriptRequestPayload = {
@@ -79,22 +80,32 @@ export type TranscriptRequestPayload = {
   metadata_only?: boolean;
   fallback_to_metadata?: boolean;
   transcript_text?: boolean;
+  include_usage?: boolean;
 };
 
 export type TranscribeVideoPayload = {
   video_url: string;
   transcript_text?: boolean;
   all_videos?: boolean;
+  include_usage?: boolean;
+};
+
+export type TranscriptResult = {
+  video_info: VideoInfo;
+  transcript: TranscriptOutput;
+  usage?: UsageBlock;
 };
 
 export type TranscribeVideoSingleResult = {
   video_info: VideoInfo;
   transcript: TranscriptOutput;
+  usage?: UsageBlock;
 };
 
 export type TranscribeVideoCarouselResult = {
   carousel_info: CarouselInfo;
   videos: CarouselVideoResult[];
+  usage?: UsageBlock;
 };
 
 export type TranscribeVideoResult = TranscribeVideoSingleResult | TranscribeVideoCarouselResult;
@@ -124,8 +135,75 @@ export interface ExtractDataResult {
   data: Record<string, unknown>;
   video_info?: VideoInfo;
   file_info?: FileInfo;
-  usage?: ExtractionTokenUsage;
+  usage?: UsageBlock;
 }
+
+export type YouTubeSearchFocus = 'relevance' | 'popularity' | 'brevity';
+
+export type SearchYouTubePayload = {
+  query: string;
+  use_enhanced_search?: boolean;
+  start_year?: number;
+  end_year?: number;
+  focus?: YouTubeSearchFocus;
+  duration?: number;
+  max_results?: number;
+  include_usage?: boolean;
+};
+
+export type SearchYouTubeResult = {
+  results: VideoSearchResult[];
+  query: string;
+  total_found: number;
+  explanation?: string;
+  usage?: UsageBlock;
+  /** Present when a 402 partial-results response is returned. */
+  status?: 'success' | 'partial';
+  /** Present on partial results (e.g. `insufficient_credits_video_search`). */
+  error_code?: string;
+};
+
+export type SearchFilesPayload = {
+  query: string;
+  namespace_ids?: string[];
+  include_usage?: boolean;
+};
+
+export type SearchFilesResult = {
+  results: FileSearchResult[];
+  query: string;
+  total_found: number;
+  explanation?: string;
+  usage?: UsageBlock;
+};
+
+export type AnalyzeVideoPayload = {
+  video_url: string;
+  query?: string;
+  transcript_text?: boolean;
+  include_usage?: boolean;
+};
+
+export type AnalyzeFilePayload = {
+  file_id: string;
+  query?: string;
+  transcript_text?: boolean;
+  include_usage?: boolean;
+};
+
+export type AnalyzeVideoResult = {
+  video_info: VideoInfo;
+  transcript: TranscriptOutput;
+  transcript_analysis: AnalysisResult;
+  usage?: UsageBlock;
+};
+
+export type AnalyzeFileResult = {
+  file_info: FileInfo;
+  transcript: TranscriptOutput;
+  transcript_analysis: AnalysisResult;
+  usage?: UsageBlock;
+};
 
 export type ExtractVideoDataPayload = {
   video_url: string;
@@ -177,6 +255,32 @@ function parseApiErrorPayload(data: any): {
 function appendOptionalFormField(form: FormData, name: string, value: string | number | boolean | undefined): void {
   if (value !== undefined) {
     form.append(name, String(value));
+  }
+}
+
+function buildTikTokPollParams(query?: {
+  cursor?: string;
+  limit?: number;
+  include_usage?: boolean;
+}): Record<string, string | number> | undefined {
+  if (!query) return undefined;
+  const params: Record<string, string | number> = {};
+  if (query.cursor !== undefined) params.cursor = query.cursor;
+  if (query.limit !== undefined) params.limit = query.limit;
+  // The TikTok pollers expect include_usage as a query string value.
+  if (query.include_usage) params.include_usage = 'true';
+  return params;
+}
+
+const _deprecationWarned = new Set<string>();
+
+function warnDeprecated(oldName: string, newName: string): void {
+  if (_deprecationWarned.has(oldName)) return;
+  _deprecationWarned.add(oldName);
+  if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+    console.warn(
+      `[vidnavigator] ${oldName}() is deprecated and will be removed in a future release; use ${newName}() instead.`
+    );
   }
 }
 
@@ -258,10 +362,12 @@ export class VidNavigatorClient {
   }
 
   //region --- Transcripts ---
-  async getTranscript(payload: TranscriptRequestPayload): Promise<{
-    video_info: VideoInfo;
-    transcript: TranscriptOutput;
-  }> {
+  /**
+   * Get a transcript for any supported video. The endpoint auto-detects the
+   * platform (YouTube, Vimeo, X/Twitter, TikTok, Facebook, Dailymotion, Loom, etc.)
+   * from `video_url`. For Instagram, use {@link VidNavigatorClient.transcribeVideo}.
+   */
+  async getTranscript(payload: TranscriptRequestPayload): Promise<TranscriptResult> {
     const response = await this.request<
       ApiSuccessResponse<{
         video_info: VideoInfoJSON;
@@ -272,24 +378,18 @@ export class VidNavigatorClient {
     return {
       video_info: VideoInfo.fromJSON(response.data.video_info),
       transcript: transcriptFromJSON(response.data.transcript)!,
+      usage: response.usage ? UsageBlock.fromJSON(response.usage) : undefined,
     };
   }
 
-  async getYouTubeTranscript(payload: TranscriptRequestPayload): Promise<{
-    video_info: VideoInfo;
-    transcript: TranscriptOutput;
-  }> {
-    const response = await this.request<
-      ApiSuccessResponse<{
-        video_info: VideoInfoJSON;
-        transcript: TranscriptSegmentJSON[] | string;
-      }>
-    >('POST', '/youtube/transcript', payload);
-
-    return {
-      video_info: VideoInfo.fromJSON(response.data.video_info),
-      transcript: transcriptFromJSON(response.data.transcript)!,
-    };
+  /**
+   * @deprecated There is now a single `/transcript` endpoint that auto-detects the
+   * platform. Use {@link VidNavigatorClient.getTranscript} instead. This alias
+   * forwards to `getTranscript` and will be removed in a future release.
+   */
+  async getYouTubeTranscript(payload: TranscriptRequestPayload): Promise<TranscriptResult> {
+    warnDeprecated('getYouTubeTranscript', 'getTranscript');
+    return this.getTranscript(payload);
   }
 
   async transcribeVideo(payload: TranscribeVideoPayload): Promise<TranscribeVideoResult> {
@@ -305,10 +405,12 @@ export class VidNavigatorClient {
     >('POST', '/transcribe', payload);
 
     const inner = response.data;
+    const usage = response.usage ? UsageBlock.fromJSON(response.usage) : undefined;
     if ('videos' in inner && 'carousel_info' in inner) {
       return {
         carousel_info: CarouselInfo.fromJSON(inner.carousel_info),
         videos: inner.videos.map((v) => CarouselVideoResult.fromJSON(v)),
+        usage,
       };
     }
     const single = inner as {
@@ -318,6 +420,7 @@ export class VidNavigatorClient {
     return {
       video_info: VideoInfo.fromJSON(single.video_info),
       transcript: transcriptFromJSON(single.transcript)!,
+      usage,
     };
   }
   //endregion
@@ -336,15 +439,17 @@ export class VidNavigatorClient {
 
   async getTikTokProfileScrape(
     task_id: string,
-    query?: { cursor?: string; limit?: number }
+    query?: { cursor?: string; limit?: number; include_usage?: boolean }
   ): Promise<TikTokProfileTask> {
     const response = await this.request<ApiSuccessResponse<TikTokProfileTaskJSON>>(
       'GET',
       `/tiktok/profile/${task_id}`,
       undefined,
-      query
+      buildTikTokPollParams(query)
     );
-    return TikTokProfileTask.fromJSON(response.data);
+    const task = TikTokProfileTask.fromJSON(response.data);
+    if (response.usage) task.usage = UsageBlock.fromJSON(response.usage);
+    return task;
   }
 
   async submitTikTokSearch(payload: TikTokSearchRequest): Promise<TikTokSearchSubmission> {
@@ -358,15 +463,17 @@ export class VidNavigatorClient {
 
   async getTikTokSearch(
     task_id: string,
-    query?: { cursor?: string; limit?: number }
+    query?: { cursor?: string; limit?: number; include_usage?: boolean }
   ): Promise<TikTokSearchTask> {
     const response = await this.request<ApiSuccessResponse<TikTokSearchTaskJSON>>(
       'GET',
       `/tiktok/search/${task_id}`,
       undefined,
-      query
+      buildTikTokPollParams(query)
     );
-    return TikTokSearchTask.fromJSON(response.data);
+    const task = TikTokSearchTask.fromJSON(response.data);
+    if (response.usage) task.usage = UsageBlock.fromJSON(response.usage);
+    return task;
   }
   //endregion
 
@@ -583,15 +690,7 @@ export class VidNavigatorClient {
   //endregion
 
   //region --- Analysis ---
-  async analyzeVideo(payload: {
-    video_url: string;
-    query?: string;
-    transcript_text?: boolean;
-  }): Promise<{
-    video_info: VideoInfo;
-    transcript: TranscriptOutput;
-    transcript_analysis: AnalysisResult;
-  }> {
+  async analyzeVideo(payload: AnalyzeVideoPayload): Promise<AnalyzeVideoResult> {
     const response = await this.request<
       ApiSuccessResponse<{
         video_info: VideoInfoJSON;
@@ -604,18 +703,11 @@ export class VidNavigatorClient {
       video_info: VideoInfo.fromJSON(response.data.video_info),
       transcript: transcriptFromJSON(response.data.transcript)!,
       transcript_analysis: AnalysisResult.fromJSON(response.data.transcript_analysis),
+      usage: response.usage ? UsageBlock.fromJSON(response.usage) : undefined,
     };
   }
 
-  async analyzeFile(payload: {
-    file_id: string;
-    query?: string;
-    transcript_text?: boolean;
-  }): Promise<{
-    file_info: FileInfo;
-    transcript: TranscriptOutput;
-    transcript_analysis: AnalysisResult;
-  }> {
+  async analyzeFile(payload: AnalyzeFilePayload): Promise<AnalyzeFileResult> {
     const response = await this.request<
       ApiSuccessResponse<{
         file_info: FileInfoJSON;
@@ -628,6 +720,7 @@ export class VidNavigatorClient {
       file_info: FileInfo.fromJSON(response.data.file_info),
       transcript: transcriptFromJSON(response.data.transcript)!,
       transcript_analysis: AnalysisResult.fromJSON(response.data.transcript_analysis),
+      usage: response.usage ? UsageBlock.fromJSON(response.usage) : undefined,
     };
   }
 
@@ -657,12 +750,12 @@ export class VidNavigatorClient {
         status: 'success';
         data: Record<string, unknown>;
         video_info?: VideoInfoJSON;
-        usage?: ExtractionTokenUsageJSON;
+        usage?: UsageBlockJSON;
       }>('POST', '/extract/video', form, undefined, form.getHeaders());
       return {
         data: body.data,
         video_info: body.video_info ? VideoInfo.fromJSON(body.video_info) : undefined,
-        usage: body.usage ? ExtractionTokenUsage.fromJSON(body.usage) : undefined,
+        usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
       };
     }
 
@@ -670,12 +763,12 @@ export class VidNavigatorClient {
       status: 'success';
       data: Record<string, unknown>;
       video_info?: VideoInfoJSON;
-      usage?: ExtractionTokenUsageJSON;
+      usage?: UsageBlockJSON;
     }>('POST', '/extract/video', payload);
     return {
       data: body.data,
       video_info: body.video_info ? VideoInfo.fromJSON(body.video_info) : undefined,
-      usage: body.usage ? ExtractionTokenUsage.fromJSON(body.usage) : undefined,
+      usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
     };
   }
 
@@ -693,12 +786,12 @@ export class VidNavigatorClient {
         status: 'success';
         data: Record<string, unknown>;
         file_info?: FileInfoJSON;
-        usage?: ExtractionTokenUsageJSON;
+        usage?: UsageBlockJSON;
       }>('POST', '/extract/file', form, undefined, form.getHeaders());
       return {
         data: body.data,
         file_info: body.file_info ? FileInfo.fromJSON(body.file_info) : undefined,
-        usage: body.usage ? ExtractionTokenUsage.fromJSON(body.usage) : undefined,
+        usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
       };
     }
 
@@ -706,56 +799,71 @@ export class VidNavigatorClient {
       status: 'success';
       data: Record<string, unknown>;
       file_info?: FileInfoJSON;
-      usage?: ExtractionTokenUsageJSON;
+      usage?: UsageBlockJSON;
     }>('POST', '/extract/file', payload);
     return {
       data: body.data,
       file_info: body.file_info ? FileInfo.fromJSON(body.file_info) : undefined,
-      usage: body.usage ? ExtractionTokenUsage.fromJSON(body.usage) : undefined,
+      usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
     };
   }
   //endregion
 
   //region --- Search ---
-  async searchVideos(payload: {
-    query: string;
-    use_enhanced_search?: boolean;
-    start_year?: number;
-    end_year?: number;
-    focus?: 'relevance' | 'popularity' | 'brevity';
-    duration?: number;
-  }): Promise<{
-    results: VideoSearchResult[];
-    query: string;
-    total_found: number;
-    explanation?: string;
-  }> {
-    const response = await this.request<
-      ApiSuccessResponse<{
+  /**
+   * Search YouTube for videos with AI analysis and ranking.
+   *
+   * If the account runs out of `residential_request` credits mid-search, the API
+   * returns HTTP 402 with `status: "partial"` and the videos analysed so far. The
+   * SDK surfaces that partial payload (results, `status: "partial"`, `error_code`,
+   * and `usage` when requested) instead of throwing.
+   */
+  async searchYouTube(payload: SearchYouTubePayload): Promise<SearchYouTubeResult> {
+    let response: {
+      status?: 'success' | 'partial';
+      error_code?: string;
+      data: {
         results: VideoSearchResultJSON[];
         query: string;
         total_found: number;
         explanation?: string;
-      }>
-    >('POST', '/search/video', payload);
+      };
+      usage?: UsageBlockJSON;
+    };
+
+    try {
+      response = await this.request('POST', '/youtube/search', payload);
+    } catch (error: any) {
+      const body = error?.details;
+      if (error instanceof PaymentRequiredError && body?.status === 'partial' && body?.data) {
+        response = body;
+      } else {
+        throw error;
+      }
+    }
 
     return {
-      results: response.data.results.map(VideoSearchResult.fromJSON),
+      results: (response.data.results ?? []).map(VideoSearchResult.fromJSON),
       query: response.data.query,
       total_found: response.data.total_found,
       explanation: response.data.explanation,
+      usage: response.usage ? UsageBlock.fromJSON(response.usage) : undefined,
+      status: response.status,
+      error_code: response.error_code,
     };
   }
 
-  async searchFiles(payload: {
-    query: string;
-    namespace_ids?: string[];
-  }): Promise<{
-    results: FileSearchResult[];
-    query: string;
-    total_found: number;
-    explanation?: string;
-  }> {
+  /**
+   * @deprecated `/search/video` moved to `/youtube/search`. Use
+   * {@link VidNavigatorClient.searchYouTube} instead. This alias forwards to
+   * `searchYouTube` and will be removed in a future release.
+   */
+  async searchVideos(payload: SearchYouTubePayload): Promise<SearchYouTubeResult> {
+    warnDeprecated('searchVideos', 'searchYouTube');
+    return this.searchYouTube(payload);
+  }
+
+  async searchFiles(payload: SearchFilesPayload): Promise<SearchFilesResult> {
     const response = await this.request<
       ApiSuccessResponse<{
         results: FileSearchResultJSON[];
@@ -770,6 +878,7 @@ export class VidNavigatorClient {
       query: response.data.query,
       total_found: response.data.total_found,
       explanation: response.data.explanation,
+      usage: response.usage ? UsageBlock.fromJSON(response.usage) : undefined,
     };
   }
   //endregion
