@@ -39,27 +39,24 @@ import {
   TikTokSearchTask,
   TikTokSearchTaskJSON,
   TweetStatement,
-  TweetStatementJSON,
+  AsyncJob,
+  AsyncJobJSON,
+  AsyncJobAccepted,
+  AsyncJobAcceptedJSON,
+  TikTokProfilePagination,
 } from './models';
-import {
-  VidNavigatorError,
-  AuthenticationError,
-  BadRequestError,
-  AccessDeniedError,
-  NotFoundError,
-  RateLimitExceededError,
-  PaymentRequiredError,
-  ServerError,
-  StorageQuotaExceededError,
-  GeoRestrictedError,
-  SystemOverloadError,
-} from './errors';
+import { VidNavigatorError, PaymentRequiredError } from './errors';
+import { buildApiError } from './http';
+import { Job, JobInfo, JobOperation, PollableTask, PollOptions, RunOptions, SubmitOptions } from './jobs';
 
 export * from './models';
 export * from './errors';
+export * from './webhooks';
+export { Job } from './jobs';
+export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '1.0.5';
+export const SDK_VERSION = '2.0.0';
 
 //region --- Interfaces ---
 export interface SDKConfig {
@@ -88,7 +85,42 @@ export type TranscribeVideoPayload = {
   transcript_text?: boolean;
   all_videos?: boolean;
   include_usage?: boolean;
-};
+} & WebhookOption;
+
+/**
+ * Where to POST a notification when an async job finishes. Overrides the account-level default
+ * configured in Studio → API; pass an empty string to opt this job out of that default.
+ * Must be a publicly reachable https URL. This is a pass-through: polling always works either way.
+ */
+export type WebhookOption = { webhook_url?: string };
+
+/** Input for {@link VidNavigatorClient.transcribe}. A plain string is treated as `video_url`. */
+export type TranscribeInput = {
+  video_url: string;
+  transcript_text?: boolean;
+  /** Instagram carousel posts only: transcribe every video in the post. */
+  all_videos?: boolean;
+} & WebhookOption;
+
+/** Input for {@link VidNavigatorClient.extractVideo}: a JSON `schema`, or a JSON/YAML `schemaFilePath`. */
+export type ExtractVideoInput =
+  | ({
+      video_url: string;
+      schema: ExtractionSchema;
+      what_to_extract?: string;
+      /** Speech-to-text the audio when no platform transcript exists. Default true. */
+      transcribe?: boolean;
+    } & WebhookOption)
+  | ({
+      video_url: string;
+      /** Path to a JSON or YAML schema file (sent as multipart form-data). */
+      schemaFilePath: string;
+      what_to_extract?: string;
+      transcribe?: boolean;
+    } & WebhookOption);
+
+/** Input for {@link VidNavigatorClient.tweetStatement}. A plain string is treated as `tweet_id`. */
+export type TweetStatementInput = { tweet_id: string } & WebhookOption;
 
 export type TranscriptResult = {
   video_info: VideoInfo;
@@ -109,6 +141,37 @@ export type TranscribeVideoCarouselResult = {
 };
 
 export type TranscribeVideoResult = TranscribeVideoSingleResult | TranscribeVideoCarouselResult;
+
+/** Snapshot of a transcription task. `result` has the same shape as {@link VidNavigatorClient.transcribe}'s return value. */
+export type TranscribeAsyncJob = AsyncJob<TranscribeVideoResult>;
+
+/** Snapshot of an extraction task. `result` is the extracted object, shaped like your schema. */
+export type ExtractVideoAsyncJob = AsyncJob<Record<string, unknown>>;
+
+/** Snapshot of a tweet claim analysis task. `result` is a {@link TweetStatement}. */
+export type TweetStatementAsyncJob = AsyncJob<TweetStatement>;
+
+export type TranscribeJob = Job<TranscribeAsyncJob, TranscribeVideoResult>;
+
+/** Input that always yields a single-video result (the carousel shape needs `all_videos: true`). */
+type SingleTranscribeInput = string | (TranscribeInput & { all_videos?: false });
+
+/**
+ * {@link JobOperation} for transcription, typed so that a plain URL (or `all_videos` left off)
+ * resolves to {@link TranscribeVideoSingleResult}.
+ */
+export interface TranscribeOperation extends JobOperation<string | TranscribeInput, TranscribeAsyncJob, TranscribeVideoResult> {
+  (input: SingleTranscribeInput, options?: RunOptions<TranscribeAsyncJob>): Promise<TranscribeVideoSingleResult>;
+  (input: string | TranscribeInput, options?: RunOptions<TranscribeAsyncJob>): Promise<TranscribeVideoResult>;
+  submit(input: SingleTranscribeInput, options?: SubmitOptions): Promise<Job<TranscribeAsyncJob, TranscribeVideoSingleResult>>;
+  submit(input: string | TranscribeInput, options?: SubmitOptions): Promise<Job<TranscribeAsyncJob, TranscribeVideoResult>>;
+}
+export type ExtractVideoJob = Job<ExtractVideoAsyncJob, ExtractDataResult>;
+export type TweetStatementJob = Job<TweetStatementAsyncJob, TweetStatement>;
+/** `result()` resolves to the completed task with **all** pages of `videos` collected. */
+export type TikTokProfileJob = Job<TikTokProfileTask, TikTokProfileTask>;
+/** `result()` resolves to the completed task with **all** pages of `results` collected. */
+export type TikTokSearchJob = Job<TikTokSearchTask, TikTokSearchTask>;
 
 export type UploadFileSuccessResult = {
   status: 'success';
@@ -211,7 +274,7 @@ export type ExtractVideoDataPayload = {
   what_to_extract?: string;
   transcribe?: boolean;
   include_usage?: boolean;
-};
+} & WebhookOption;
 
 export type ExtractVideoDataMultipartPayload = {
   video_url: string;
@@ -220,7 +283,9 @@ export type ExtractVideoDataMultipartPayload = {
   what_to_extract?: string;
   transcribe?: boolean;
   include_usage?: boolean;
-};
+} & WebhookOption;
+
+export type TweetStatementPayload = { tweet_id: string } & WebhookOption;
 
 export type ExtractFileDataPayload = {
   file_id: string;
@@ -238,18 +303,70 @@ export type ExtractFileDataMultipartPayload = {
 };
 //endregion
 
-function parseApiErrorPayload(data: any): {
-  errorCode?: string;
-  errorMessage?: string;
-  details?: any;
-} {
-  const errorField = data?.error;
-  const errorCode =
-    typeof errorField === 'string' ? errorField : errorField?.code;
-  const errorMessage =
-    data?.message ??
-    (typeof errorField === 'object' ? errorField?.message : undefined);
-  return { errorCode, errorMessage, details: data };
+function parseTranscribeData(
+  inner:
+    | { video_info: VideoInfoJSON; transcript: TranscriptSegmentJSON[] | string }
+    | { carousel_info: CarouselInfoJSON; videos: CarouselVideoResultJSON[] },
+  usage?: UsageBlock
+): TranscribeVideoResult {
+  if ('videos' in inner && 'carousel_info' in inner) {
+    return {
+      carousel_info: CarouselInfo.fromJSON(inner.carousel_info),
+      videos: inner.videos.map((v) => CarouselVideoResult.fromJSON(v)),
+      usage,
+    };
+  }
+  const single = inner as { video_info: VideoInfoJSON; transcript: TranscriptSegmentJSON[] | string };
+  return {
+    video_info: VideoInfo.fromJSON(single.video_info),
+    transcript: transcriptFromJSON(single.transcript)!,
+    usage,
+  };
+}
+
+function buildAsyncJobParams(options?: SubmitOptions): Record<string, string> | undefined {
+  // Like the TikTok pollers, the async job pollers take include_usage as a query string value.
+  return options?.include_usage ? { include_usage: 'true' } : undefined;
+}
+
+function requireResult<T>(task: AsyncJob<T>): T {
+  if (task.result === null) {
+    const err = new VidNavigatorError(`Task ${task.task_id} completed without a result`);
+    err.task_id = task.task_id;
+    throw err;
+  }
+  return task.result;
+}
+
+/** TikTok results are paginated; fetch every page of a completed task and merge the items. */
+async function collectAllPages<TTask extends { pagination?: TikTokProfilePagination }, TItem>(
+  fetchPage: (query: { cursor?: string; limit: number; include_usage?: boolean }) => Promise<TTask>,
+  items: (task: TTask) => TItem[],
+  setItems: (task: TTask, all: TItem[]) => void,
+  include_usage?: boolean
+): Promise<TTask> {
+  const first = await fetchPage({ limit: TIKTOK_PAGE_SIZE, include_usage });
+  const all = [...items(first)];
+  let cursor = first.pagination?.next_cursor ?? undefined;
+  while (cursor) {
+    const page = await fetchPage({ limit: TIKTOK_PAGE_SIZE, cursor });
+    all.push(...items(page));
+    cursor = page.pagination?.next_cursor ?? undefined;
+  }
+  setItems(first, all);
+  if (first.pagination) {
+    first.pagination = { ...first.pagination, limit: all.length, has_next: false, next_cursor: null };
+  }
+  return first;
+}
+
+const TIKTOK_PAGE_SIZE = 500;
+
+interface OperationSpec<TInput, TTask extends PollableTask, TResult> {
+  jobType: string;
+  submit: (input: TInput) => Promise<JobInfo>;
+  fetchTask: (task_id: string, options: SubmitOptions) => Promise<TTask>;
+  toResult: (task: TTask, options: SubmitOptions) => Promise<TResult>;
 }
 
 function appendOptionalFormField(form: FormData, name: string, value: string | number | boolean | undefined): void {
@@ -287,6 +404,40 @@ function warnDeprecated(oldName: string, newName: string): void {
 export class VidNavigatorClient {
   private client: AxiosInstance;
 
+  /**
+   * Speech-to-text transcription of any length (Instagram, TikTok, X, Facebook, Vimeo, ...),
+   * built on `POST /transcribe/async`.
+   *
+   * - `await vn.transcribe(url)` submits, polls, and returns the result.
+   * - `await vn.transcribe.submit(url)` returns a {@link Job} handle right away.
+   * - `vn.transcribe.resume(task_id)` reattaches to a job you already submitted.
+   */
+  readonly transcribe: TranscribeOperation;
+
+  /**
+   * Structured-data extraction from a video of any length, built on `POST /extract/video/async`.
+   * The schema is validated when you submit. Same shapes as {@link VidNavigatorClient.transcribe}.
+   */
+  readonly extractVideo: JobOperation<ExtractVideoInput, ExtractVideoAsyncJob, ExtractDataResult>;
+
+  /**
+   * Structured claim analysis of an X/Twitter tweet (attached media of any length), built on
+   * `POST /tweet/statement/async`. Same shapes as {@link VidNavigatorClient.transcribe}.
+   */
+  readonly tweetStatement: JobOperation<string | TweetStatementInput, TweetStatementAsyncJob, TweetStatement>;
+
+  /**
+   * TikTok profile scrape, built on `POST /tiktok/profile`. The result is the completed task with
+   * every page of `videos` collected. Same shapes as {@link VidNavigatorClient.transcribe}.
+   */
+  readonly tiktokProfile: JobOperation<string | TikTokProfileScrapeRequest, TikTokProfileTask, TikTokProfileTask>;
+
+  /**
+   * TikTok keyword search, built on `POST /tiktok/search`. The result is the completed task with
+   * every page of `results` collected. Same shapes as {@link VidNavigatorClient.transcribe}.
+   */
+  readonly tiktokSearch: JobOperation<string | TikTokSearchRequest, TikTokSearchTask, TikTokSearchTask>;
+
   constructor(config: SDKConfig) {
     if (!config?.apiKey) {
       throw new Error('An API key is required to use the VidNavigator SDK.');
@@ -300,6 +451,132 @@ export class VidNavigatorClient {
       },
       ...config.axiosConfig,
     });
+
+    this.transcribe = this.defineOperation({
+      jobType: 'transcribe',
+      submit: (input: string | TranscribeInput) =>
+        this.submitAsyncJob('/transcribe/async', typeof input === 'string' ? { video_url: input } : input),
+      fetchTask: (task_id, options) =>
+        this.getAsyncJob(`/transcribe/${encodeURIComponent(task_id)}`, options, (raw) => parseTranscribeData(raw)),
+      toResult: async (task) => ({ ...requireResult(task), usage: task.usage }),
+    }) as TranscribeOperation;
+
+    this.extractVideo = this.defineOperation({
+      jobType: 'extract_video',
+      submit: (input: ExtractVideoInput) => this.submitExtractVideo(input),
+      fetchTask: (task_id, options) =>
+        this.getAsyncJob(
+          `/extract/video/${encodeURIComponent(task_id)}`,
+          options,
+          (raw) => raw as Record<string, unknown>
+        ),
+      toResult: async (task) => ({ data: requireResult(task), usage: task.usage }),
+    });
+
+    this.tweetStatement = this.defineOperation({
+      jobType: 'tweet_statement',
+      submit: (input: string | TweetStatementInput) =>
+        this.submitAsyncJob('/tweet/statement/async', typeof input === 'string' ? { tweet_id: input } : input),
+      fetchTask: (task_id, options) =>
+        this.getAsyncJob(`/tweet/statement/${encodeURIComponent(task_id)}`, options, (raw) =>
+          TweetStatement.fromJSON(raw)
+        ),
+      toResult: async (task) => {
+        const statement = requireResult(task);
+        statement.usage = task.usage;
+        return statement;
+      },
+    });
+
+    this.tiktokProfile = this.defineOperation({
+      jobType: 'tiktok_profile',
+      submit: async (input: string | TikTokProfileScrapeRequest) => {
+        const sub = await this.submitTikTokProfileScrape(typeof input === 'string' ? { profile_url: input } : input);
+        return { ...sub, job_type: 'tiktok_profile' };
+      },
+      // Status polls ask for one video only; the full result is paged in once the task completes.
+      fetchTask: (task_id) => this.getTikTokProfileScrape(task_id, { limit: 1 }),
+      toResult: (task, options) =>
+        collectAllPages(
+          (query) => this.getTikTokProfileScrape(task.task_id, query),
+          (page) => page.videos,
+          (page, all) => { page.videos = all; },
+          options.include_usage
+        ),
+    });
+
+    this.tiktokSearch = this.defineOperation({
+      jobType: 'tiktok_search',
+      submit: async (input: string | TikTokSearchRequest) => {
+        const sub = await this.submitTikTokSearch(typeof input === 'string' ? { query: input } : input);
+        return { ...sub, job_type: 'tiktok_search' };
+      },
+      fetchTask: (task_id) => this.getTikTokSearch(task_id, { limit: 1 }),
+      toResult: (task, options) =>
+        collectAllPages(
+          (query) => this.getTikTokSearch(task.task_id, query),
+          (page) => page.results,
+          (page, all) => { page.results = all; },
+          options.include_usage
+        ),
+    });
+  }
+
+  private defineOperation<TInput, TTask extends PollableTask, TResult>(
+    spec: OperationSpec<TInput, TTask, TResult>
+  ): JobOperation<TInput, TTask, TResult> {
+    const makeJob = (info: JobInfo, options: SubmitOptions = {}) =>
+      new Job<TTask, TResult>(
+        info,
+        () => spec.fetchTask(info.task_id, options),
+        (task) => spec.toResult(task, options)
+      );
+    const submit = async (input: TInput, options?: SubmitOptions) => makeJob(await spec.submit(input), options);
+    const run = async (input: TInput, options: RunOptions<TTask> = {}) => {
+      const { include_usage, ...pollOptions } = options;
+      const job = await submit(input, { include_usage });
+      return job.result(pollOptions);
+    };
+    return Object.assign(run, {
+      submit,
+      resume: (task_id: string, options?: SubmitOptions) =>
+        makeJob({ task_id, job_type: spec.jobType }, options),
+    });
+  }
+
+  private async submitAsyncJob(url: string, body: unknown, headers?: Record<string, string>): Promise<JobInfo> {
+    const response = await this.request<ApiSuccessResponse<AsyncJobAcceptedJSON>>('POST', url, body, undefined, headers);
+    const accepted = AsyncJobAccepted.fromJSON(response.data);
+    return { ...accepted, job_type: accepted.job_type ?? url.split('/')[1] };
+  }
+
+  private submitExtractVideo(input: ExtractVideoInput): Promise<JobInfo> {
+    if ('schemaFilePath' in input) {
+      const form = new FormData();
+      form.append('video_url', input.video_url);
+      form.append('schema', fs.createReadStream(input.schemaFilePath));
+      appendOptionalFormField(form, 'what_to_extract', input.what_to_extract);
+      appendOptionalFormField(form, 'transcribe', input.transcribe);
+      appendOptionalFormField(form, 'webhook_url', input.webhook_url);
+      return this.submitAsyncJob('/extract/video/async', form, form.getHeaders());
+    }
+    return this.submitAsyncJob('/extract/video/async', input);
+  }
+
+  private async getAsyncJob<T>(
+    url: string,
+    options: SubmitOptions | undefined,
+    parseResult: (raw: any) => T
+  ): Promise<AsyncJob<T>> {
+    const response = await this.request<ApiSuccessResponse<AsyncJobJSON>>(
+      'GET',
+      url,
+      undefined,
+      buildAsyncJobParams(options)
+    );
+    const job = AsyncJob.fromJSON(response.data, parseResult);
+    if (response.usage) job.usage = UsageBlock.fromJSON(response.usage);
+    return job;
   }
 
   private async request<T>(
@@ -320,42 +597,7 @@ export class VidNavigatorClient {
       return response.data;
     } catch (error: any) {
       if (axios.isAxiosError(error) && error.response) {
-        const { status, data } = error.response;
-        const { errorCode, errorMessage, details } = parseApiErrorPayload(data);
-        const message = `API request failed with status ${status}: ${errorMessage || error.message}`;
-
-        switch (status) {
-          case 400:
-            throw new BadRequestError(message, status, errorCode, errorMessage, details);
-          case 401:
-            throw new AuthenticationError(message, status, errorCode, errorMessage, details);
-          case 402:
-            throw new PaymentRequiredError(message, status, errorCode, errorMessage, details);
-          case 403:
-            throw new AccessDeniedError(message, status, errorCode, errorMessage, details);
-          case 404:
-            throw new NotFoundError(message, status, errorCode, errorMessage, details);
-          case 413:
-            throw new StorageQuotaExceededError(message, status, errorCode, errorMessage, details);
-          case 429:
-            throw new RateLimitExceededError(message, status, errorCode, errorMessage, details);
-          case 451:
-            throw new GeoRestrictedError(message, status, errorCode, errorMessage, details);
-          case 503:
-            throw new SystemOverloadError(
-              message,
-              status,
-              errorCode,
-              errorMessage,
-              details,
-              data?.retry_after_seconds
-            );
-          default:
-            if (status >= 500) {
-              throw new ServerError(message, status, errorCode, errorMessage, details);
-            }
-            throw new VidNavigatorError(message, status, errorCode, errorMessage, details);
-        }
+        throw buildApiError(error.response.status, error.response.data, error.message);
       }
       throw new VidNavigatorError(error.message);
     }
@@ -392,36 +634,16 @@ export class VidNavigatorClient {
     return this.getTranscript(payload);
   }
 
-  async transcribeVideo(payload: TranscribeVideoPayload): Promise<TranscribeVideoResult> {
-    const response = await this.request<
-      | ApiSuccessResponse<{
-          video_info: VideoInfoJSON;
-          transcript: TranscriptSegmentJSON[] | string;
-        }>
-      | ApiSuccessResponse<{
-          carousel_info: CarouselInfoJSON;
-          videos: CarouselVideoResultJSON[];
-        }>
-    >('POST', '/transcribe', payload);
-
-    const inner = response.data;
-    const usage = response.usage ? UsageBlock.fromJSON(response.usage) : undefined;
-    if ('videos' in inner && 'carousel_info' in inner) {
-      return {
-        carousel_info: CarouselInfo.fromJSON(inner.carousel_info),
-        videos: inner.videos.map((v) => CarouselVideoResult.fromJSON(v)),
-        usage,
-      };
-    }
-    const single = inner as {
-      video_info: VideoInfoJSON;
-      transcript: TranscriptSegmentJSON[] | string;
-    };
-    return {
-      video_info: VideoInfo.fromJSON(single.video_info),
-      transcript: transcriptFromJSON(single.transcript)!,
-      usage,
-    };
+  /**
+   * Speech-to-text transcription. Blocking convenience wrapper around {@link VidNavigatorClient.transcribe}:
+   * submits to `POST /transcribe/async` and polls until the job finishes, so media of any length works.
+   */
+  async transcribeVideo(
+    payload: TranscribeVideoPayload,
+    options?: PollOptions<TranscribeAsyncJob>
+  ): Promise<TranscribeVideoResult> {
+    const { include_usage, ...input } = payload;
+    return this.transcribe(input, { ...options, include_usage });
   }
   //endregion
 
@@ -574,33 +796,7 @@ export class VidNavigatorClient {
       };
     } catch (error: any) {
       if (axios.isAxiosError(error) && error.response) {
-        const { status, data } = error.response;
-        const { errorCode, errorMessage, details } = parseApiErrorPayload(data);
-        const message = `API request failed with status ${status}: ${errorMessage || error.message}`;
-        switch (status) {
-          case 400:
-            throw new BadRequestError(message, status, errorCode, errorMessage, details);
-          case 401:
-            throw new AuthenticationError(message, status, errorCode, errorMessage, details);
-          case 402:
-            throw new PaymentRequiredError(message, status, errorCode, errorMessage, details);
-          case 413:
-            throw new StorageQuotaExceededError(message, status, errorCode, errorMessage, details);
-          case 503:
-            throw new SystemOverloadError(
-              message,
-              status,
-              errorCode,
-              errorMessage,
-              details,
-              data?.retry_after_seconds
-            );
-          default:
-            if (status >= 500) {
-              throw new ServerError(message, status, errorCode, errorMessage, details);
-            }
-            throw new VidNavigatorError(message, status, errorCode, errorMessage, details);
-        }
+        throw buildApiError(error.response.status, error.response.data, error.message);
       }
       throw new VidNavigatorError(error.message);
     }
@@ -724,52 +920,31 @@ export class VidNavigatorClient {
     };
   }
 
-  async getTweetStatement(payload: { tweet_id: string }): Promise<TweetStatement> {
-    const response = await this.request<ApiSuccessResponse<TweetStatementJSON>>(
-      'POST',
-      '/tweet/statement',
-      payload
-    );
-    return TweetStatement.fromJSON(response.data);
+  /**
+   * Structured claim analysis of an X/Twitter tweet. Blocking convenience wrapper around
+   * {@link VidNavigatorClient.tweetStatement}: submits to `POST /tweet/statement/async` and polls.
+   */
+  async getTweetStatement(
+    payload: TweetStatementPayload,
+    options?: RunOptions<TweetStatementAsyncJob>
+  ): Promise<TweetStatement> {
+    return this.tweetStatement(payload, options);
   }
   //endregion
 
   //region --- Extraction ---
+  /**
+   * Structured-data extraction from an online video. Blocking convenience wrapper around
+   * {@link VidNavigatorClient.extractVideo}: submits to `POST /extract/video/async` and polls, so
+   * media of any length works. The async API does not return `video_info`; use
+   * {@link VidNavigatorClient.getTranscript} with `metadata_only: true` if you need it.
+   */
   async extractVideoData(
-    payload: ExtractVideoDataPayload | ExtractVideoDataMultipartPayload
+    payload: ExtractVideoDataPayload | ExtractVideoDataMultipartPayload,
+    options?: PollOptions<ExtractVideoAsyncJob>
   ): Promise<ExtractDataResult> {
-    if ('schemaFilePath' in payload) {
-      const form = new FormData();
-      form.append('video_url', payload.video_url);
-      form.append('schema', fs.createReadStream(payload.schemaFilePath));
-      appendOptionalFormField(form, 'what_to_extract', payload.what_to_extract);
-      appendOptionalFormField(form, 'transcribe', payload.transcribe);
-      appendOptionalFormField(form, 'include_usage', payload.include_usage);
-
-      const body = await this.request<{
-        status: 'success';
-        data: Record<string, unknown>;
-        video_info?: VideoInfoJSON;
-        usage?: UsageBlockJSON;
-      }>('POST', '/extract/video', form, undefined, form.getHeaders());
-      return {
-        data: body.data,
-        video_info: body.video_info ? VideoInfo.fromJSON(body.video_info) : undefined,
-        usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
-      };
-    }
-
-    const body = await this.request<{
-      status: 'success';
-      data: Record<string, unknown>;
-      video_info?: VideoInfoJSON;
-      usage?: UsageBlockJSON;
-    }>('POST', '/extract/video', payload);
-    return {
-      data: body.data,
-      video_info: body.video_info ? VideoInfo.fromJSON(body.video_info) : undefined,
-      usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
-    };
+    const { include_usage, ...input } = payload;
+    return this.extractVideo(input as ExtractVideoInput, { ...options, include_usage });
   }
 
   async extractFileData(

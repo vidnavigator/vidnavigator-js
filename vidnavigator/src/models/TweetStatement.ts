@@ -1,3 +1,5 @@
+import { UsageBlock } from './Usage';
+
 export type TweetClaimType =
   | 'factual_claim'
   | 'opinion'
@@ -60,6 +62,7 @@ export interface TweetStatementJSON {
 
 export class TweetStatement {
   final_statement?: string;
+  /** @deprecated Not part of the API contract and not returned by the async endpoint; always undefined. */
   statement_query?: string;
   detailed_analysis?: string;
   topics?: string[];
@@ -73,6 +76,8 @@ export class TweetStatement {
   tweet_media_summary?: string | null;
   quoted_tweet_text?: string | null;
   quoted_media_summary?: string | null;
+  /** Per-call usage, populated when requested with include_usage. */
+  usage?: UsageBlock;
 
   constructor(data: TweetStatementJSON) {
     Object.assign(this, data);

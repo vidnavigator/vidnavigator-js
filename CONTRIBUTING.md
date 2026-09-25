@@ -40,11 +40,21 @@ Tests live in `tests/` and are plain Node.js scripts (no test framework required
 
 | Command | Scope | Network? | Duration |
 |---|---|---|---|
-| `npm run test:unit` | Models, errors, exports, method existence | No | ~1s |
-| `npm run test:integration` | Every live API endpoint (health, usage, transcripts, transcribe, analyze, namespaces, extract, search, errors) | Yes | ~60-90s |
+| `npm run test:unit` | Models, errors, exports, mocked client calls (background jobs: blocking + `submit()` + `resume()`, poll cadence, timeouts, failures, error mapping), webhook signatures. Fails if the SDK ever calls a synchronous speech-to-text endpoint | No | ~1s |
+| `npm run test:integration` | Every live API endpoint (health, usage, transcripts, transcribe jobs, analyze, namespaces, extraction jobs, search, errors) | Yes | ~90-120s |
 | `npm run test:files` | Full file lifecycle: upload `tests/media/video-test.mp4`, poll, get, analyze, extract, delete | Yes | ~3-5 min |
-| `npm test` | Unit + integration | Yes | ~60-90s |
+| `npm test` | Unit + integration | Yes | ~90-120s |
 | `npm run test:all` | Unit + integration + files | Yes | ~5 min |
+
+### Optional integration tests
+
+Some live tests are slow or cost extra credits, so they only run when their variable is set (in `.env` or inline):
+
+| Variable | Enables |
+|---|---|
+| `TEST_TIKTOK_PROFILE_URL` | TikTok profile scrape submit / poll / pagination (e.g. `https://www.tiktok.com/@tiktok`) |
+| `TEST_TIKTOK_SEARCH_QUERY` | TikTok keyword search with `sort_by` / `published_within` (e.g. `ai tools`) |
+| `TEST_TWEET_ID` | `getTweetStatement` and `tweetStatement.submit()` (use a tweet with real content, e.g. `1585841080431321088`) |
 
 ### Test media files
 

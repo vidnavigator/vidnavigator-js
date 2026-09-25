@@ -53,7 +53,7 @@ const vn = new VidNavigatorClient({
   apiKey: process.env.VIDNAVIGATOR_API_KEY,
 });
 
-const { video_info, transcript } = await vn.getYouTubeTranscript({
+const { video_info, transcript } = await vn.getTranscript({
   video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
 });
 ```

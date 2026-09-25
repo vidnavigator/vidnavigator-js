@@ -144,6 +144,86 @@ async function run() {
     }
   } catch (e) { fail('transcribeVideo', e.message); }
 
+  // ── transcribe: blocking one-liner (POST /transcribe/async + polling) ──
+  console.log('--- transcribe (blocking) ---');
+  try {
+    const result = await client.transcribe(TEST_INSTAGRAM_REEL, { include_usage: true, timeoutMs: 300000 });
+    if ('videos' in result) {
+      assert(Array.isArray(result.videos), 'transcribe carousel');
+    } else {
+      assert(result.video_info instanceof sdk.VideoInfo, 'transcribe result.video_info');
+      const t = result.transcript;
+      assert((typeof t === 'string' && t.length > 0) || (Array.isArray(t) && t.length > 0), 'transcribe result.transcript');
+    }
+    assert(result.usage instanceof sdk.UsageBlock, 'transcribe result.usage (include_usage read on the poll)');
+  } catch (e) { fail('transcribe (blocking)', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+
+  // ── transcribe.submit: non-blocking handle ──
+  console.log('--- transcribe.submit / Job ---');
+  try {
+    const job = await client.transcribe.submit(
+      { video_url: TEST_INSTAGRAM_REEL, transcript_text: true, webhook_url: '' }, // opt out of any account default webhook
+      { include_usage: true }
+    );
+    assert(job instanceof sdk.Job, 'transcribe.submit returns Job');
+    assert(typeof job.task_id === 'string' && job.task_id.length > 0, 'Job.task_id');
+    assert(job.job_type === 'transcribe', 'Job.job_type');
+    assert(job.webhook_url === null, 'Job.webhook_url null when opted out (polling still works)');
+    assert(typeof job.check_status_url === 'string' && job.check_status_url.endsWith(job.task_id), 'Job.check_status_url');
+    const status = await job.status();
+    assert(['processing', 'completed'].includes(status), 'Job.status() returns a task_status', status);
+    const result = await job.result({ timeoutMs: 300000 });
+    assert(typeof result.transcript === 'string' && result.transcript.length > 0, 'Job.result() transcript_text string');
+    assert(result.usage instanceof sdk.UsageBlock, 'Job.result() usage');
+
+    // Results stay readable: reattach by task_id and read again.
+    const resumed = await client.transcribe.resume(job.task_id).result({ timeoutMs: 300000 });
+    assert(resumed.transcript === result.transcript, 'resume(task_id).result() re-reads the same result');
+  } catch (e) { fail('transcribe.submit', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+
+  // ── Timeout keeps the task_id; the job is recoverable ──
+  // Uses an extraction (not a cached transcription) so the first poll is still `processing`.
+  console.log('--- timeout → resume ---');
+  try {
+    let taskId;
+    const input = {
+      video_url: TEST_YOUTUBE_URL,
+      schema: { topic: { type: 'String', description: 'Main topic in a few words' } },
+      transcribe: false,
+    };
+    try {
+      await client.extractVideo(input, { timeoutMs: 1 });
+      pass('extraction finished before a 1ms timeout; timeout path not exercised this run');
+    } catch (e) {
+      assert(e instanceof sdk.TaskTimeoutError, 'tiny timeout throws TaskTimeoutError', e && e.name);
+      assert(typeof e.task_id === 'string' && e.task_id.length > 0, 'TaskTimeoutError carries task_id');
+      taskId = e.task_id;
+    }
+    if (taskId) {
+      const recovered = await client.extractVideo.resume(taskId).result({ timeoutMs: 180000 });
+      assert(typeof recovered.data.topic === 'string', 'job resumed from TaskTimeoutError.task_id completes');
+    }
+  } catch (e) { fail('timeout → resume', `${e.name}: ${e.message}`); }
+
+  console.log('--- resume (unknown task) ---');
+  try {
+    await client.transcribe.resume('00000000-0000-0000-0000-000000000000').result();
+    fail('unknown task throws NotFoundError');
+  } catch (e) {
+    assert(e instanceof sdk.NotFoundError, 'unknown task throws NotFoundError', e && e.name);
+    assert(e.error_code === 'task_not_found', 'unknown task error_code task_not_found', e && e.error_code);
+    assert(e.task_id === '00000000-0000-0000-0000-000000000000', 'poll error carries task_id');
+  }
+
+  console.log('--- transcribe.submit (private webhook_url rejected) ---');
+  try {
+    await client.transcribe.submit({ video_url: TEST_INSTAGRAM_REEL, webhook_url: 'http://127.0.0.1/hook' });
+    fail('private webhook_url rejected');
+  } catch (e) {
+    assert(e instanceof sdk.BadRequestError, 'private webhook_url rejected with BadRequestError', e && `${e.name}: ${e.message}`);
+    assert(e.task_id === undefined, 'rejected submit has no task_id');
+  }
+
   // ── Analyze video ──
   console.log('--- analyzeVideo ---');
   try {
@@ -178,7 +258,7 @@ async function run() {
       include_usage: true,
     });
     assert(extraction.data && typeof extraction.data.topic === 'string', 'extractVideoData data.topic');
-    assert(extraction.video_info instanceof sdk.VideoInfo, 'extractVideoData video_info');
+    assert(extraction.video_info === undefined, 'extractVideoData has no video_info (async API)');
     assert(extraction.usage instanceof sdk.UsageBlock, 'extractVideoData usage is UsageBlock');
     // Live API returns charges-based usage; tokens live under the analysis_request charge.
     const tokens = extraction.usage.analysis_tokens;
@@ -197,6 +277,44 @@ async function run() {
     assert(light.usage === undefined, 'extractVideoData no usage');
   } catch (e) { fail('extractVideoData (no usage)', e.message); }
 
+  // ── extractVideo: blocking + handle ──
+  console.log('--- extractVideo ---');
+  try {
+    const { data, usage } = await client.extractVideo(
+      {
+        video_url: TEST_YOUTUBE_URL,
+        schema: { topic: { type: 'String', description: 'Main topic in a few words' } },
+        transcribe: false,
+      },
+      { include_usage: true, timeoutMs: 180000 }
+    );
+    assert(data && typeof data.topic === 'string', 'extractVideo data.topic');
+    assert(usage instanceof sdk.UsageBlock && !!usage.charge_for('analysis_request'), 'extractVideo usage analysis_request');
+
+    const job = await client.extractVideo.submit({
+      video_url: TEST_YOUTUBE_URL,
+      schema: { topic: { type: 'String', description: 'Main topic in a few words' } },
+      transcribe: false,
+      webhook_url: '',
+    });
+    assert(job.job_type === 'extract_video', 'extractVideo.submit job_type');
+    const final = await job.wait({ timeoutMs: 180000 });
+    assert(final.task_status === 'completed', 'extractVideo Job.wait() completed');
+    assert(final.request && final.request.video_url === TEST_YOUTUBE_URL, 'extractVideo task request echo');
+  } catch (e) { fail('extractVideo', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+
+  console.log('--- extractVideo (invalid schema rejected at submit) ---');
+  try {
+    await client.extractVideo({
+      video_url: TEST_YOUTUBE_URL,
+      schema: { bad: { type: 'NotAType' } },
+      transcribe: false,
+    });
+    fail('extractVideo invalid schema throws BadRequestError');
+  } catch (e) {
+    assert(e instanceof sdk.BadRequestError, 'extractVideo invalid schema throws BadRequestError', e && `${e.name}: ${e.message}`);
+  }
+
   // ── Optional TikTok profile scrape ──
   if (process.env.TEST_TIKTOK_PROFILE_URL) {
     console.log('--- submitTikTokProfileScrape / getTikTokProfileScrape ---');
@@ -205,8 +323,10 @@ async function run() {
         const submitted = await client.submitTikTokProfileScrape({
           profile_url: process.env.TEST_TIKTOK_PROFILE_URL,
           max_posts: 2,
+          webhook_url: '',
         });
         assert(submitted instanceof sdk.TikTokProfileScrapeSubmission, 'submitTikTokProfileScrape response type');
+        assert(submitted.webhook_url === null || submitted.webhook_url === undefined, 'submitTikTokProfileScrape webhook opt-out');
         assert(typeof submitted.task_id === 'string' && submitted.task_id.length > 0, 'submitTikTokProfileScrape task_id');
 
         let scrape = await client.getTikTokProfileScrape(submitted.task_id, { limit: 1, include_usage: true });
@@ -256,6 +376,17 @@ async function run() {
         }
       })(), 600000, 'TikTok profile scrape');
     } catch (e) { fail('TikTok profile scrape', e.message); }
+
+    console.log('--- tiktokProfile (blocking, all pages) ---');
+    try {
+      const task = await client.tiktokProfile(
+        { profile_url: process.env.TEST_TIKTOK_PROFILE_URL, max_posts: 3, webhook_url: '' },
+        { include_usage: true, timeoutMs: 600000 }
+      );
+      assert(task instanceof sdk.TikTokProfileTask && task.task_status === 'completed', 'tiktokProfile completed');
+      assert(task.videos.length > 0 && task.videos.length <= 3, 'tiktokProfile collected videos', String(task.videos.length));
+      assert(task.pagination.has_next === false, 'tiktokProfile merged all pages');
+    } catch (e) { fail('tiktokProfile', `${e.name}: ${e.message} task_id=${e.task_id}`); }
   } else {
     console.log('--- TikTok profile scrape skipped (TEST_TIKTOK_PROFILE_URL not set) ---');
   }
@@ -269,8 +400,12 @@ async function run() {
           query: process.env.TEST_TIKTOK_SEARCH_QUERY,
           max_results: 5,
           parallel_search_slices: 1,
+          sort_by: 'newest',
+          published_within: 'this_month',
+          webhook_url: '',
         });
         assert(submitted instanceof sdk.TikTokSearchSubmission, 'submitTikTokSearch response type');
+        assert(submitted.webhook_url === null || submitted.webhook_url === undefined, 'submitTikTokSearch webhook opt-out');
         assert(typeof submitted.task_id === 'string' && submitted.task_id.length > 0, 'submitTikTokSearch task_id');
 
         let search = await client.getTikTokSearch(submitted.task_id, { limit: 2, include_usage: true });
@@ -284,6 +419,9 @@ async function run() {
         }
 
         assert(search.task_status === 'completed', 'TikTok search completed');
+        if (search.stats && search.stats.sort_by) {
+          assert(search.stats.sort_by === 'newest', 'TikTok search stats.sort_by echoes request');
+        }
         assert(Array.isArray(search.results), 'getTikTokSearch results array');
         if (search.usage) {
           assert(search.usage instanceof sdk.UsageBlock, 'getTikTokSearch usage is UsageBlock on completion');
@@ -314,6 +452,17 @@ async function run() {
         }
       })(), 600000, 'TikTok keyword search');
     } catch (e) { fail('TikTok keyword search', e.message); }
+
+    console.log('--- tiktokSearch (blocking, all pages) ---');
+    try {
+      const task = await client.tiktokSearch(
+        { query: process.env.TEST_TIKTOK_SEARCH_QUERY, max_results: 5, webhook_url: '' },
+        { timeoutMs: 600000 }
+      );
+      assert(task instanceof sdk.TikTokSearchTask && task.task_status === 'completed', 'tiktokSearch completed');
+      assert(Array.isArray(task.results), 'tiktokSearch results array');
+      if (task.results.length > 0) assert(task.results[0] instanceof sdk.TikTokSearchResult, 'tiktokSearch result type');
+    } catch (e) { fail('tiktokSearch', `${e.name}: ${e.message} task_id=${e.task_id}`); }
   } else {
     console.log('--- TikTok keyword search skipped (TEST_TIKTOK_SEARCH_QUERY not set) ---');
   }
@@ -325,8 +474,18 @@ async function run() {
       const statement = await client.getTweetStatement({ tweet_id: process.env.TEST_TWEET_ID });
       assert(statement instanceof sdk.TweetStatement, 'getTweetStatement response type');
       assert(typeof statement.final_statement === 'string', 'getTweetStatement final_statement');
-      assert(typeof statement.statement_query === 'string', 'getTweetStatement statement_query');
+      assert(typeof statement.detailed_analysis === 'string', 'getTweetStatement detailed_analysis');
     } catch (e) { fail('getTweetStatement', e.message); }
+
+    console.log('--- tweetStatement (handle) ---');
+    try {
+      const job = await client.tweetStatement.submit({ tweet_id: process.env.TEST_TWEET_ID, webhook_url: '' }, { include_usage: true });
+      assert(job.job_type === 'tweet_statement', 'tweetStatement.submit job_type');
+      const statement = await job.result({ timeoutMs: 300000 });
+      assert(statement instanceof sdk.TweetStatement, 'tweetStatement result is TweetStatement');
+      assert(typeof statement.final_statement === 'string', 'tweetStatement final_statement');
+      assert(statement.usage instanceof sdk.UsageBlock, 'tweetStatement usage');
+    } catch (e) { fail('tweetStatement', `${e.name}: ${e.message} task_id=${e.task_id}`); }
   } else {
     console.log('--- getTweetStatement skipped (TEST_TWEET_ID not set) ---');
   }

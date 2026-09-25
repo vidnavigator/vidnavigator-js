@@ -10,7 +10,8 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 ## Why VidNavigator?
 
 - **Multi-platform transcription** — YouTube, Instagram Reels & carousel posts, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, and more.
-- **Async TikTok profile scraping and keyword search** — collect public TikTok videos in the background, then read results via cursor pagination or a signed `download_url`.
+- **Any video length** — transcription, extraction, and tweet analysis run as background jobs, so there is no duration limit. Get the result with one `await`, or submit many jobs and collect them as they finish.
+- **Async TikTok profile scraping and keyword search** — collect public TikTok videos in the background, then read results via cursor pagination or a signed `download_url`, optionally notified by webhook.
 - **Instagram carousel support** — select a specific video by index, or transcribe every video in a carousel post with one call.
 - **AI-powered analysis** — get summaries, people mentioned, places, key subjects, and direct answers to questions about any video or audio.
 - **Structured data extraction** — define a JSON schema and receive typed, structured fields extracted from any transcript (powered by LLMs).
@@ -63,6 +64,15 @@ const vn = new VidNavigatorClient({
 });
 ```
 
+### Upgrading from 1.x
+
+Transcription, structured extraction, and tweet analysis now always run as background jobs, so they work on videos of any length. Your existing calls keep working with the same arguments, with two differences:
+
+- `extractVideoData()` no longer returns `video_info`. Use `getTranscript({ video_url, metadata_only: true })` if you need the metadata.
+- `getTweetStatement()` no longer returns `statement_query`, which was never part of the documented API.
+
+New in 2.0: `vn.transcribe`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokProfile`, and `vn.tiktokSearch`, each with `.submit()` for running many jobs at once (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)), plus webhook signature helpers.
+
 ---
 
 ## Examples
@@ -96,17 +106,15 @@ Pass `transcript_text: true` to get the full transcript as a single plain-text s
 
 ### 2. Instagram Reel / TikTok / X / Vimeo
 
-For most non-Instagram platforms, you can use either `getTranscript` (fast, caption-based) or `transcribeVideo` (speech-to-text). **Note:** Instagram only supports `transcribeVideo`.
+For most non-Instagram platforms, you can use either `getTranscript` (fast, caption-based) or `transcribe` (speech-to-text, any length). **Note:** Instagram only supports `transcribe`.
 
 ```ts
 // Instagram Reel (speech-to-text only)
-const { video_info, transcript } = await vn.transcribeVideo({
-  video_url: 'https://www.instagram.com/reel/C86ZvEaqRmo/',
-});
+const { video_info, transcript } = await vn.transcribe('https://www.instagram.com/reel/C86ZvEaqRmo/');
 console.log(video_info.title);
-console.log(transcript[0].text);
+console.log(transcript);
 
-// TikTok (can use getTranscript or transcribeVideo)
+// TikTok (can use getTranscript or transcribe)
 const tiktok = await vn.getTranscript({
   video_url: 'https://www.tiktok.com/@user/video/1234567890',
 });
@@ -117,64 +125,194 @@ const tweet = await vn.getTranscript({
 });
 ```
 
-### 3. TikTok profile scraping (async)
+### 3. Background jobs: one call, or many at once
 
-TikTok profile scraping is asynchronous. First submit the profile URL, then poll the task until `task_status` is no longer `processing`. Once complete, you can either page through results with `getTikTokProfileScrape()` or fetch the full JSON from `download_url`.
+Transcription, structured extraction, tweet analysis, and TikTok scraping run as background jobs on VidNavigator. The SDK always uses the async API endpoints, so **video length is never a problem**. You never deal with the request-response limits of long transcriptions.
+
+Each of these operations comes in two shapes:
+
+| Operation | Wait for the result | Start it and come back later |
+|---|---|---|
+| Transcription | `await vn.transcribe(url)` | `await vn.transcribe.submit(url)` |
+| Structured extraction | `await vn.extractVideo({ video_url, schema })` | `await vn.extractVideo.submit({ ... })` |
+| Tweet claim analysis | `await vn.tweetStatement(tweetId)` | `await vn.tweetStatement.submit(tweetId)` |
+| TikTok profile scrape | `await vn.tiktokProfile(profileUrl)` | `await vn.tiktokProfile.submit(profileUrl)` |
+| TikTok keyword search | `await vn.tiktokSearch(query)` | `await vn.tiktokSearch.submit(query)` |
+
+**Wait for the result.** The one-liner submits the job, checks on it until it finishes, and returns the result:
 
 ```ts
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const { video_info, transcript, usage } = await vn.transcribe(
+  'https://www.tiktok.com/@user/video/1234567890',
+  { include_usage: true }
+);
+console.log(video_info.title, transcript, usage?.total_credits);
+```
 
-const submitted = await vn.submitTikTokProfileScrape({
+Pass an object instead of a URL for more options, e.g. `vn.transcribe({ video_url, transcript_text: true, all_videos: true })`.
+
+**Start many at once.** `.submit()` returns a `Job` right away. Each job has a `task_id`, `status()` (checks once), `result()` (waits, then returns the result), and `wait()` (waits, then returns the final task without throwing on failure):
+
+```ts
+const urls = ['https://www.instagram.com/reel/A/', 'https://www.instagram.com/reel/B/', 'https://vimeo.com/123'];
+
+const jobs = await Promise.all(urls.map((url) => vn.transcribe.submit(url)));
+console.log(jobs.map((job) => job.task_id)); // store these if you may need to come back later
+
+const results = await Promise.allSettled(jobs.map((job) => job.result()));
+results.forEach((r, i) => console.log(urls[i], r.status === 'fulfilled' ? r.value : r.reason.message));
+```
+
+```ts
+const job = await vn.extractVideo.submit({
+  video_url: 'https://www.facebook.com/watch/?v=1234567890',
+  schema: {
+    speakers: { type: 'Array',  description: 'Names of everyone who speaks' },
+    verdict:  { type: 'String', description: 'The final conclusion of the video' },
+  },
+});
+
+console.log(await job.status()); // 'processing' | 'completed' | 'failed'
+const { data } = await job.result();
+console.log(data); // { speakers: [...], verdict: "..." }, shaped like your schema
+```
+
+**Come back later.** A job keeps running on VidNavigator even if your process stops waiting, and its result stays available for **1 hour after it finishes**. Keep the `task_id` and reattach with `.resume()`:
+
+```ts
+const job = vn.transcribe.resume(savedTaskId);
+const result = await job.result();
+```
+
+**Timeouts.** The one-liners and `result()` wait up to 30 minutes by default. If that runs out, they throw a `TaskTimeoutError` that **carries the `task_id`**. The job is not lost, so resume it:
+
+```ts
+import { TaskTimeoutError } from 'vidnavigator';
+
+try {
+  const result = await vn.transcribe(url, { timeoutMs: 5 * 60 * 1000 });
+} catch (err) {
+  if (err instanceof TaskTimeoutError) {
+    saveForLater(err.task_id); // later: await vn.transcribe.resume(err.task_id).result()
+  } else {
+    throw err;
+  }
+}
+```
+
+**Waiting options.** Pass these to the one-liner or to `result()` / `wait()`:
+
+| Option | Default | |
+|---|---|---|
+| `timeoutMs` | 30 minutes | Stop waiting and throw `TaskTimeoutError` (with `task_id`). `0` waits forever |
+| `intervalMs` | `3000` | Time between checks. Checking costs no credits and is not rate-limited |
+| `fastStart` | `true` | Check every second for the first 10 seconds, so short clips return quickly |
+| `signal` | | An `AbortSignal` to stop waiting early (the job keeps running) |
+| `onPoll` | | Called with each task snapshot, e.g. for progress logs |
+| `include_usage` | `false` | Attach a `usage` block to the result (one-liner, `.submit()` and `.resume()` options) |
+
+**When a job fails**, `result()` and the one-liners throw an error built from the job's `error` details (`error`, `message`, `http_status`), using the same error class as any other API error, for example `NotFoundError` for a missing video. The error also carries the `task_id`. `wait()` returns the failed task instead, with `task.error` set.
+
+**When a job can't start**, submitting throws right away and no job is created:
+- `InsufficientCreditsError` (402): not enough credits (for transcription, less than 60 seconds left).
+- `TooManyActiveJobsError` (429): too many of your jobs are already running. Wait for some to finish and retry.
+
+> The older methods `transcribeVideo()`, `extractVideoData()`, and `getTweetStatement()` still work with the same arguments. They now run as background jobs too, so they handle videos of any length. `extractVideoData()` no longer returns `video_info`; call `getTranscript({ video_url, metadata_only: true })` if you need it.
+
+### 4. Webhooks
+
+You can also have VidNavigator call your server when a job finishes. Pass `webhook_url` to any of the operations above (transcription, extraction, tweet analysis, TikTok profile and search), or set an account-wide default in **Studio → API**. A per-job `webhook_url` overrides the default, and `webhook_url: ''` turns the default off for that one job. The URL must be a public `https` endpoint; private and loopback hosts are rejected with a `BadRequestError`.
+
+Webhooks are optional. Waiting with `result()` or the one-liners works exactly the same whether or not a webhook is set, and it remains the source of truth.
+
+```ts
+const job = await vn.transcribe.submit({
+  video_url: 'https://www.instagram.com/reel/C86ZvEaqRmo/',
+  webhook_url: 'https://example.com/hooks/vidnavigator',
+});
+console.log(job.webhook_url); // where the notification will be sent, or null
+```
+
+Each delivery is signed with your signing secret (from Studio → API). Verify it with `constructWebhookEvent()`, passing the **raw** request body:
+
+```ts
+import express from 'express';
+import { VidNavigatorClient, constructWebhookEvent, WebhookSignatureError, WEBHOOK_HEADERS } from 'vidnavigator';
+
+const vn = new VidNavigatorClient({ apiKey: process.env.VIDNAVIGATOR_API_KEY! });
+const app = express();
+
+app.post('/hooks/vidnavigator', express.raw({ type: 'application/json' }), async (req, res) => {
+  let event;
+  try {
+    event = constructWebhookEvent(
+      req.body,                                  // raw Buffer, not parsed JSON
+      req.headers[WEBHOOK_HEADERS.signature],    // "t=<unix_ts>,v1=<hex>"
+      process.env.VIDNAVIGATOR_WEBHOOK_SECRET!
+    );
+  } catch (err) {
+    if (err instanceof WebhookSignatureError) return res.status(400).send('Invalid signature');
+    throw err;
+  }
+  res.sendStatus(200); // acknowledge quickly; any 2xx counts
+
+  // Deliveries can repeat: dedupe on req.headers[WEBHOOK_HEADERS.delivery].
+  // The simplest handler reattaches to the job and reads the parsed result:
+  if (event.type === 'transcribe.completed') {
+    const result = await vn.transcribe.resume(event.data.task_id).result();
+    console.log(result);
+  } else if (event.type === 'tiktok_profile.completed') {
+    const task = await vn.tiktokProfile.resume(event.data.task_id).result(); // every video, all pages
+    console.log(task.videos.length);
+  } else if (event.type.endsWith('.failed')) {
+    console.error(event.data.task_id, event.data.error); // { error, message, http_status }
+  }
+});
+```
+
+- `event.data.result` holds the raw result for transcription, extraction, and tweet events, unless it was over 256 KB (`result_truncated: true`). TikTok events only carry `stats`. In every case, `resume(task_id).result()` gets the full parsed result.
+- `verifyWebhookSignature(rawBody, signatureHeader, secret)` returns `true` or `false` instead of throwing.
+- Deliveries older than 5 minutes are rejected by default. Change this with `{ toleranceSeconds }`; `0` turns the check off.
+- Failed deliveries (5xx, 429, network errors) are retried 5 times over about 13 minutes. Other 4xx responses are not retried.
+- To see a job's delivery status, check it: `(await job.refresh()).webhook` → `{ status: 'pending' | 'delivered' | 'failed', attempts, response_status, last_error, delivered_at }`.
+
+### 5. TikTok profile scraping (async)
+
+`vn.tiktokProfile()` scrapes a public profile in the background and returns the finished task with **every** matching video (the SDK fetches all result pages for you):
+
+```ts
+const task = await vn.tiktokProfile({
   profile_url: 'https://www.tiktok.com/@tiktok',
   max_posts: 250,
   after_datetime: '2024-01-01',
 });
 
-let task = await vn.getTikTokProfileScrape(submitted.task_id, { limit: 50 });
-
-while (task.task_status === 'processing') {
-  await sleep(5000);
-  task = await vn.getTikTokProfileScrape(submitted.task_id, { limit: 50 });
-}
-
-if (task.task_status === 'failed') {
-  throw new Error(task.error_message || 'TikTok profile scrape failed');
-}
-
-console.log(`Matched ${task.stats?.videos_matched ?? task.pagination?.total_items ?? 0} videos`);
+console.log(`Matched ${task.videos.length} videos`, task.stats);
+const videos = task.videos; // TikTokVideo[], published_at parsed as Date
 ```
 
-Use cursor pagination when you want to process videos page by page:
+Pass just the URL for the defaults: `await vn.tiktokProfile('https://www.tiktok.com/@tiktok')`. As with every operation, `vn.tiktokProfile.submit(...)` returns a `Job` instead, and `webhook_url` is accepted.
+
+If you'd rather read the results one page at a time, or grab them as a single JSON file, submit the job and use the page-level method with its `task_id`:
 
 ```ts
-const videos = [];
+const job = await vn.tiktokProfile.submit('https://www.tiktok.com/@tiktok');
+await job.wait();
+
+// Page by page
 let cursor: string | undefined;
-
 do {
-  const page = await vn.getTikTokProfileScrape(submitted.task_id, {
-    limit: 100,
-    cursor,
-  });
-
-  videos.push(...page.videos);
+  const page = await vn.getTikTokProfileScrape(job.task_id, { limit: 100, cursor });
+  handle(page.videos);
   cursor = page.pagination?.next_cursor ?? undefined;
 } while (cursor);
 
-console.log(`Loaded ${videos.length} TikTok videos`);
-```
-
-Use `download_url` when you want the entire profile result in one request. The URL is short-lived and points directly to the generated JSON file, so it can be fetched with any HTTP client.
-
-```ts
-if (!task.download_url) {
-  throw new Error('No download URL is available for this scrape');
+// Or the whole result as one JSON file (short-lived signed URL, any HTTP client works)
+const { download_url } = await vn.getTikTokProfileScrape(job.task_id, { limit: 1 });
+if (download_url) {
+  const fullProfile = await (await fetch(download_url)).json();
+  console.log(fullProfile.videos.length);
 }
-
-const response = await fetch(task.download_url);
-const fullProfile = await response.json();
-const videos = fullProfile.videos ?? [];
-
-console.log(`Downloaded ${videos.length} videos for`, fullProfile.profile_url);
 ```
 
 After you have the final video list, loop through each TikTok video URL and use the normal transcript or extraction APIs:
@@ -220,33 +358,29 @@ for (const video of videos) {
 
 For large profiles, process videos sequentially or with a small concurrency limit so you do not exhaust credits or hit rate limits.
 
-### 4. TikTok keyword search (async)
+### 6. TikTok keyword search (async)
 
-TikTok keyword search follows the same async pattern as profile scraping: submit a search, then poll by `task_id` until results are ready.
+`vn.tiktokSearch()` works the same way and returns the finished task with every result:
 
 ```ts
-const submitted = await vn.submitTikTokSearch({
+const task = await vn.tiktokSearch({
   query: 'ai tools',
   max_results: 100,
-  parallel_search_slices: 2,
-  after_datetime: '2024-01-01',
+  sort_by: 'most_liked',          // 'relevance' | 'most_liked' | 'newest'
+  published_within: 'this_month', // 'all' | 'past_24_hours' | 'this_week' | 'this_month' | 'last_3_months' | 'last_6_months'
+  min_views: 10000,
 });
 
-let task = await vn.getTikTokSearch(submitted.task_id, { limit: 50 });
-
-while (task.task_status === 'processing') {
-  await sleep(5000);
-  task = await vn.getTikTokSearch(submitted.task_id, { limit: 50 });
-}
-
+console.log(task.stats?.sort_by, task.stats?.published_within); // what the search actually ran with
 for (const result of task.results) {
   console.log(result.published_at?.toISOString(), result.url, result.stats?.views);
 }
 ```
 
-Use `parallel_search_slices` from `2` to `4` when you need broader collection than TikTok's natural single-chain cap. Billing scales with the number of slices, so keep it at `1` unless you need the wider result set.
+- `sort_by` and `published_within` are applied by TikTok itself. If you leave out `sort_by`, results come back newest first. If you leave out `published_within` and set an `after_datetime` more than 24 hours ago, the smallest window that covers it is picked for you.
+- `parallel_search_slices` (`2` to `4`) runs several search chains in parallel to collect more results than TikTok's single-chain limit (about 115 to 140 items). Billing grows with the number of slices, so keep it at `1` unless you need the extra results, and especially when `published_within` is set, since every slice searches the same window.
 
-### 5. Instagram carousel posts (multiple videos)
+### 7. Instagram carousel posts (multiple videos)
 
 Instagram carousel posts can contain multiple videos. You can select a specific video by index, or transcribe them all at once:
 
@@ -279,7 +413,7 @@ if ('carousel_info' in all) {
 }
 ```
 
-### 6. Upload and analyze a local file
+### 8. Upload and analyze a local file
 
 Upload audio or video files for transcription, analysis, and search. Supported formats: mp4, webm, mov, avi, wmv, flv, mkv, m4a, mp3, mpeg, mpga, wav.
 
@@ -313,7 +447,7 @@ console.log(transcript_analysis.query_answer?.answer);
 // "Three action items were discussed: 1) Finalize the hiring..."
 ```
 
-### 7. Extract structured data
+### 9. Extract structured data
 
 Define a schema and get back clean, structured data extracted from any video or file transcript. Powered by LLMs with per-call usage tracking (see [Per-call usage](#per-call-usage)).
 
@@ -370,7 +504,9 @@ const { data } = await vn.extractVideoData({
 
 **Supported schema types:** `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`
 
-### 8. Semantic search
+> `extractVideoData()` runs as a background job, so videos of any length work. For many extractions at once, use `vn.extractVideo.submit()` (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)). The result has `data` and `usage`, but no `video_info`.
+
+### 10. Semantic search
 
 Search YouTube videos and uploaded files with AI-powered ranking/reranking.
 
@@ -409,7 +545,7 @@ for (const r of fileResults.results) {
 
 > **Deprecated:** `searchVideos()` still works but is deprecated — it now forwards to `searchYouTube()` (the `/search/video` endpoint moved to `/youtube/search`) and emits a deprecation warning. Use `searchYouTube()` instead.
 
-### 9. Organize files with namespaces
+### 11. Organize files with namespaces
 
 ```ts
 // Create a namespace
@@ -429,7 +565,7 @@ const files = await vn.getFiles({ namespace_id: ns.id });
 const all = await vn.getNamespaces();
 ```
 
-### 10. Usage and credits
+### 12. Usage and credits
 
 ```ts
 const usage = await vn.getUsage();
@@ -443,7 +579,7 @@ console.log(`Channels indexed: ${usage.channelsIndexed.used} / ${usage.channelsI
 
 ### Per-call usage
 
-Pass `include_usage: true` to most endpoints (`getTranscript`, `transcribeVideo`, `analyzeVideo`, `analyzeFile`, `extractVideoData`, `extractFileData`, `searchYouTube`, `searchFiles`) to receive a `usage` block describing exactly what the request cost. For the TikTok pollers (`getTikTokProfileScrape`, `getTikTokSearch`), pass `include_usage: true` in the options object — usage is populated once `task_status === 'completed'`.
+Pass `include_usage: true` to most endpoints (`getTranscript`, `transcribeVideo`, `analyzeVideo`, `analyzeFile`, `extractVideoData`, `extractFileData`, `searchYouTube`, `searchFiles`) to receive a `usage` block describing exactly what the request cost. For background jobs, pass it in the options: `vn.transcribe(url, { include_usage: true })`, `vn.transcribe.submit(url, { include_usage: true })`, or `vn.transcribe.resume(taskId, { include_usage: true })`. The result's `usage` is filled in once the job completes. A failed job has all its charges reverted, so it has no usage.
 
 The `usage` field is a `UsageBlock`:
 
@@ -483,20 +619,48 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 |--------|-------------|
 | `getTranscript(payload)` | Get a transcript for any supported video; auto-detects the platform from the URL (note: Instagram uses `transcribeVideo`) |
 | `getYouTubeTranscript(payload)` | **Deprecated** — forwards to `getTranscript()` |
-| `transcribeVideo(payload)` | Speech-to-text transcription via AI models; supports Instagram carousel with `all_videos` |
+| `transcribe(urlOrInput, options?)` | Speech-to-text of any length. Input: `video_url`, `transcript_text`, `all_videos` (Instagram carousels), `webhook_url`. See [Background jobs](#background-jobs) |
+| `transcribeVideo(payload, options?)` | Same as `transcribe()`, with the original payload shape (`include_usage` in the payload) |
 
 **Common options:** `video_url`, `language`, `metadata_only`, `fallback_to_metadata`, `transcript_text`, `include_usage`
+
+### Background jobs
+
+| Member | Description |
+|--------|-------------|
+| `vn.transcribe`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokProfile`, `vn.tiktokSearch` | Call directly to submit and wait for the result. Options: `include_usage`, `timeoutMs`, `intervalMs`, `fastStart`, `signal`, `onPoll` |
+| `.submit(input, { include_usage? })` | Start the job and return a `Job` immediately |
+| `.resume(task_id, { include_usage? })` | Get a `Job` for a job you already started (no request is made) |
+| `job.task_id`, `job.job_type`, `job.check_status_url`, `job.webhook_url` | Job details from the submit response |
+| `job.status()` | Check once; returns `'processing'`, `'completed'` or `'failed'` |
+| `job.refresh()` | Check once; returns the full task (`error`, `webhook`, timestamps, ...) |
+| `job.result(options?)` | Wait until finished and return the result. Throws on failure or timeout; every error carries `task_id` |
+| `job.wait(options?)` | Wait until finished and return the final task, without throwing on failure |
+
+Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → `{ data, usage? }`; `tweetStatement` → `TweetStatement`; `tiktokProfile` / `tiktokSearch` → the completed task with every page of `videos` / `results`.
+
+### Webhooks
+
+| Function | Description |
+|----------|-------------|
+| `constructWebhookEvent(rawBody, signatureHeader, secret, options?)` | Verify a delivery and return the parsed `WebhookEvent`. Throws `WebhookSignatureError` if the signature is invalid |
+| `verifyWebhookSignature(rawBody, signatureHeader, secret, options?)` | Same check, returning `true` / `false` |
+| `WEBHOOK_HEADERS` | Header names: `signature`, `delivery`, `event`, `taskId` |
+
+`options`: `toleranceSeconds` (default `300`, `0` turns the check off). Event types: `transcribe.*`, `extract_video.*`, `tweet_statement.*`, `tiktok_profile.*`, `tiktok_search.*`, each with `.completed` or `.failed`.
 
 ### TikTok
 
 | Method | Description |
 |--------|-------------|
-| `submitTikTokProfileScrape(payload)` | Start an async public TikTok profile scrape. Returns a `task_id` immediately |
+| `tiktokProfile(urlOrInput, options?)` | Scrape a public profile and return the completed task with every video. See [Background jobs](#background-jobs) |
+| `tiktokSearch(queryOrInput, options?)` | Keyword search returning the completed task with every result |
+| `submitTikTokProfileScrape(payload)` | Lower-level: start a public TikTok profile scrape. Returns a `task_id` immediately. Options: `max_posts`, `after_datetime`, `before_datetime`, `min_likes`, `max_likes`, `webhook_url` |
 | `getTikTokProfileScrape(task_id, query?)` | Poll task status and retrieve a page of videos. Options: `cursor`, `limit`, `include_usage` |
-| `submitTikTokSearch(payload)` | Start an async TikTok keyword search. Returns a `task_id` immediately |
+| `submitTikTokSearch(payload)` | Start an async TikTok keyword search. Returns a `task_id` immediately. Options: `max_results`, `parallel_search_slices`, `sort_by`, `published_within`, `after_datetime`, `before_datetime`, `min_likes`, `max_likes`, `min_views`, `max_views`, `webhook_url` |
 | `getTikTokSearch(task_id, query?)` | Poll search status and retrieve a page of results. Options: `cursor`, `limit`, `include_usage` |
 
-Completed profile tasks include `videos`; completed search tasks include `results`. Both include `pagination`, optional `stats`, and an optional short-lived `download_url` for retrieving the whole result as JSON. Datetime filters use `after_datetime` and `before_datetime`, each accepting either `YYYY-MM-DD` or full ISO datetime strings with timezone; TikTok `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
+Completed profile tasks include `videos`; completed search tasks include `results`. Both include `pagination`, optional `stats`, and an optional short-lived `download_url` for retrieving the whole result as JSON. Failed tasks include `error` (`{ error, message, http_status }`); the older `error_message` string still works but is deprecated. Datetime filters use `after_datetime` and `before_datetime`, each accepting either `YYYY-MM-DD` or full ISO datetime strings with timezone; TikTok `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
 
 ### Files
 
@@ -528,7 +692,8 @@ Completed profile tasks include `videos`; completed search tasks include `result
 |--------|-------------|
 | `analyzeVideo(payload)` | Analyze an online video with an optional natural language query |
 | `analyzeFile(payload)` | Analyze an uploaded file with an optional natural language query |
-| `getTweetStatement(payload)` | Extract a structured claim analysis from an X/Twitter tweet ID |
+| `tweetStatement(tweetIdOrInput, options?)` | Structured claim analysis of an X/Twitter tweet, including attached media of any length. Input: `tweet_id`, `webhook_url`. Returns a `TweetStatement` |
+| `getTweetStatement(payload, options?)` | Same as `tweetStatement()`, with the original payload shape |
 
 Returns `transcript_analysis` containing:
 - `summary` — content overview
@@ -541,7 +706,8 @@ Returns `transcript_analysis` containing:
 
 | Method | Description |
 |--------|-------------|
-| `extractVideoData(payload)` | Extract structured data from an online video transcript |
+| `extractVideo(input, options?)` | Structured data from an online video of any length. Input: `video_url`, `schema` or `schemaFilePath`, `what_to_extract`, `transcribe`, `webhook_url`. Returns `{ data, usage? }` |
+| `extractVideoData(payload, options?)` | Same as `extractVideo()`, with the original payload shape (`include_usage` in the payload) |
 | `extractFileData(payload)` | Extract structured data from an uploaded file transcript |
 
 **Options:** `schema` (required for JSON requests), `schemaFilePath` (JSON/YAML schema file via multipart form-data), `what_to_extract` (optional guidance), `include_usage` (attach a per-call `UsageBlock`; read LLM tokens via `usage.analysis_tokens`)
@@ -596,13 +762,19 @@ try {
 | `BadRequestError` | 400 | Invalid parameters |
 | `AuthenticationError` | 401 | Invalid or missing API key |
 | `PaymentRequiredError` | 402 | Credit limit reached |
+| `InsufficientCreditsError` | 402 | A job could not start: not enough credits (`limit_exceeded`). Extends `PaymentRequiredError` |
 | `AccessDeniedError` | 403 | Insufficient permissions |
-| `NotFoundError` | 404 | Resource does not exist |
+| `NotFoundError` | 404 | Resource does not exist, or a job's `task_id` is unknown or expired (`task_not_found`) |
 | `StorageQuotaExceededError` | 413 | Storage quota exceeded |
 | `RateLimitExceededError` | 429 | Too many requests |
+| `TooManyActiveJobsError` | 429 | A job could not start: too many of your jobs are already running (`too_many_active_jobs`). Extends `RateLimitExceededError` |
 | `GeoRestrictedError` | 451 | Content unavailable in your region |
 | `ServerError` | 5xx | Unexpected server error |
 | `SystemOverloadError` | 503 | Temporary overload (has `retry_after_seconds`) |
+| `TaskTimeoutError` | - | Waiting for a job took longer than `timeoutMs`. Has `task_id`; the job keeps running, so `resume(task_id)` it |
+| `WebhookSignatureError` | - | `constructWebhookEvent()` got a missing, invalid, or expired signature |
+
+A failed job throws the class matching its `error.http_status`, with `error_code` and `error_message` taken from its `error` details. Every error raised while waiting for a job has a `task_id` property.
 
 ## TypeScript Models
 
@@ -624,11 +796,13 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `ExtractionTokenUsage` | Legacy flat token usage (`prompt_tokens`, `completion_tokens`, `total_tokens`) — extraction now returns a `UsageBlock`; prefer `usage.analysis_tokens` |
 | `CarouselInfo` | Carousel summary: total items, video/image count, transcribed count, total duration |
 | `CarouselVideoResult` | Per-video result in a carousel: index, status, video info, transcript |
-| `TikTokProfileScrapeSubmission` | Async scrape submission: `task_id`, status, profile URL, expiry |
-| `TikTokProfileTask` | TikTok profile scrape task with status, profile metadata, videos, pagination, `download_url` |
+| `Job` | Handle returned by `.submit()` / `.resume()`: `task_id`, `status()`, `refresh()`, `result()`, `wait()` |
+| `AsyncJob<T>` | Task snapshot of a transcription, extraction, or tweet job (from `job.refresh()` / `job.wait()`): `task_status`, `result`, `error`, `webhook`, `request`, timestamps |
+| `TikTokProfileScrapeSubmission` | Async scrape submission: `task_id`, status, profile URL, expiry, `webhook_url` |
+| `TikTokProfileTask` | TikTok profile scrape task with status, profile metadata, videos, pagination, `download_url`, `error`, `webhook` |
 | `TikTokVideo` | Public TikTok video metadata returned by profile scraping, including `published_at` as a `Date` and integer counters |
-| `TikTokSearchSubmission` | Async TikTok keyword search submission: `task_id`, query, slice count, expiry |
-| `TikTokSearchTask` | TikTok keyword search task with status, results, pagination, `download_url` |
+| `TikTokSearchSubmission` | Async TikTok keyword search submission: `task_id`, query, slice count, expiry, `webhook_url` |
+| `TikTokSearchTask` | TikTok keyword search task with status, results, pagination, `download_url`, `error`, `webhook`; `stats` shows the `sort_by` / `published_within` the search ran with |
 | `TikTokSearchResult` | Normalized TikTok keyword result, including `published_at` as a `Date` and integer counters |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
 

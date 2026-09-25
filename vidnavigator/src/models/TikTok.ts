@@ -1,4 +1,17 @@
 import { UsageBlock } from './Usage';
+import { AsyncJobError, AsyncJobWebhookStatus } from './AsyncJob';
+
+/** Sort order applied by TikTok itself for keyword searches. */
+export type TikTokSearchSortBy = 'relevance' | 'most_liked' | 'newest';
+
+/** Rolling publication window applied by TikTok itself (`this_week` = the last 7 days). */
+export type TikTokPublishedWithin =
+  | 'all'
+  | 'past_24_hours'
+  | 'this_week'
+  | 'this_month'
+  | 'last_3_months'
+  | 'last_6_months';
 
 export interface TikTokProfileScrapeRequest {
   profile_url: string;
@@ -9,12 +22,23 @@ export interface TikTokProfileScrapeRequest {
   before_datetime?: string;
   min_likes?: number;
   max_likes?: number;
+  /**
+   * Where to POST a notification when the task finishes. Overrides the account-level default
+   * configured in Studio → API; pass an empty string to opt this task out of that default.
+   * Must be a publicly reachable https URL. The event carries `stats` — read the result from
+   * `check_status_url` (a scrape can hold thousands of videos).
+   */
+  webhook_url?: string;
 }
 
 export interface TikTokSearchRequest {
   query: string;
   max_results?: number;
   parallel_search_slices?: number;
+  /** Sort order applied by TikTok. When omitted, results are returned newest first. */
+  sort_by?: TikTokSearchSortBy;
+  /** Publication window applied by TikTok. Auto-selected from `after_datetime` when omitted. */
+  published_within?: TikTokPublishedWithin;
   /** Format: YYYY-MM-DD or ISO datetime with timezone */
   after_datetime?: string;
   /** Format: YYYY-MM-DD or ISO datetime with timezone */
@@ -23,6 +47,13 @@ export interface TikTokSearchRequest {
   max_likes?: number;
   min_views?: number;
   max_views?: number;
+  /**
+   * Where to POST a notification when the task finishes. Overrides the account-level default
+   * configured in Studio → API; pass an empty string to opt this task out of that default.
+   * Must be a publicly reachable https URL. The event carries `stats` — read the results from
+   * `check_status_url`.
+   */
+  webhook_url?: string;
 }
 
 function toInteger(value: number | null | undefined): number | null | undefined {
@@ -57,6 +88,8 @@ function normalizeSearchFilters(
 ): TikTokSearchFilters | undefined {
   if (!filters) return undefined;
   return {
+    sort_by: filters.sort_by,
+    published_within: filters.published_within,
     after_datetime: filters.after_datetime,
     before_datetime: filters.before_datetime,
     min_likes: toInteger(filters.min_likes),
@@ -81,6 +114,8 @@ function normalizeSearchStats(stats: TikTokSearchStats | undefined): TikTokSearc
     pages_fetched: toOptionalInteger(stats.pages_fetched),
     results_count: toOptionalInteger(stats.results_count),
     next_search_cursor: toInteger(stats.next_search_cursor),
+    sort_by: stats.sort_by,
+    published_within: stats.published_within,
   };
 }
 
@@ -106,6 +141,7 @@ export interface TikTokProfileScrapeSubmissionJSON {
   expires_at?: string;
   check_status_url?: string;
   message?: string;
+  webhook_url?: string | null;
 }
 
 export class TikTokProfileScrapeSubmission {
@@ -115,6 +151,8 @@ export class TikTokProfileScrapeSubmission {
   expires_at?: string;
   check_status_url?: string;
   message?: string;
+  /** The URL this task's result notification will be POSTed to, or `null`. */
+  webhook_url?: string | null;
 
   constructor(data: TikTokProfileScrapeSubmissionJSON) {
     this.task_id = data.task_id;
@@ -123,6 +161,7 @@ export class TikTokProfileScrapeSubmission {
     this.expires_at = data.expires_at;
     this.check_status_url = data.check_status_url;
     this.message = data.message;
+    this.webhook_url = data.webhook_url;
   }
 
   static fromJSON(json: TikTokProfileScrapeSubmissionJSON): TikTokProfileScrapeSubmission {
@@ -140,6 +179,7 @@ export interface TikTokSearchSubmissionJSON {
   expires_at?: string;
   check_status_url?: string;
   message?: string;
+  webhook_url?: string | null;
 }
 
 export class TikTokSearchSubmission {
@@ -152,6 +192,8 @@ export class TikTokSearchSubmission {
   expires_at?: string;
   check_status_url?: string;
   message?: string;
+  /** The URL this task's result notification will be POSTed to, or `null`. */
+  webhook_url?: string | null;
 
   constructor(data: TikTokSearchSubmissionJSON) {
     this.task_id = data.task_id;
@@ -163,6 +205,7 @@ export class TikTokSearchSubmission {
     this.expires_at = data.expires_at;
     this.check_status_url = data.check_status_url;
     this.message = data.message;
+    this.webhook_url = data.webhook_url;
   }
 
   static fromJSON(json: TikTokSearchSubmissionJSON): TikTokSearchSubmission {
@@ -331,6 +374,8 @@ export class TikTokSearchResult {
 }
 
 export interface TikTokSearchFilters {
+  sort_by?: TikTokSearchSortBy | null;
+  published_within?: TikTokPublishedWithin | null;
   after_datetime?: string | null;
   before_datetime?: string | null;
   min_likes?: number | null;
@@ -343,6 +388,10 @@ export interface TikTokSearchStats {
   pages_fetched?: number;
   results_count?: number;
   next_search_cursor?: number | null;
+  /** Sort order the search ran with (`relevance` when `sort_by` was omitted). */
+  sort_by?: TikTokSearchSortBy;
+  /** Date window the search ran with; `all` means no window. */
+  published_within?: TikTokPublishedWithin;
 }
 
 export interface TikTokProfileTaskJSON {
@@ -359,6 +408,8 @@ export interface TikTokProfileTaskJSON {
   created_at?: string | null;
   completed_at?: string | null;
   expires_at?: string | null;
+  error?: AsyncJobError | null;
+  webhook?: AsyncJobWebhookStatus | null;
 }
 
 export class TikTokProfileTask {
@@ -371,10 +422,15 @@ export class TikTokProfileTask {
   videos: TikTokVideo[];
   pagination?: TikTokProfilePagination;
   download_url?: string | null;
+  /** @deprecated Use `error`, which carries a machine-readable code. */
   error_message?: string | null;
   created_at?: string | null;
   completed_at?: string | null;
   expires_at?: string | null;
+  /** Present when `task_status === 'failed'`: error code, message and HTTP status. */
+  error: AsyncJobError | null;
+  /** Webhook delivery state, or `null` when no webhook was configured. */
+  webhook?: AsyncJobWebhookStatus | null;
   /** Per-call usage, populated only when polled with `include_usage=true` and `task_status=completed`. */
   usage?: UsageBlock;
 
@@ -392,6 +448,8 @@ export class TikTokProfileTask {
     this.created_at = data.created_at;
     this.completed_at = data.completed_at;
     this.expires_at = data.expires_at;
+    this.error = data.error ?? null;
+    this.webhook = data.webhook;
   }
 
   static fromJSON(json: TikTokProfileTaskJSON): TikTokProfileTask {
@@ -413,6 +471,8 @@ export interface TikTokSearchTaskJSON {
   created_at?: string | null;
   completed_at?: string | null;
   expires_at?: string | null;
+  error?: AsyncJobError | null;
+  webhook?: AsyncJobWebhookStatus | null;
 }
 
 export class TikTokSearchTask {
@@ -425,10 +485,15 @@ export class TikTokSearchTask {
   results: TikTokSearchResult[];
   pagination?: TikTokProfilePagination;
   download_url?: string | null;
+  /** @deprecated Use `error`, which carries a machine-readable code. */
   error_message?: string | null;
   created_at?: string | null;
   completed_at?: string | null;
   expires_at?: string | null;
+  /** Present when `task_status === 'failed'`: error code, message and HTTP status. */
+  error: AsyncJobError | null;
+  /** Webhook delivery state, or `null` when no webhook was configured. */
+  webhook?: AsyncJobWebhookStatus | null;
   /** Per-call usage, populated only when polled with `include_usage=true` and `task_status=completed`. */
   usage?: UsageBlock;
 
@@ -446,6 +511,8 @@ export class TikTokSearchTask {
     this.created_at = data.created_at;
     this.completed_at = data.completed_at;
     this.expires_at = data.expires_at;
+    this.error = data.error ?? null;
+    this.webhook = data.webhook;
   }
 
   static fromJSON(json: TikTokSearchTaskJSON): TikTokSearchTask {

@@ -11,6 +11,12 @@ export class VidNavigatorError extends Error {
   public readonly error_code?: string;
   public readonly error_message?: string;
   public readonly details?: any;
+  /**
+   * Set on every error raised while submitting, polling, or waiting for an async job once a
+   * `task_id` exists. The job keeps running server-side and its result stays readable for 1 hour
+   * after it finishes, so keep this id to resume with `vn.<operation>.resume(task_id)`.
+   */
+  public task_id?: string;
 
   constructor(
     message: string,
@@ -148,3 +154,55 @@ export class SystemOverloadError extends VidNavigatorError {
     Object.setPrototypeOf(this, SystemOverloadError.prototype);
   }
 } 
+
+/**
+ * Raised when an async job could not be submitted because the account is out of credits
+ * (HTTP 402, `limit_exceeded`), e.g. less than 60 seconds of transcription credit left.
+ * No task is created. Extends `PaymentRequiredError`.
+ */
+export class InsufficientCreditsError extends PaymentRequiredError {
+  constructor(message: string, status_code?: number, error_code?: string, error_message?: string, details?: any) {
+    super(message, status_code, error_code, error_message, details);
+    this.name = 'InsufficientCreditsError';
+    Object.setPrototypeOf(this, InsufficientCreditsError.prototype);
+  }
+}
+
+/**
+ * Raised when an async job could not be submitted because too many jobs are already running
+ * for this account (HTTP 429, `too_many_active_jobs`). No task is created; retry once some
+ * of your running jobs finish. Extends `RateLimitExceededError`.
+ */
+export class TooManyActiveJobsError extends RateLimitExceededError {
+  constructor(message: string, status_code?: number, error_code?: string, error_message?: string, details?: any) {
+    super(message, status_code, error_code, error_message, details);
+    this.name = 'TooManyActiveJobsError';
+    Object.setPrototypeOf(this, TooManyActiveJobsError.prototype);
+  }
+}
+
+/**
+ * Raised when waiting for a job exceeds `timeoutMs`. Always carries `task_id`: the job keeps
+ * running server-side and its result stays readable for 1 hour after it finishes, so resume it
+ * with `vn.<operation>.resume(err.task_id)`.
+ */
+export class TaskTimeoutError extends VidNavigatorError {
+  constructor(message: string, task_id: string) {
+    super(message);
+    this.name = 'TaskTimeoutError';
+    this.task_id = task_id;
+    Object.setPrototypeOf(this, TaskTimeoutError.prototype);
+  }
+}
+
+/**
+ * Raised by `constructWebhookEvent()` when a webhook delivery's signature is missing,
+ * malformed, does not match, or is older than the allowed tolerance.
+ */
+export class WebhookSignatureError extends VidNavigatorError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WebhookSignatureError';
+    Object.setPrototypeOf(this, WebhookSignatureError.prototype);
+  }
+}
