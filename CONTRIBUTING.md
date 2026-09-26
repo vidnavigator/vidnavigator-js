@@ -46,6 +46,14 @@ Tests live in `tests/` and are plain Node.js scripts (no test framework required
 | `npm test` | Unit + integration | Yes | ~90-120s |
 | `npm run test:all` | Unit + integration + files | Yes | ~5 min |
 
+### Running against a local backend
+
+Set `VIDNAVIGATOR_TEST_TARGET=local` to run any suite against a local API. It uses `LOCAL_VIDNAVIGATOR_API_KEY` from `.env` and `LOCAL_VIDNAVIGATOR_BASE_URL` (default `http://localhost:5001/v1`):
+
+```bash
+VIDNAVIGATOR_TEST_TARGET=local npm run test:all
+```
+
 ### Optional integration tests
 
 Some live tests are slow or cost extra credits, so they only run when their variable is set (in `.env` or inline):

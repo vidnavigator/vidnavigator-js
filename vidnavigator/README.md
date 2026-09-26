@@ -52,7 +52,9 @@ yarn add vidnavigator
 pnpm add vidnavigator
 ```
 
-**Requirements:** Node.js 16+ and a [VidNavigator API key](https://vidnavigator.com).
+**Requirements:** Node.js 16+ (18+ for the examples that use the global `fetch`) and a [VidNavigator API key](https://vidnavigator.com).
+
+The SDK is for server-side use: it reads local files for uploads and schema files, and your API key should never be shipped to a browser.
 
 ## Quick Start
 
@@ -63,6 +65,28 @@ const vn = new VidNavigatorClient({
   apiKey: process.env.VIDNAVIGATOR_API_KEY!,
 });
 ```
+
+CommonJS works too: `const { VidNavigatorClient } = require('vidnavigator');`
+
+### Configuration
+
+| Option | Default | |
+|---|---|---|
+| `apiKey` | (required) | Your VidNavigator API key |
+| `baseURL` | `https://api.vidnavigator.com/v1` | API base URL |
+| `axiosConfig` | | Passed to the underlying [axios](https://axios-http.com/docs/req_config) instance: HTTP timeout, proxy, extra headers, ... |
+
+```ts
+const vn = new VidNavigatorClient({
+  apiKey: process.env.VIDNAVIGATOR_API_KEY!,
+  axiosConfig: {
+    timeout: 120_000, // per HTTP request, in ms (separate from how long background jobs may run)
+    proxy: { protocol: 'http', host: 'proxy.internal', port: 3128 },
+  },
+});
+```
+
+`axiosConfig.timeout` limits each HTTP request. How long the SDK waits for a background job to finish is set per call with `timeoutMs` (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)).
 
 ### Upgrading from 1.x
 
@@ -91,9 +115,11 @@ console.log(video_info.title);    // "Rick Astley - Never Gonna Give You Up"
 console.log(video_info.channel);  // "Rick Astley"
 console.log(video_info.duration); // 212
 
-// Timed segments by default
-for (const seg of transcript.slice(0, 3)) {
-  console.log(`[${seg.start.toFixed(1)}s] ${seg.text}`);
+// Timed segments by default (a single string when transcript_text: true)
+if (Array.isArray(transcript)) {
+  for (const seg of transcript.slice(0, 3)) {
+    console.log(`[${seg.start.toFixed(1)}s] ${seg.text}`);
+  }
 }
 // [0.0s] We're no strangers to love
 // [3.4s] You know the rules and so do I
@@ -167,7 +193,7 @@ results.forEach((r, i) => console.log(urls[i], r.status === 'fulfilled' ? r.valu
 const job = await vn.extractVideo.submit({
   video_url: 'https://www.facebook.com/watch/?v=1234567890',
   schema: {
-    speakers: { type: 'Array',  description: 'Names of everyone who speaks' },
+    speakers: { type: 'Array',  description: 'Names of everyone who speaks', items: { type: 'String', description: 'A speaker name' } },
     verdict:  { type: 'String', description: 'The final conclusion of the video' },
   },
 });
@@ -214,8 +240,69 @@ try {
 **When a job fails**, `result()` and the one-liners throw an error built from the job's `error` details (`error`, `message`, `http_status`), using the same error class as any other API error, for example `NotFoundError` for a missing video. The error also carries the `task_id`. `wait()` returns the failed task instead, with `task.error` set.
 
 **When a job can't start**, submitting throws right away and no job is created:
-- `InsufficientCreditsError` (402): not enough credits (for transcription, less than 60 seconds left).
+- `InsufficientCreditsError` (402): not enough credits (for transcription, less than 60 seconds left). A job can also be accepted and then run out of credits while it runs; `result()` then throws the same `InsufficientCreditsError`, so handle it in both places.
 - `TooManyActiveJobsError` (429): too many of your jobs are already running. Wait for some to finish and retry.
+
+**Large batches.** Your account can only have a limited number of jobs running at once, so `Promise.all` over hundreds of URLs will hit `TooManyActiveJobsError`. Keep a fixed number in flight and retry when the limit is reached:
+
+```ts
+import { TooManyActiveJobsError } from 'vidnavigator';
+
+async function transcribeAll(urls: string[], concurrency = 10) {
+  const results = new Map<string, unknown>();
+  const queue = [...urls];
+
+  async function worker() {
+    for (let url = queue.shift(); url; url = queue.shift()) {
+      for (;;) {
+        try {
+          results.set(url, await vn.transcribe(url));
+          break;
+        } catch (err) {
+          if (err instanceof TooManyActiveJobsError) {
+            await new Promise((r) => setTimeout(r, 10_000)); // wait for running jobs to finish
+            continue;
+          }
+          results.set(url, err); // record the failure and move on
+          break;
+        }
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return results;
+}
+```
+
+**Progress.** `onPoll` receives every task snapshot while you wait:
+
+```ts
+const started = Date.now();
+const result = await vn.transcribe(url, {
+  onPoll: (task) => console.log(`${task.task_id}: ${task.task_status} after ${Math.round((Date.now() - started) / 1000)}s`),
+});
+```
+
+**Surviving restarts.** Save each `task_id` as soon as you submit, so a crash or deploy doesn't lose the work. Results stay available for 1 hour after a job finishes:
+
+```ts
+import { writeFileSync, readFileSync, existsSync } from 'fs';
+
+// Submit and persist
+const job = await vn.transcribe.submit(url);
+writeFileSync('pending-jobs.json', JSON.stringify([...pending(), job.task_id]));
+
+// After a restart: pick every job back up
+for (const taskId of pending()) {
+  const result = await vn.transcribe.resume(taskId).result();
+  // ... store the result, then drop taskId from pending-jobs.json
+}
+
+function pending(): string[] {
+  return existsSync('pending-jobs.json') ? JSON.parse(readFileSync('pending-jobs.json', 'utf8')) : [];
+}
+```
 
 > The older methods `transcribeVideo()`, `extractVideoData()`, and `getTweetStatement()` still work with the same arguments. They now run as background jobs too, so they handle videos of any length. `extractVideoData()` no longer returns `video_info`; call `getTranscript({ video_url, metadata_only: true })` if you need it.
 
@@ -270,7 +357,7 @@ app.post('/hooks/vidnavigator', express.raw({ type: 'application/json' }), async
 });
 ```
 
-- `event.data.result` holds the raw result for transcription, extraction, and tweet events, unless it was over 256 KB (`result_truncated: true`). TikTok events only carry `stats`. In every case, `resume(task_id).result()` gets the full parsed result.
+- `event.data.result` holds the raw result for transcription, extraction, and tweet events, unless it was over 256 KB (`result_truncated: true`). For TikTok events it is only a summary, `{ stats, download_url_available }`, since a scrape can hold thousands of videos. In every case, `resume(task_id).result()` gets the full parsed result.
 - `verifyWebhookSignature(rawBody, signatureHeader, secret)` returns `true` or `false` instead of throwing.
 - Deliveries older than 5 minutes are rejected by default. Change this with `{ toleranceSeconds }`; `0` turns the check off.
 - Failed deliveries (5xx, 429, network errors) are retried 5 times over about 13 minutes. Other 4xx responses are not retried.
@@ -341,7 +428,7 @@ for (const video of videos) {
     video_url: video.url,
     schema: {
       hook: { type: 'String', description: 'The opening hook or premise' },
-      products: { type: 'Array', description: 'Products or brands mentioned' },
+      products: { type: 'Array', description: 'Products or brands mentioned', items: { type: 'String', description: 'A product or brand' } },
       sentiment: {
         type: 'Enum',
         description: 'Overall sentiment',
@@ -386,15 +473,13 @@ Instagram carousel posts can contain multiple videos. You can select a specific 
 
 ```ts
 // Transcribe the 2nd video in a carousel
-const single = await vn.transcribeVideo({
-  video_url: 'https://www.instagram.com/p/ABC123/?img_index=2',
-});
+const single = await vn.transcribe('https://www.instagram.com/p/ABC123/?img_index=2');
 console.log(single.video_info.title);
 console.log(single.video_info.carousel_info);
 // { total_items: 5, video_count: 3, image_count: 2, selected_index: 2 }
 
 // Transcribe ALL videos in a carousel at once
-const all = await vn.transcribeVideo({
+const all = await vn.transcribe({
   video_url: 'https://www.instagram.com/p/ABC123/',
   all_videos: true,
 });
@@ -404,8 +489,8 @@ if ('carousel_info' in all) {
 
   for (const video of all.videos) {
     if (video.status === 'success') {
-      console.log(`Video #${video.index}: ${video.video_info.title}`);
-      console.log(`  Transcript: ${video.transcript[0]?.text}...`);
+      console.log(`Video #${video.index}: ${video.video_info?.title}`);
+      console.log('  Transcript:', video.transcript);
     } else {
       console.log(`Video #${video.index}: failed — ${video.message}`);
     }
@@ -426,11 +511,11 @@ const upload = await vn.uploadFile({
 
 console.log(upload.file_id);       // "64a1b2c3d4e5f6789..."
 console.log(upload.file_name);     // "meeting-recording.mp4"
-console.log(upload.file_info.namespace_ids);  // ["ns_meetings"]
+console.log(upload.file_info?.namespace_ids); // ["ns_meetings"]
 
 // Analyze with a question
 const { transcript_analysis } = await vn.analyzeFile({
-  file_id: upload.file_info.id,
+  file_id: upload.file_id,
   query: 'What action items were discussed?',
 });
 
@@ -447,6 +532,41 @@ console.log(transcript_analysis.query_answer?.answer);
 // "Three action items were discussed: 1) Finalize the hiring..."
 ```
 
+Without `wait_for_completion`, the upload returns right away (`status: 'accepted'`) while the file is processed. Check on it with `getFile()`, then work with it:
+
+```ts
+const { file_id } = await vn.uploadFile({ filePath: './interview.mp3' });
+
+let { file_info } = await vn.getFile(file_id);
+while (file_info.status === 'processing') {
+  await new Promise((r) => setTimeout(r, 5000));
+  ({ file_info } = await vn.getFile(file_id));
+}
+
+if (file_info.status === 'failed') {
+  await vn.retryFileProcessing(file_id); // or: await vn.cancelFileUpload(file_id) while it is still processing
+}
+
+const { transcript } = await vn.getFile(file_id, { transcript_text: true }); // full text
+const { file_url } = await vn.getFileUrl(file_id);                            // signed download URL
+const { files, has_more } = await vn.getFiles({ status: 'completed', limit: 20, offset: 0 });
+await vn.deleteFile(file_id);
+```
+
+### Analyze an online video
+
+```ts
+const { video_info, transcript_analysis } = await vn.analyzeVideo({
+  video_url: 'https://www.youtube.com/watch?v=4czjS9h4Fpg',
+  query: 'Where did the rover land?',
+  include_usage: true,
+});
+
+console.log(transcript_analysis.summary);
+console.log(transcript_analysis.query_answer?.answer);             // direct answer to your question
+console.log(transcript_analysis.query_answer?.relevant_segments);  // supporting transcript excerpts
+```
+
 ### 9. Extract structured data
 
 Define a schema and get back clean, structured data extracted from any video or file transcript. Powered by LLMs with per-call usage tracking (see [Per-call usage](#per-call-usage)).
@@ -459,7 +579,7 @@ const { data, usage } = await vn.extractVideoData({
     language: { type: 'String',  description: 'Primary spoken language (ISO 639-1)' },
     tone:     { type: 'Enum',    description: 'Overall tone',
                 enum: ['positive', 'negative', 'neutral', 'mixed'] },
-    key_quotes: { type: 'Array', description: 'Top 3 memorable quotes' },
+    key_quotes: { type: 'Array', description: 'Top 3 memorable quotes', items: { type: 'String', description: 'A quote' } },
   },
   what_to_extract: 'Determine the topic, language, tone, and notable quotes.',
   include_usage: true,
@@ -484,7 +604,7 @@ Also works on uploaded files:
 const { data } = await vn.extractFileData({
   file_id: 'your-file-id',
   schema: {
-    action_items: { type: 'Array',  description: 'List of action items from the meeting' },
+    action_items: { type: 'Array',  description: 'List of action items from the meeting', items: { type: 'String', description: 'An action item' } },
     next_meeting: { type: 'String', description: 'When is the next meeting scheduled?' },
     sentiment:    { type: 'Enum',   description: 'Overall meeting mood',
                     enum: ['productive', 'tense', 'casual', 'urgent'] },
@@ -503,6 +623,8 @@ const { data } = await vn.extractVideoData({
 ```
 
 **Supported schema types:** `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`
+
+**Schema rules:** every field needs `type` and `description`. `Array` fields also need `items` (the schema of one element). `Object` fields list their sub-fields in `properties` (up to 10), and `Enum` fields list the allowed values in `enum`. At most 10 top-level fields and 3 levels of nesting. An invalid schema is rejected with a `BadRequestError` before anything runs.
 
 > `extractVideoData()` runs as a background job, so videos of any length work. For many extractions at once, use `vn.extractVideo.submit()` (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)). The result has `data` and `usage`, but no `video_info`.
 
@@ -553,13 +675,13 @@ const ns = await vn.createNamespace({ name: 'Client Calls' });
 
 // Assign a file to namespaces
 const updated = await vn.updateFileNamespaces(fileId, {
-  namespace_ids: [ns.id],
+  namespace_ids: [ns.id!],
 });
 console.log(updated.namespaces);
 // [{ id: "...", name: "Client Calls" }]
 
 // List files filtered by namespace
-const files = await vn.getFiles({ namespace_id: ns.id });
+const files = await vn.getFiles({ namespace_id: ns.id! });
 
 // List all namespaces
 const all = await vn.getNamespaces();
@@ -571,9 +693,9 @@ const all = await vn.getNamespaces();
 const usage = await vn.getUsage();
 
 console.log(`Credits remaining: ${usage.credits.monthly_remaining}`);
-console.log(`Video transcripts used: ${usage.usage.videoTranscripts.used}`);
-console.log(`YouTube transcripts used: ${usage.usage.youtubeTranscripts.used}`);
-console.log(`Storage: ${usage.storage.used_formatted} / ${usage.storage.limit_formatted}`);
+console.log(`Transcription hours used: ${usage.usage.transcriptionHour?.used}`);
+console.log(`Standard requests used: ${usage.usage.standardRequest?.used}`);
+console.log(`Storage: ${usage.storage.usedFormatted} / ${usage.storage.limitFormatted}`);
 console.log(`Channels indexed: ${usage.channelsIndexed.used} / ${usage.channelsIndexed.limit}`);
 ```
 

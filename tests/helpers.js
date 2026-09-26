@@ -24,6 +24,13 @@ const TEST_VIDEO_FILE = path.join(MEDIA_DIR, 'video-test.mp4');
 const TEST_YOUTUBE_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 const TEST_INSTAGRAM_REEL = 'https://www.instagram.com/reel/C86ZvEaqRmo/';
 
+// VIDNAVIGATOR_TEST_TARGET=local runs the suites against a local backend with
+// LOCAL_VIDNAVIGATOR_API_KEY (and LOCAL_VIDNAVIGATOR_BASE_URL, default http://localhost:5001/v1).
+if (process.env.VIDNAVIGATOR_TEST_TARGET === 'local') {
+  process.env.VIDNAVIGATOR_API_KEY = process.env.LOCAL_VIDNAVIGATOR_API_KEY;
+  process.env.VIDNAVIGATOR_BASE_URL = process.env.LOCAL_VIDNAVIGATOR_BASE_URL || 'http://localhost:5001/v1';
+}
+
 function makeClient(apiKey) {
   return new sdk.VidNavigatorClient({
     apiKey: apiKey || process.env.VIDNAVIGATOR_API_KEY,

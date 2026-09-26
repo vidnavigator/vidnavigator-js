@@ -25,8 +25,8 @@ export interface TikTokProfileScrapeRequest {
   /**
    * Where to POST a notification when the task finishes. Overrides the account-level default
    * configured in Studio → API; pass an empty string to opt this task out of that default.
-   * Must be a publicly reachable https URL. The event carries `stats` — read the result from
-   * `check_status_url` (a scrape can hold thousands of videos).
+   * Must be a publicly reachable https URL. The event's `data.result` is a summary (`stats`, `download_url_available`),
+   * not the videos (a scrape can hold thousands); read those with `vn.tiktokProfile.resume(task_id).result()`.
    */
   webhook_url?: string;
 }
@@ -50,8 +50,8 @@ export interface TikTokSearchRequest {
   /**
    * Where to POST a notification when the task finishes. Overrides the account-level default
    * configured in Studio → API; pass an empty string to opt this task out of that default.
-   * Must be a publicly reachable https URL. The event carries `stats` — read the results from
-   * `check_status_url`.
+   * Must be a publicly reachable https URL. The event's `data.result` is a summary (`stats`, `download_url_available`);
+   * read the results with `vn.tiktokSearch.resume(task_id).result()`.
    */
   webhook_url?: string;
 }

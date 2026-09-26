@@ -15,6 +15,14 @@ export type WebhookEventType =
   | 'tiktok_search.completed'
   | 'tiktok_search.failed';
 
+/** `data.result` of a `tiktok_profile.*` / `tiktok_search.*` event: a summary, not the videos. */
+export interface TikTokWebhookResult {
+  /** Same fields as the task's `stats` (e.g. `videos_matched`, or `results_count` / `sort_by` for searches). */
+  stats?: Record<string, unknown>;
+  /** Whether the full result can be downloaded as one JSON file (`download_url` on the task). */
+  download_url_available?: boolean;
+}
+
 /** The JSON body POSTed to your `webhook_url`. */
 export interface WebhookEvent {
   /** Event id, e.g. `evt_9f2c...`. */
@@ -28,14 +36,14 @@ export interface WebhookEvent {
     job_type?: string;
     check_status_url?: string;
     /**
-     * Raw result of the completed job (same shape as `AsyncJob.result` before parsing).
-     * Omitted when `result_truncated` is true, and for TikTok tasks, which only carry `stats`.
+     * Raw (unparsed) result of the completed job. For transcription, extraction and tweet jobs it
+     * is the same data the job's `result()` parses. For TikTok tasks it is a summary only,
+     * {@link TikTokWebhookResult} (a scrape can hold thousands of videos); fetch the videos with
+     * `vn.tiktokProfile.resume(task_id).result()`. Omitted when `result_truncated` is true.
      */
-    result?: Record<string, unknown> | null;
-    /** True when the result exceeded 256 KB; fetch it from `check_status_url` instead. */
+    result?: Record<string, unknown> | TikTokWebhookResult | null;
+    /** True when the result exceeded 256 KB; fetch it with `resume(task_id).result()` instead. */
     result_truncated?: boolean;
-    /** TikTok tasks: summary stats of the scrape / search. */
-    stats?: Record<string, unknown>;
     error?: AsyncJobError | null;
   };
 }
