@@ -90,9 +90,8 @@ const vn = new VidNavigatorClient({
 
 ### Upgrading from 1.x
 
-Transcription, structured extraction, and tweet analysis now always run as background jobs, so they work on videos of any length. Your existing calls keep working with the same arguments, with two differences:
+Transcription, structured extraction, and tweet analysis now always run as background jobs, so they work on videos of any length. Your existing calls keep working with the same arguments, with one difference:
 
-- `extractVideoData()` no longer returns `video_info`. Use `getTranscript({ video_url, metadata_only: true })` if you need the metadata.
 - `getTweetStatement()` no longer returns `statement_query`, which was never part of the documented API.
 
 New in 2.0: `vn.transcribe`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokProfile`, and `vn.tiktokSearch`, each with `.submit()` for running many jobs at once (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)), plus webhook signature helpers.
@@ -304,7 +303,7 @@ function pending(): string[] {
 }
 ```
 
-> The older methods `transcribeVideo()`, `extractVideoData()`, and `getTweetStatement()` still work with the same arguments. They now run as background jobs too, so they handle videos of any length. `extractVideoData()` no longer returns `video_info`; call `getTranscript({ video_url, metadata_only: true })` if you need it.
+> The older methods `transcribeVideo()`, `extractVideoData()`, and `getTweetStatement()` still work with the same arguments. They now run as background jobs too, so they handle videos of any length.
 
 ### 4. Webhooks
 

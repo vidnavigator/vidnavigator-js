@@ -1,4 +1,5 @@
 import { UsageBlock } from './Usage';
+import { VideoInfo, VideoInfoJSON } from './VideoInfo';
 
 /** Async job kinds returned by the `/transcribe/async`, `/extract/video/async` and `/tweet/statement/async` endpoints. */
 export type AsyncJobType = 'transcribe' | 'extract_video' | 'tweet_statement';
@@ -83,6 +84,8 @@ export interface AsyncJobJSON {
   check_status_url?: string;
   webhook?: AsyncJobWebhookStatus | null;
   result?: any;
+  /** `extract_video` jobs, once completed: the `video_info` the synchronous endpoint returns. */
+  video_info?: VideoInfoJSON;
   error?: AsyncJobError | null;
 }
 
@@ -105,6 +108,8 @@ export class AsyncJob<TResult> {
   check_status_url?: string;
   webhook?: AsyncJobWebhookStatus | null;
   result: TResult | null;
+  /** `extract_video` jobs, once completed: metadata of the video the data was extracted from. */
+  video_info?: VideoInfo;
   error: AsyncJobError | null;
   /** Per-call usage, populated only when polled with `include_usage: true` and `task_status === 'completed'`. */
   usage?: UsageBlock;
@@ -121,6 +126,7 @@ export class AsyncJob<TResult> {
     this.check_status_url = data.check_status_url;
     this.webhook = data.webhook;
     this.result = data.result !== undefined && data.result !== null ? parseResult(data.result) : null;
+    this.video_info = data.video_info ? VideoInfo.fromJSON(data.video_info) : undefined;
     this.error = data.error ?? null;
   }
 

@@ -44,6 +44,8 @@ export interface WebhookEvent {
     result?: Record<string, unknown> | TikTokWebhookResult | null;
     /** True when the result exceeded 256 KB; fetch it with `resume(task_id).result()` instead. */
     result_truncated?: boolean;
+    /** `extract_video.completed` only: raw `video_info` of the video. Sent even when `result_truncated` is true. */
+    video_info?: Record<string, unknown>;
     error?: AsyncJobError | null;
   };
 }

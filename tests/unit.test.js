@@ -713,7 +713,12 @@ async function runClientMethodTests() {
     if (method === 'GET' && url === '/extract/video/ex-legacy') {
       return {
         status: 'success',
-        data: { task_id: 'ex-legacy', task_status: 'completed', result: { topic: 'testing' } },
+        data: {
+          task_id: 'ex-legacy',
+          task_status: 'completed',
+          result: { topic: 'testing' },
+          video_info: { title: 'Extracted video', url: 'https://example.com/video' },
+        },
         usage: params && params.include_usage === 'true'
           ? {
               charges: [
@@ -806,7 +811,10 @@ async function runClientMethodTests() {
   const submitCall = calls[callsBefore];
   assert(submitCall.url === '/extract/video/async', 'extractVideoData submits to /extract/video/async');
   assert(videoExtraction.data.topic === 'testing', 'extractVideoData returns data from the async result');
-  assert(videoExtraction.video_info === undefined, 'extractVideoData has no video_info (async API does not return it)');
+  assert(
+    videoExtraction.video_info instanceof sdk.VideoInfo && videoExtraction.video_info.title === 'Extracted video',
+    'extractVideoData parses video_info from the async job'
+  );
   assert(videoExtraction.usage instanceof sdk.UsageBlock, 'extractVideoData parses usage as UsageBlock');
   assert(
     videoExtraction.usage.analysis_tokens && videoExtraction.usage.analysis_tokens.total_tokens === 3,

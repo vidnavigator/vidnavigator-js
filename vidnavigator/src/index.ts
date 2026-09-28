@@ -56,7 +56,7 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '2.0.0';
+export const SDK_VERSION = '2.1.0';
 
 //region --- Interfaces ---
 export interface SDKConfig {
@@ -470,7 +470,7 @@ export class VidNavigatorClient {
           options,
           (raw) => raw as Record<string, unknown>
         ),
-      toResult: async (task) => ({ data: requireResult(task), usage: task.usage }),
+      toResult: async (task) => ({ data: requireResult(task), video_info: task.video_info, usage: task.usage }),
     });
 
     this.tweetStatement = this.defineOperation({
@@ -936,8 +936,7 @@ export class VidNavigatorClient {
   /**
    * Structured-data extraction from an online video. Blocking convenience wrapper around
    * {@link VidNavigatorClient.extractVideo}: submits to `POST /extract/video/async` and polls, so
-   * media of any length works. The async API does not return `video_info`; use
-   * {@link VidNavigatorClient.getTranscript} with `metadata_only: true` if you need it.
+   * media of any length works. The result carries the extracted `data` and the video's `video_info`.
    */
   async extractVideoData(
     payload: ExtractVideoDataPayload | ExtractVideoDataMultipartPayload,

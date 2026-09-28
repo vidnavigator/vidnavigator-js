@@ -4652,7 +4652,7 @@
               "items": {
                 "type": "string"
               },
-              "description": "Allowed values for Enum type"
+              "description": "Allowed values for Enum type. The extracted value is always one of these. `values` is accepted as a legacy alias."
             }
           }
         },
@@ -5542,6 +5542,14 @@
             "description": "Present only when `task_status=completed`. Identical to the `data` block of a successful synchronous `POST /extract/video`.",
             "type": "object"
           },
+          "video_info": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VideoInfo"
+              }
+            ],
+            "description": "Present only when `task_status=completed`. The same `video_info` a successful synchronous `POST /extract/video` returns beside `data`."
+          },
           "error": {
             "$ref": "#/components/schemas/AsyncJobError"
           }
@@ -5657,6 +5665,14 @@
                 "type": "object",
                 "nullable": true,
                 "description": "The completed job's result. Omitted when `result_truncated` is true."
+              },
+              "video_info": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/VideoInfo"
+                  }
+                ],
+                "description": "`extract_video` jobs only: the `video_info` the synchronous `POST /extract/video` returns beside `data`. Sent even when `result_truncated` is true."
               },
               "result_truncated": {
                 "type": "boolean",
