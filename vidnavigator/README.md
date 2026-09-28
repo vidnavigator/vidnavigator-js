@@ -625,7 +625,7 @@ const { data } = await vn.extractVideoData({
 
 **Schema rules:** every field needs `type` and `description`. `Array` fields also need `items` (the schema of one element). `Object` fields list their sub-fields in `properties` (up to 10), and `Enum` fields list the allowed values in `enum`. At most 10 top-level fields and 3 levels of nesting. An invalid schema is rejected with a `BadRequestError` before anything runs.
 
-> `extractVideoData()` runs as a background job, so videos of any length work. For many extractions at once, use `vn.extractVideo.submit()` (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)). The result has `data` and `usage`, but no `video_info`.
+> `extractVideoData()` runs as a background job, so videos of any length work. For many extractions at once, use `vn.extractVideo.submit()` (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)). The result has `data` (the extracted fields), `video_info` (the video's metadata), and `usage` when requested.
 
 ### 10. Semantic search
 
@@ -758,7 +758,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 | `job.result(options?)` | Wait until finished and return the result. Throws on failure or timeout; every error carries `task_id` |
 | `job.wait(options?)` | Wait until finished and return the final task, without throwing on failure |
 
-Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → `{ data, usage? }`; `tweetStatement` → `TweetStatement`; `tiktokProfile` / `tiktokSearch` → the completed task with every page of `videos` / `results`.
+Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → `{ data, video_info, usage? }`; `tweetStatement` → `TweetStatement`; `tiktokProfile` / `tiktokSearch` → the completed task with every page of `videos` / `results`.
 
 ### Webhooks
 
@@ -827,7 +827,7 @@ Returns `transcript_analysis` containing:
 
 | Method | Description |
 |--------|-------------|
-| `extractVideo(input, options?)` | Structured data from an online video of any length. Input: `video_url`, `schema` or `schemaFilePath`, `what_to_extract`, `transcribe`, `webhook_url`. Returns `{ data, usage? }` |
+| `extractVideo(input, options?)` | Structured data from an online video of any length. Input: `video_url`, `schema` or `schemaFilePath`, `what_to_extract`, `transcribe`, `webhook_url`. Returns `{ data, video_info, usage? }` |
 | `extractVideoData(payload, options?)` | Same as `extractVideo()`, with the original payload shape (`include_usage` in the payload) |
 | `extractFileData(payload)` | Extract structured data from an uploaded file transcript |
 

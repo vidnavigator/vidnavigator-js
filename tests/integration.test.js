@@ -258,7 +258,7 @@ async function run() {
       include_usage: true,
     });
     assert(extraction.data && typeof extraction.data.topic === 'string', 'extractVideoData data.topic');
-    assert(extraction.video_info === undefined, 'extractVideoData has no video_info (async API)');
+    assert(extraction.video_info instanceof sdk.VideoInfo, 'extractVideoData video_info');
     assert(extraction.usage instanceof sdk.UsageBlock, 'extractVideoData usage is UsageBlock');
     // Live API returns charges-based usage; tokens live under the analysis_request charge.
     const tokens = extraction.usage.analysis_tokens;

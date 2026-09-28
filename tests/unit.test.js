@@ -1069,7 +1069,7 @@ async function runOperationTests() {
   assert(legacy.usage instanceof sdk.UsageBlock, 'transcribeVideo include_usage is read from the poll');
 
   // ── extractVideo (JSON) ──
-  api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: { topic: 'Never Gonna Give You Up' } }]);
+  api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: { topic: 'Never Gonna Give You Up' }, video_info: { title: 'Rick Astley', duration: 212 } }]);
   const ex = await client.extractVideo(
     { video_url: 'https://youtu.be/x', schema: { topic: { type: 'String', description: 'Topic' } }, transcribe: false, webhook_url: '' },
     { ...FAST, include_usage: true }
@@ -1080,6 +1080,7 @@ async function runOperationTests() {
   assert(exSubmit.data.webhook_url === '', 'extractVideo passes empty webhook_url (opt-out) through');
   assert(ex.data.topic === 'Never Gonna Give You Up', 'extractVideo result.data is the extracted object');
   assert(ex.usage instanceof sdk.UsageBlock, 'extractVideo result.usage');
+  assert(ex.video_info instanceof sdk.VideoInfo && ex.video_info.duration === 212, 'extractVideo result.video_info parsed as VideoInfo');
 
   // ── extractVideo (multipart schema file) ──
   const schemaPath = path.join(__dirname, 'tmp-async-extraction-schema.yaml');
@@ -1101,7 +1102,9 @@ async function runOperationTests() {
       assert(names.includes(field), `extractVideo multipart has ${field} field`);
     }
     assert(!names.includes('what_to_extract'), 'extractVideo multipart omits undefined fields');
-    assert((await exJob.result(FAST)).data.topic === 'x', 'extractVideo multipart job result');
+    const exJobResult = await exJob.result(FAST);
+    assert(exJobResult.data.topic === 'x', 'extractVideo multipart job result');
+    assert(exJobResult.video_info === undefined, 'extractVideo result without video_info (older server) leaves it undefined');
   } finally {
     fs.unlinkSync(schemaPath);
   }
