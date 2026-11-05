@@ -1,6 +1,6 @@
 # VidNavigator SDK for JavaScript
 
-The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](https://vidnavigator.com). Transcribe, analyze, search, and extract structured data from video and audio — YouTube, Instagram, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, and your own uploaded files.
+The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](https://vidnavigator.com). Transcribe, analyze, search, and extract structured data from video and audio — YouTube, Instagram, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, Snapchat, and your own uploaded files.
 
 [![npm version](https://img.shields.io/npm/v/vidnavigator.svg)](https://www.npmjs.com/package/vidnavigator)
 [![License](https://img.shields.io/npm/l/vidnavigator.svg)](https://github.com/vidnavigator/vidnavigator-js/blob/main/LICENSE)
@@ -9,9 +9,9 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 
 ## Why VidNavigator?
 
-- **Multi-platform transcription** — YouTube, Instagram Reels & carousel posts, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, and more.
+- **Multi-platform transcription** — YouTube, Instagram Reels & carousel posts, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, Snapchat, and more.
 - **Any video length** — transcription, extraction, and tweet analysis run as background jobs, so there is no duration limit. Get the result with one `await`, or submit many jobs and collect them as they finish.
-- **Async TikTok profile scraping and keyword search** — collect public TikTok videos in the background, then read results via cursor pagination or a signed `download_url`, optionally notified by webhook.
+- **Async TikTok profile scraping, keyword search and LIVE search** — collect public TikTok videos, or LIVE rooms with their stream URLs, in the background, then read results via cursor pagination or a signed `download_url`, optionally notified by webhook.
 - **Instagram carousel support** — select a specific video by index, or transcribe every video in a carousel post with one call.
 - **AI-powered analysis** — get summaries, people mentioned, places, key subjects, and direct answers to questions about any video or audio.
 - **Structured data extraction** — define a JSON schema and receive typed, structured fields extracted from any transcript (powered by LLMs).
@@ -34,6 +34,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 | Facebook | Yes | Yes | - |
 | Dailymotion | Yes | Yes | - |
 | Loom | Yes | Yes | - |
+| Snapchat | Yes, when Snapchat has a transcript | Yes | Yes (highlights: `img_index`, `all_videos`) |
 | Uploaded files | Yes | Yes | - |
 
 > **Transcript** = fast caption/subtitle extraction. **Transcribe** = speech-to-text via AI models (works when captions are unavailable).
@@ -102,7 +103,7 @@ New in 2.0: `vn.transcribe`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokP
 
 ### 1. Get a transcript (any platform)
 
-There is a single `getTranscript` method that auto-detects the platform (YouTube, Vimeo, X/Twitter, TikTok, Facebook, Dailymotion, Loom, and more) from the URL.
+There is a single `getTranscript` method that auto-detects the platform (YouTube, Vimeo, X/Twitter, TikTok, Facebook, Dailymotion, Loom, Snapchat, and more) from the URL.
 
 ```ts
 const { video_info, transcript } = await vn.getTranscript({
@@ -163,6 +164,7 @@ Each of these operations comes in two shapes:
 | Tweet claim analysis | `await vn.tweetStatement(tweetId)` | `await vn.tweetStatement.submit(tweetId)` |
 | TikTok profile scrape | `await vn.tiktokProfile(profileUrl)` | `await vn.tiktokProfile.submit(profileUrl)` |
 | TikTok keyword search | `await vn.tiktokSearch(query)` | `await vn.tiktokSearch.submit(query)` |
+| TikTok LIVE search | `await vn.tiktokLiveSearch(query)` | `await vn.tiktokLiveSearch.submit(query)` |
 
 **Wait for the result.** The one-liner submits the job, checks on it until it finishes, and returns the result:
 
@@ -466,6 +468,31 @@ for (const result of task.results) {
 - `sort_by` and `published_within` are applied by TikTok itself. If you leave out `sort_by`, results come back newest first. If you leave out `published_within` and set an `after_datetime` more than 24 hours ago, the smallest window that covers it is picked for you.
 - `parallel_search_slices` (`2` to `4`) runs several search chains in parallel to collect more results than TikTok's single-chain limit (about 115 to 140 items). Billing grows with the number of slices, so keep it at `1` unless you need the extra results, and especially when `published_within` is set, since every slice searches the same window.
 
+- `country` picks whose TikTok results you get (`'fr'`, `'de'`, `'jp'`, ..., default `'gb'`). `'us'` is refused: TikTok asks US visitors to log in.
+- Billing: 1 `residential_request` per 30 videos TikTok returned (`task.stats.videos_fetched`, including the ones your filters dropped), minimum 1 per search.
+
+### 6b. TikTok LIVE search (async)
+
+`vn.tiktokLiveSearch()` finds TikTok LIVE rooms broadcasting right now for a keyword, with their stream URLs:
+
+```ts
+const task = await vn.tiktokLiveSearch({ query: 'gaming', country: 'us' });
+
+for (const room of task.results) {
+  console.log(room.title, room.author?.unique_id, room.stats?.viewers, room.category, room.hashtags);
+  const urls = room.stream_urls;
+  if (urls) {
+    const q = urls.default_quality ?? 'hd';
+    console.log('FLV:', urls.flv[q], 'HLS:', urls.hls[q], 'audio only:', urls.audio_only);
+  }
+}
+```
+
+- Each room has the same `id`, `url`, `author` and `stats` fields as a keyword search result, plus `started_at` (a `Date`), `stats.viewers` / `stats.total_viewers`, `hashtags` (the `#tags` of the title), `category` (the LIVE's category on TikTok, e.g. `'Gaming'`) and `game_tags`.
+- `stream_urls` holds `flv` and `hls` URLs keyed by quality (`origin`, `uhd`, `hd`, `sd`, `ld`), `default_quality`, an `audio_only` stream and `expires_at`. The URLs play while the LIVE is on. They are returned by default; pass `include_stream_urls: false` to leave them out. Not every LIVE offers HLS, so `hls` can be empty.
+- `country` defaults to `'us'`. Results keep TikTok's ranking; a keyword with no LIVE room in that country at that moment completes with zero results.
+- Billing: 1 `residential_request` per 30 rooms TikTok returned (`task.stats.rooms_fetched`), minimum 1 per search.
+
 ### 7. Instagram carousel posts (multiple videos)
 
 Instagram carousel posts can contain multiple videos. You can select a specific video by index, or transcribe them all at once:
@@ -749,7 +776,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 
 | Member | Description |
 |--------|-------------|
-| `vn.transcribe`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokProfile`, `vn.tiktokSearch` | Call directly to submit and wait for the result. Options: `include_usage`, `timeoutMs`, `intervalMs`, `fastStart`, `signal`, `onPoll` |
+| `vn.transcribe`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokProfile`, `vn.tiktokSearch`, `vn.tiktokLiveSearch` | Call directly to submit and wait for the result. Options: `include_usage`, `timeoutMs`, `intervalMs`, `fastStart`, `signal`, `onPoll` |
 | `.submit(input, { include_usage? })` | Start the job and return a `Job` immediately |
 | `.resume(task_id, { include_usage? })` | Get a `Job` for a job you already started (no request is made) |
 | `job.task_id`, `job.job_type`, `job.check_status_url`, `job.webhook_url` | Job details from the submit response |
@@ -758,7 +785,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 | `job.result(options?)` | Wait until finished and return the result. Throws on failure or timeout; every error carries `task_id` |
 | `job.wait(options?)` | Wait until finished and return the final task, without throwing on failure |
 
-Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → `{ data, video_info, usage? }`; `tweetStatement` → `TweetStatement`; `tiktokProfile` / `tiktokSearch` → the completed task with every page of `videos` / `results`.
+Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → `{ data, video_info, usage? }`; `tweetStatement` → `TweetStatement`; `tiktokProfile` / `tiktokSearch` / `tiktokLiveSearch` → the completed task with every page of `videos` / `results`.
 
 ### Webhooks
 
@@ -768,7 +795,7 @@ Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → 
 | `verifyWebhookSignature(rawBody, signatureHeader, secret, options?)` | Same check, returning `true` / `false` |
 | `WEBHOOK_HEADERS` | Header names: `signature`, `delivery`, `event`, `taskId` |
 
-`options`: `toleranceSeconds` (default `300`, `0` turns the check off). Event types: `transcribe.*`, `extract_video.*`, `tweet_statement.*`, `tiktok_profile.*`, `tiktok_search.*`, each with `.completed` or `.failed`.
+`options`: `toleranceSeconds` (default `300`, `0` turns the check off). Event types: `transcribe.*`, `extract_video.*`, `tweet_statement.*`, `tiktok_profile.*`, `tiktok_search.*`, `tiktok_live_search.*`, each with `.completed` or `.failed`.
 
 ### TikTok
 
@@ -776,10 +803,13 @@ Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → 
 |--------|-------------|
 | `tiktokProfile(urlOrInput, options?)` | Scrape a public profile and return the completed task with every video. See [Background jobs](#background-jobs) |
 | `tiktokSearch(queryOrInput, options?)` | Keyword search returning the completed task with every result |
+| `tiktokLiveSearch(queryOrInput, options?)` | LIVE search returning the completed task with every room and its stream URLs |
 | `submitTikTokProfileScrape(payload)` | Lower-level: start a public TikTok profile scrape. Returns a `task_id` immediately. Options: `max_posts`, `after_datetime`, `before_datetime`, `min_likes`, `max_likes`, `webhook_url` |
 | `getTikTokProfileScrape(task_id, query?)` | Poll task status and retrieve a page of videos. Options: `cursor`, `limit`, `include_usage` |
-| `submitTikTokSearch(payload)` | Start an async TikTok keyword search. Returns a `task_id` immediately. Options: `max_results`, `parallel_search_slices`, `sort_by`, `published_within`, `after_datetime`, `before_datetime`, `min_likes`, `max_likes`, `min_views`, `max_views`, `webhook_url` |
+| `submitTikTokSearch(payload)` | Start an async TikTok keyword search. Returns a `task_id` immediately. Options: `max_results`, `parallel_search_slices`, `sort_by`, `published_within`, `after_datetime`, `before_datetime`, `min_likes`, `max_likes`, `min_views`, `max_views`, `country`, `webhook_url` |
 | `getTikTokSearch(task_id, query?)` | Poll search status and retrieve a page of results. Options: `cursor`, `limit`, `include_usage` |
+| `submitTikTokLiveSearch(payload)` | Start an async TikTok LIVE search. Returns a `task_id` immediately. Options: `max_results`, `country`, `include_stream_urls`, `webhook_url` |
+| `getTikTokLiveSearch(task_id, query?)` | Poll LIVE search status and retrieve a page of rooms. Options: `cursor`, `limit`, `include_usage` |
 
 Completed profile tasks include `videos`; completed search tasks include `results`. Both include `pagination`, optional `stats`, and an optional short-lived `download_url` for retrieving the whole result as JSON. Failed tasks include `error` (`{ error, message, http_status }`); the older `error_message` string still works but is deprecated. Datetime filters use `after_datetime` and `before_datetime`, each accepting either `YYYY-MM-DD` or full ISO datetime strings with timezone; TikTok `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
 
@@ -925,6 +955,9 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokSearchSubmission` | Async TikTok keyword search submission: `task_id`, query, slice count, expiry, `webhook_url` |
 | `TikTokSearchTask` | TikTok keyword search task with status, results, pagination, `download_url`, `error`, `webhook`; `stats` shows the `sort_by` / `published_within` the search ran with |
 | `TikTokSearchResult` | Normalized TikTok keyword result, including `published_at` as a `Date` and integer counters |
+| `TikTokLiveSearchSubmission` | Async TikTok LIVE search submission: `task_id`, query, country, `include_stream_urls`, expiry, `webhook_url` |
+| `TikTokLiveSearchTask` | TikTok LIVE search task with status, rooms, pagination, `download_url`, `error`, `webhook`; `stats.rooms_fetched` is what is billed |
+| `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
 
 ## Links

@@ -61,7 +61,8 @@ Some live tests are slow or cost extra credits, so they only run when their vari
 | Variable | Enables |
 |---|---|
 | `TEST_TIKTOK_PROFILE_URL` | TikTok profile scrape submit / poll / pagination (e.g. `https://www.tiktok.com/@tiktok`) |
-| `TEST_TIKTOK_SEARCH_QUERY` | TikTok keyword search with `sort_by` / `published_within` (e.g. `ai tools`) |
+| `TEST_TIKTOK_SEARCH_QUERY` | TikTok keyword search with `sort_by` / `published_within`, and with `country: 'fr'` (e.g. `ai tools`) |
+| `TEST_TIKTOK_LIVE_QUERY` | TikTok LIVE search: rooms, stream URLs, `include_stream_urls: false`, `country: 'gb'` (e.g. `gaming`, which had LIVE rooms in the US in every run) |
 | `TEST_TWEET_ID` | `getTweetStatement` and `tweetStatement.submit()` (use a tweet with real content, e.g. `1585841080431321088`) |
 
 ### Test media files

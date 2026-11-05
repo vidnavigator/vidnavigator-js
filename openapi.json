@@ -29,7 +29,7 @@
     "/transcript": {
       "post": {
         "summary": "Get transcript for any supported video",
-        "description": "Extract transcript from any supported online video (YouTube, Vimeo, Twitter/X, TikTok, Facebook, Dailymotion, Loom, etc.) with optional language selection. The endpoint auto-detects the platform from the URL and routes internally.\n\n The URL inside `video_url` is what determines the upstream behavior.\n\n**Note:** for Instagram videos, use `/transcribe` instead (speech-to-text).\n\nOptions:\n- `transcript_text=true`: Returns the transcript as a single plain-text string instead of an array of segments.\n- `metadata_only=true`: Returns only video metadata (no transcript).\n- `fallback_to_metadata=true`: If transcript is unavailable, returns video metadata with an empty transcript instead of a 404 error (ignored when `metadata_only=true`).\n\n**Billing** depends on the URL:\n- YouTube (full transcript OR `metadata_only=true`) \u2192 1\u00d7 `residential_request` (the transcript fetch routes through the residential proxy)\n- Non-YouTube \u2192 1\u00d7 `standard_request` (some platforms internally use residential and would be billed accordingly)\n\nThe charge applies whether or not a transcript is returned (mirrors the proxy hop we paid for). Set `include_usage=true` to receive a `usage` block in the response.",
+        "description": "Extract transcript from any supported online video (YouTube, Vimeo, Twitter/X, TikTok, Facebook, Dailymotion, Loom, Snapchat, etc.) with optional language selection. The endpoint auto-detects the platform from the URL and routes internally.\n\n The URL inside `video_url` is what determines the upstream behavior.\n\n**Note:** for Instagram videos, use `/transcribe` instead (speech-to-text).\n\nOptions:\n- `transcript_text=true`: Returns the transcript as a single plain-text string instead of an array of segments.\n- `metadata_only=true`: Returns only video metadata (no transcript).\n- `fallback_to_metadata=true`: If transcript is unavailable, returns video metadata with an empty transcript instead of a 404 error (ignored when `metadata_only=true`).\n\n**Billing** depends on the URL:\n- YouTube (full transcript OR `metadata_only=true`) \u2192 1\u00d7 `residential_request` (the transcript fetch routes through the residential proxy)\n- Non-YouTube \u2192 1\u00d7 `standard_request` (some platforms internally use residential and would be billed accordingly)\n\nThe charge applies whether or not a transcript is returned (mirrors the proxy hop we paid for). Set `include_usage=true` to receive a `usage` block in the response.",
         "operationId": "getTranscript",
         "tags": [
           "Transcripts"
@@ -142,7 +142,7 @@
     "/transcribe": {
       "post": {
         "summary": "Transcribe online videos",
-        "description": "Transcribe online videos (e.g., Instagram, TikTok) using speech-to-text models when a transcript is not available.\n\n**Instagram Carousel Posts:**\n- For posts with multiple videos, the URL can include `?img_index=N` to select a specific video\n- Example: `https://www.instagram.com/p/ABC123/?img_index=2` transcribes the second video\n- Without `img_index`, the first video is transcribed\n- Set `all_videos=true` to transcribe ALL videos in a carousel post\n\n**Options:**\n- `transcript_text=true`: Returns transcript as a single text string instead of segments\n- `all_videos=true`: For carousel posts, returns all videos with their transcripts\n\n**Billing:** on cache miss, one `standard_request` or `residential_request` is charged for the metadata fetch (residential for Instagram, Facebook-watch, Rumble; standard otherwise), plus `transcription_hour` proportional to the audio duration. On cache hit (same URL transcribed before for any user), only `transcription_hour` is charged \u2014 the metadata fetch is skipped. Users with the `free_on_cache_hit` sponsorship flag get the cache-hit `transcription_hour` waived (`waived: true` in the per-charge entry). Set `include_usage=true` to see the breakdown.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /transcribe/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). The metadata fetch needed to read the video's duration is billed (`standard_request` or `residential_request`) and is **not** refunded: the limit is documented, so the proxy call was spent answering a request that could not be served. No `transcription_hour` is charged \u2014 no audio is processed. Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
+        "description": "Transcribe online videos (e.g., Instagram, TikTok, Snapchat) using speech-to-text models when a transcript is not available.\n\n**Instagram Carousel Posts:**\n- For posts with multiple videos, the URL can include `?img_index=N` to select a specific video\n- Example: `https://www.instagram.com/p/ABC123/?img_index=2` transcribes the second video\n- Without `img_index`, the first video is transcribed\n- Set `all_videos=true` to transcribe ALL videos in a carousel post\n- Snapchat highlights with several videos work the same way: `img_index=N` is the Nth video\n\n**Options:**\n- `transcript_text=true`: Returns transcript as a single text string instead of segments\n- `all_videos=true`: For carousel posts, returns all videos with their transcripts\n\n**Billing:** on cache miss, one `standard_request` or `residential_request` is charged for the metadata fetch (residential for Instagram, Facebook-watch, Rumble; standard otherwise), plus `transcription_hour` proportional to the audio duration. On cache hit (same URL transcribed before for any user), only `transcription_hour` is charged \u2014 the metadata fetch is skipped. Users with the `free_on_cache_hit` sponsorship flag get the cache-hit `transcription_hour` waived (`waived: true` in the per-charge entry). Set `include_usage=true` to see the breakdown.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /transcribe/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). The metadata fetch needed to read the video's duration is billed (`standard_request` or `residential_request`) and is **not** refunded: the limit is documented, so the proxy call was spent answering a request that could not be served. No `transcription_hour` is charged \u2014 no audio is processed. Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
         "operationId": "transcribeVideo",
         "tags": [
           "Transcripts"
@@ -160,7 +160,7 @@
                   "video_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "URL of the video to transcribe. For Instagram carousel posts, append ?img_index=N to select a specific video.",
+                    "description": "URL of the video to transcribe. For Instagram carousel posts and Snapchat highlights, append ?img_index=N to select a specific video.",
                     "example": "https://www.instagram.com/reel/C86ZvEaqRmo/"
                   },
                   "transcript_text": {
@@ -585,7 +585,7 @@
     "/tiktok/search": {
       "post": {
         "summary": "Submit a TikTok keyword search (async)",
-        "description": "Start an asynchronous TikTok keyword search task and return a `task_id` immediately. Poll `GET /tiktok/search/{task_id}` for cursor-paginated results. Results are retained for ~1 hour.\n\nResults are returned sorted by `published_at` descending (newest first) across pagination, full retrieval, and the signed `download_url` payload, unless `sort_by` is set, in which case that order is kept.\n\n**parallel_search_slices billing:** by default (`1`), the search runs a single paginated query chain and is naturally capped at roughly 115-140 items by TikTok. Setting `parallel_search_slices` to `2..4` runs that many concurrent chains in parallel and dedups by video id, lifting the effective ceiling. Cost scales linearly: each additional slice consumes up to ~1x the residential pages of a single search, so an N-slice request bills up to **Nx the residential pages**. Extra slices add the most on searches without a date window; with `published_within` set, every slice searches the same window and can return largely the same videos. `parallel_search_slices` is *not* a time filter \u2014 use `published_within`, `after_datetime` or `before_datetime` for time windows.\n\n**Usage disclosure:** This endpoint does NOT accept `include_usage`. Billing happens in the background worker after the 202 response is sent, so there is nothing to disclose at submit time. Pass `include_usage=true` on `GET /tiktok/search/{task_id}` instead \u2014 the GET endpoint replays the final charges once `task_status=completed`.",
+        "description": "Start an asynchronous TikTok keyword search task and return a `task_id` immediately. Poll `GET /tiktok/search/{task_id}` for cursor-paginated results. Results are retained for ~1 hour.\n\nResults are returned sorted by `published_at` descending (newest first) across pagination, full retrieval, and the signed `download_url` payload, unless `sort_by` is set, in which case that order is kept.\n\nThe search returns TikTok's results for `country` (default `gb`); `us` is rejected because TikTok asks US visitors to log in.\n\n**Billing:** 1 `residential_request` per 30 videos fetched from TikTok (`stats.videos_fetched`, including videos your filters drop), minimum 1 per search.\n\n**parallel_search_slices billing:** by default (`1`), the search runs a single paginated query chain and is naturally capped at roughly 115-140 items by TikTok. Setting `parallel_search_slices` to `2..4` runs that many concurrent chains in parallel and dedups by video id, lifting the effective ceiling. Cost scales linearly: each additional slice fetches up to ~1x the videos of a single search, so an N-slice request bills up to **Nx the residential requests**. Extra slices add the most on searches without a date window; with `published_within` set, every slice searches the same window and can return largely the same videos. `parallel_search_slices` is *not* a time filter \u2014 use `published_within`, `after_datetime` or `before_datetime` for time windows.\n\n**Usage disclosure:** This endpoint does NOT accept `include_usage`. Billing happens in the background worker after the 202 response is sent, so there is nothing to disclose at submit time. Pass `include_usage=true` on `GET /tiktok/search/{task_id}` instead \u2014 the GET endpoint replays the final charges once `task_status=completed`.",
         "operationId": "submitTikTokSearch",
         "tags": [
           "TikTok"
@@ -606,11 +606,152 @@
                     "description": "Keyword phrase to search on TikTok.",
                     "example": "ai tools"
                   },
+                  "country": {
+                    "type": "string",
+                    "enum": [
+                      "ae",
+                      "af",
+                      "al",
+                      "am",
+                      "ao",
+                      "ar",
+                      "at",
+                      "au",
+                      "az",
+                      "ba",
+                      "bd",
+                      "be",
+                      "bf",
+                      "bg",
+                      "bh",
+                      "bj",
+                      "bo",
+                      "br",
+                      "bw",
+                      "by",
+                      "ca",
+                      "cd",
+                      "ch",
+                      "ci",
+                      "cl",
+                      "cm",
+                      "co",
+                      "cr",
+                      "cy",
+                      "cz",
+                      "de",
+                      "dk",
+                      "do",
+                      "dz",
+                      "ec",
+                      "ee",
+                      "eg",
+                      "es",
+                      "et",
+                      "fi",
+                      "fj",
+                      "fr",
+                      "gb",
+                      "ge",
+                      "gh",
+                      "gr",
+                      "gt",
+                      "hn",
+                      "hr",
+                      "ht",
+                      "hu",
+                      "id",
+                      "ie",
+                      "il",
+                      "iq",
+                      "is",
+                      "it",
+                      "jm",
+                      "jp",
+                      "ke",
+                      "kg",
+                      "kh",
+                      "kr",
+                      "kw",
+                      "kz",
+                      "la",
+                      "lb",
+                      "lk",
+                      "lt",
+                      "lu",
+                      "lv",
+                      "ly",
+                      "ma",
+                      "md",
+                      "me",
+                      "mg",
+                      "mk",
+                      "ml",
+                      "mm",
+                      "mn",
+                      "mt",
+                      "mu",
+                      "mw",
+                      "mx",
+                      "my",
+                      "mz",
+                      "na",
+                      "ne",
+                      "ng",
+                      "ni",
+                      "nl",
+                      "no",
+                      "np",
+                      "nz",
+                      "om",
+                      "pa",
+                      "pe",
+                      "pg",
+                      "ph",
+                      "pk",
+                      "pl",
+                      "pt",
+                      "py",
+                      "qa",
+                      "ro",
+                      "rs",
+                      "rw",
+                      "sa",
+                      "sd",
+                      "se",
+                      "sg",
+                      "si",
+                      "sk",
+                      "sn",
+                      "so",
+                      "sv",
+                      "tg",
+                      "th",
+                      "tj",
+                      "tn",
+                      "tr",
+                      "tt",
+                      "tw",
+                      "tz",
+                      "ua",
+                      "ug",
+                      "uy",
+                      "ve",
+                      "vn",
+                      "ye",
+                      "za",
+                      "zm",
+                      "zw"
+                    ],
+                    "default": "gb",
+                    "example": "fr",
+                    "description": "Country whose TikTok results you get (ISO 3166-1 alpha-2, lowercase or uppercase). Default `gb`. `us` is not supported: TikTok asks US visitors to log in before searching. The first search for a country other than `gb` can take 10-20 s longer."
+                  },
                   "max_results": {
                     "type": "integer",
                     "minimum": 0,
                     "default": 0,
-                    "description": "Optional upper bound on results the background task will try to collect. `0` (the default) or omitted means **unlimited** \u2014 pagination only stops when TikTok has no more results or the page cap is reached. With `parallel_search_slices=1` that naturally yields ~115-140 items (TikTok serves ~5 pages of ~30 items per chain); with `parallel_search_slices=4` up to ~480 unique items. A positive integer caps the merged result count. **No hard server-side cap is enforced** \u2014 a caller asking for `3000` will be billed per residential page actually fetched (~5 pages per slice naturally) and receive whatever TikTok delivers."
+                    "description": "Optional upper bound on results the background task will try to collect. `0` (the default) or omitted means **unlimited** \u2014 pagination only stops when TikTok has no more results or the page cap is reached. With `parallel_search_slices=1` that naturally yields ~115-140 items (TikTok serves ~5 pages of ~30 items per chain); with `parallel_search_slices=4` up to ~480 unique items. A positive integer caps the merged result count. **No hard server-side cap is enforced** \u2014 a caller asking for `3000` will be billed 1 `residential_request` per 30 videos actually fetched and receive whatever TikTok delivers."
                   },
                   "parallel_search_slices": {
                     "type": "integer",
@@ -618,7 +759,7 @@
                     "maximum": 4,
                     "default": 1,
                     "example": 2,
-                    "description": "How many concurrent paginated query chains to run and dedup by video id. `1` (the default) is a single chain naturally capped at roughly 115-140 items. `2..4` runs that many additional chains in parallel, lifting the effective ceiling at the cost of up to **~Nx the residential pages** of a single search. Diminishing returns: 2 slices yield ~+43% unique items, 3 slices ~+22%, 4 slices ~+13% on a representative query without a date window, so 4 already saturates TikTok's natural ~480-item dedup ceiling for most queries. With `published_within` set, every slice searches the same window and extra slices can return largely the same videos, so keep `1` unless you have measured a gain. `parallel_search_slices` is *not* a time filter \u2014 use `published_within`, `after_datetime` or `before_datetime` for time windows."
+                    "description": "How many concurrent paginated query chains to run and dedup by video id. `1` (the default) is a single chain naturally capped at roughly 115-140 items. `2..4` runs that many additional chains in parallel, lifting the effective ceiling at the cost of up to **~Nx the residential requests** of a single search. Diminishing returns: 2 slices yield ~+43% unique items, 3 slices ~+22%, 4 slices ~+13% on a representative query without a date window, so 4 already saturates TikTok's natural ~480-item dedup ceiling for most queries. With `published_within` set, every slice searches the same window and extra slices can return largely the same videos, so keep `1` unless you have measured a gain. `parallel_search_slices` is *not* a time filter \u2014 use `published_within`, `after_datetime` or `before_datetime` for time windows."
                   },
                   "sort_by": {
                     "type": "string",
@@ -670,7 +811,7 @@
                   "webhook_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Where to POST the result when the task finishes. Overrides the account-level default configured in Studio \u2192 API; pass an empty string to opt this task out of that default. Must be a publicly reachable https URL. The event is a notification, not the payload: a scrape can hold thousands of videos, so it carries `stats` and tells you to read the result from `check_status_url`. See https://docs.vidnavigator.com/guides/webhooks",
+                    "description": "Where to POST the result when the task finishes. Overrides the account-level default configured in Studio \u2192 API; pass an empty string to opt this task out of that default. Must be a publicly reachable https URL. The event is a notification, not the payload: a search can hold hundreds of videos, so it carries `stats` and tells you to read the result from `check_status_url`. See https://docs.vidnavigator.com/guides/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
                   }
                 }
@@ -706,6 +847,10 @@
                         },
                         "query": {
                           "type": "string"
+                        },
+                        "country": {
+                          "type": "string",
+                          "example": "gb"
                         },
                         "max_results": {
                           "type": "integer"
@@ -754,7 +899,7 @@
     "/tiktok/search/{task_id}": {
       "get": {
         "summary": "Get TikTok keyword search result",
-        "description": "Poll an async TikTok keyword search task and retrieve cursor-paginated normalized result items.\n\nThis endpoint does not consume credits \u2014 polling is free.\n\n**Usage disclosure:** Set `include_usage=true` to receive a `usage` block describing the charges the background worker recorded for this task. Returned only when `task_status=completed` (processing tasks haven't finished billing; failed tasks have all charges refunded). Charges are `pages_fetched \u00d7 residential_request` (no `search_request` is billed for TikTok keyword search).",
+        "description": "Poll an async TikTok keyword search task and retrieve cursor-paginated normalized result items.\n\nThis endpoint does not consume credits \u2014 polling is free.\n\n**Usage disclosure:** Set `include_usage=true` to receive a `usage` block describing the charges the background worker recorded for this task. Returned only when `task_status=completed` (processing tasks haven't finished billing; failed tasks have all charges refunded). Charges are 1 `residential_request` per 30 `videos_fetched`, minimum 1 (no `search_request` is billed for TikTok keyword search).",
         "operationId": "getTikTokSearch",
         "tags": [
           "TikTok"
@@ -791,7 +936,7 @@
             "name": "include_usage",
             "in": "query",
             "required": false,
-            "description": "When true and `task_status=completed`, attach a `usage` block describing the charges the background worker recorded (`pages_fetched \u00d7 residential_request`; no `search_request` for TikTok keyword search).",
+            "description": "When true and `task_status=completed`, attach a `usage` block describing the charges the background worker recorded (1 `residential_request` per 30 `videos_fetched`, minimum 1; no `search_request` for TikTok keyword search).",
             "schema": {
               "type": "boolean",
               "default": false
@@ -814,6 +959,325 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/TikTokSearchTask"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "description": "Task not found, expired, or not owned by this user."
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/tiktok/live/search": {
+      "post": {
+        "summary": "Submit a TikTok LIVE search (async)",
+        "description": "Search TikTok LIVE rooms broadcasting right now for a keyword, and return a `task_id` immediately. Poll `GET /tiktok/live/search/{task_id}` for cursor-paginated results. Each room comes with its author, live counters (`stats.viewers`, likes, ...), `hashtags`, `category`, `game_tags` and, unless `include_stream_urls` is `false`, its playback URLs (FLV and HLS by quality, plus an audio-only stream). Results are retained for ~1 hour.\n\nResults keep TikTok's ranking and are localized to `country`. TikTok serves about 50 rooms per keyword; some keywords have no live room in a given country at a given time, which completes with zero results.\n\n**Billing:** 1 `residential_request` per 30 rooms TikTok returned (`stats.rooms_fetched`), minimum 1 per search. A keyword typically yields up to about 45 rooms, so 1 or 2 residential requests.\n\n**Usage disclosure:** This endpoint does NOT accept `include_usage`. Pass `include_usage=true` on `GET /tiktok/live/search/{task_id}` instead.",
+        "operationId": "submitTikTokLiveSearch",
+        "tags": [
+          "TikTok"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "query"
+                ],
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "Keyword phrase to search LIVE rooms for.",
+                    "example": "gaming"
+                  },
+                  "max_results": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0,
+                    "description": "Upper bound on rooms collected. `0` (the default) means as many as TikTok serves, about 50 per keyword."
+                  },
+                  "country": {
+                    "type": "string",
+                    "enum": [
+                      "al",
+                      "am",
+                      "ao",
+                      "ar",
+                      "at",
+                      "au",
+                      "az",
+                      "ba",
+                      "be",
+                      "bf",
+                      "bg",
+                      "bj",
+                      "bo",
+                      "br",
+                      "bw",
+                      "by",
+                      "ca",
+                      "cd",
+                      "ch",
+                      "ci",
+                      "cl",
+                      "cm",
+                      "co",
+                      "cr",
+                      "cy",
+                      "cz",
+                      "de",
+                      "dk",
+                      "do",
+                      "ec",
+                      "ee",
+                      "es",
+                      "fi",
+                      "fj",
+                      "fr",
+                      "gb",
+                      "ge",
+                      "gh",
+                      "gr",
+                      "gt",
+                      "hn",
+                      "hr",
+                      "ht",
+                      "hu",
+                      "id",
+                      "ie",
+                      "il",
+                      "is",
+                      "it",
+                      "jm",
+                      "jp",
+                      "ke",
+                      "kg",
+                      "kr",
+                      "kz",
+                      "lk",
+                      "lt",
+                      "lu",
+                      "lv",
+                      "md",
+                      "me",
+                      "mg",
+                      "mk",
+                      "ml",
+                      "mn",
+                      "mt",
+                      "mu",
+                      "mw",
+                      "mx",
+                      "my",
+                      "mz",
+                      "na",
+                      "ne",
+                      "ng",
+                      "ni",
+                      "nl",
+                      "no",
+                      "np",
+                      "nz",
+                      "pa",
+                      "pe",
+                      "pg",
+                      "ph",
+                      "pl",
+                      "pr",
+                      "pt",
+                      "py",
+                      "ro",
+                      "rs",
+                      "rw",
+                      "se",
+                      "sg",
+                      "si",
+                      "sk",
+                      "sn",
+                      "sv",
+                      "tg",
+                      "th",
+                      "tj",
+                      "tr",
+                      "tt",
+                      "tw",
+                      "tz",
+                      "ua",
+                      "ug",
+                      "us",
+                      "uy",
+                      "uz",
+                      "ve",
+                      "vn",
+                      "za",
+                      "zm",
+                      "zw"
+                    ],
+                    "default": "us",
+                    "example": "gb",
+                    "description": "Country whose LIVE rooms you get (ISO 3166-1 alpha-2, lowercase or uppercase), one of the supported countries. Default `us`."
+                  },
+                  "include_stream_urls": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Return each room's playback URLs in `stream_urls` (FLV and HLS by quality, plus an audio-only FLV). On by default; they come at no extra cost. Pass `false` to leave them out."
+                  },
+                  "webhook_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Where to POST the result when the task finishes. Overrides the account-level default configured in Studio \u2192 API; pass an empty string to opt this task out of that default. Must be a publicly reachable https URL. The event is a notification, not the payload: it carries `stats` and tells you to read the rooms from `check_status_url`. See https://docs.vidnavigator.com/guides/webhooks",
+                    "example": "https://example.com/hooks/vidnavigator"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Task accepted and queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "success"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "task_id": {
+                          "type": "string"
+                        },
+                        "task_status": {
+                          "type": "string",
+                          "enum": [
+                            "processing"
+                          ]
+                        },
+                        "query": {
+                          "type": "string"
+                        },
+                        "country": {
+                          "type": "string",
+                          "example": "us"
+                        },
+                        "max_results": {
+                          "type": "integer"
+                        },
+                        "include_stream_urls": {
+                          "type": "boolean"
+                        },
+                        "expires_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "check_status_url": {
+                          "type": "string",
+                          "example": "/v1/tiktok/live/search/550e8400-e29b-41d4-a716-446655440000"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "webhook_url": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The URL this task's result will be POSTed to, or null."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/tiktok/live/search/{task_id}": {
+      "get": {
+        "summary": "Get TikTok LIVE search result",
+        "description": "Poll an async TikTok LIVE search task and retrieve cursor-paginated rooms.\n\nThis endpoint does not consume credits \u2014 polling is free.\n\n**Usage disclosure:** Set `include_usage=true` to receive a `usage` block. Charges are 1 `residential_request` per 30 `rooms_fetched`, minimum 1; failed tasks are refunded.",
+        "operationId": "getTikTokLiveSearch",
+        "tags": [
+          "TikTok"
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            }
+          },
+          {
+            "name": "include_usage",
+            "in": "query",
+            "required": false,
+            "description": "When true and `task_status=completed`, attach a `usage` block (1 `residential_request` per 30 `rooms_fetched`, minimum 1).",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "success"
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TikTokLiveSearchTask"
                     }
                   }
                 }
@@ -1094,8 +1558,14 @@
           "402": {
             "$ref": "#/components/responses/PaymentRequired"
           },
+          "403": {
+            "$ref": "#/components/responses/ContentRestricted"
+          },
           "404": {
             "$ref": "#/components/responses/VideoNotFound"
+          },
+          "451": {
+            "$ref": "#/components/responses/GeoRestricted"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -1401,7 +1871,7 @@
             }
           },
           "400": {
-            "description": "Bad request - missing parameters, invalid schema, or input too large",
+            "description": "Bad request - missing parameters, invalid schema, input too large, a url with no video (`no_videos_found`) or not from a supported platform (`unsupported_url`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1420,7 +1890,9 @@
                         "request_body_required",
                         "invalid_schema",
                         "input_too_large",
-                        "video_too_long"
+                        "video_too_long",
+                        "no_videos_found",
+                        "unsupported_url"
                       ]
                     },
                     "message": {
@@ -1434,8 +1906,14 @@
           "402": {
             "$ref": "#/components/responses/PaymentRequired"
           },
+          "403": {
+            "$ref": "#/components/responses/ContentRestricted"
+          },
+          "451": {
+            "$ref": "#/components/responses/GeoRestricted"
+          },
           "404": {
-            "description": "Video or transcript not found. Returned when no transcript is available and auto-transcription is disabled or not supported (YouTube).",
+            "description": "`transcript_not_available`: the video has no transcript and auto-transcription is disabled or not supported (YouTube). `video_unavailable` / `video_not_yet_available`: the video is gone or not published yet. `transcript_unavailable` / `metadata_fetch_failed`: we could not reach the video after our retries (may be temporary).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1450,9 +1928,11 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "video_not_found",
                         "video_unavailable",
-                        "transcript_not_available"
+                        "video_not_yet_available",
+                        "transcript_not_available",
+                        "transcript_unavailable",
+                        "metadata_fetch_failed"
                       ]
                     },
                     "message": {
@@ -2735,7 +3215,7 @@
                           "type": "string",
                           "format": "uri",
                           "description": "Short-lived signed storage URL with the file bytes. Valid for ~1 hour.",
-                          "example": "https://storage.googleapis.com/bucket/path/to/file?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Signature=..."
+                          "example": "https://storage.example.com/path/to/file?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=..."
                         }
                       }
                     }
@@ -3116,7 +3596,7 @@
                   "video_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "URL of the video to transcribe. For Instagram carousel posts, append ?img_index=N to select a specific video.",
+                    "description": "URL of the video to transcribe. For Instagram carousel posts and Snapchat highlights, append ?img_index=N to select a specific video.",
                     "example": "https://www.youtube.com/watch?v=long-podcast"
                   },
                   "transcript_text": {
@@ -3127,7 +3607,7 @@
                   "all_videos": {
                     "type": "boolean",
                     "default": false,
-                    "description": "For Instagram carousel posts only. When true, transcribes ALL videos in the post."
+                    "description": "For Instagram carousel posts and Snapchat highlights only. When true, transcribes ALL videos in the post."
                   },
                   "webhook_url": {
                     "type": "string",
@@ -4764,7 +5244,7 @@
             "type": "string",
             "format": "uri",
             "description": "Short-lived signed storage URL pointing directly at the file bytes. Same model as AWS S3 / CloudFront pre-signed URLs: time-limited and resource-scoped.",
-            "example": "https://storage.googleapis.com/bucket/path/to/file?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Signature=..."
+            "example": "https://storage.example.com/path/to/file?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=..."
           },
           "namespace_ids": {
             "type": "array",
@@ -5041,7 +5521,7 @@
             "format": "uri",
             "nullable": true,
             "description": "Short-lived (~1 hour) signed storage URL with the full scrape result as a single JSON file. Same model as AWS S3 / CloudFront pre-signed URLs: time-limited and resource-scoped, so it can be used from browsers, no-code tools, or any HTTP client without forwarding header auth. Set once the task completes, when the full result was archived; otherwise null, and clients should paginate instead. Call GET /tiktok/profile/{task_id} again at any time to mint a fresh URL.",
-            "example": "https://storage.googleapis.com/bucket/api/tiktok_profiles/user/task.json?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Signature=..."
+            "example": "https://storage.example.com/api/tiktok_profiles/user/task.json?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=..."
           },
           "error_message": {
             "type": "string",
@@ -5200,11 +5680,16 @@
           "query": {
             "type": "string"
           },
+          "country": {
+            "type": "string",
+            "example": "gb",
+            "description": "Country whose TikTok results the search returned."
+          },
           "parallel_search_slices": {
             "type": "integer",
             "minimum": 1,
             "maximum": 4,
-            "description": "Slice count the task was created with. An N-slice request ran as N concurrent paginated TikTok query chains and was billed at up to ~Nx the residential pages of a single search."
+            "description": "Slice count the task was created with. An N-slice request ran as N concurrent paginated TikTok query chains and was billed at up to ~Nx the residential requests of a single search."
           },
           "filters": {
             "type": "object",
@@ -5251,6 +5736,10 @@
               "pages_fetched": {
                 "type": "integer"
               },
+              "videos_fetched": {
+                "type": "integer",
+                "description": "Distinct videos TikTok returned, including those your filters dropped. Billed at 1 `residential_request` per 30, minimum 1 per search."
+              },
               "results_count": {
                 "type": "integer"
               },
@@ -5278,6 +5767,26 @@
                   "last_6_months"
                 ],
                 "description": "Date window the search ran with. Shows the window chosen from `after_datetime` when `published_within` was omitted; `all` means no window."
+              },
+              "country": {
+                "type": "string",
+                "description": "Same as `country`."
+              },
+              "parallel_search_slices": {
+                "type": "integer",
+                "description": "Slice count the search actually ran with."
+              },
+              "items_examined": {
+                "type": "integer",
+                "description": "Only when filters were set: videos checked against `after_datetime`, `before_datetime` and the likes / views bounds."
+              },
+              "items_filtered_out": {
+                "type": "integer",
+                "description": "Only when filters were set: videos those filters dropped."
+              },
+              "items_deduplicated": {
+                "type": "integer",
+                "description": "Only with `parallel_search_slices` > 1: videos several slices returned, counted once."
               }
             }
           },
@@ -5295,7 +5804,7 @@
             "format": "uri",
             "nullable": true,
             "description": "Short-lived (~1 hour) signed storage URL with the full search result as a single JSON file (same shape as paginated `results` but unsliced). Same model as AWS S3 / CloudFront pre-signed URLs: time-limited and resource-scoped, so it can be used from browsers, no-code tools, or any HTTP client without forwarding header auth. Set once the task completes, when the full result was archived; otherwise null, and clients should paginate instead. Call GET /tiktok/search/{task_id} again at any time to mint a fresh URL.",
-            "example": "https://storage.googleapis.com/bucket/api/tiktok_searches/user/task.json?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Signature=..."
+            "example": "https://storage.example.com/api/tiktok_searches/user/task.json?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=..."
           },
           "error_message": {
             "type": "string",
@@ -5318,6 +5827,260 @@
             "format": "date-time",
             "nullable": true,
             "description": "When the task document and its download URL availability expire (~1 hour after creation)."
+          },
+          "error": {
+            "$ref": "#/components/schemas/AsyncJobError"
+          },
+          "webhook": {
+            "$ref": "#/components/schemas/AsyncJobWebhookStatus"
+          }
+        }
+      },
+      "TikTokLiveRoom": {
+        "type": "object",
+        "description": "A TikTok LIVE room that was broadcasting when the search ran. Shaped like a keyword search result (`id`, `author`, `stats`, `hashtags`).",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "LIVE room ID.",
+            "example": "7704440240265644830"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "example": "Ranked grind #fortnite"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "example": "https://www.tiktok.com/@creator/live"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the LIVE started (UTC, ISO 8601)."
+          },
+          "author": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "nullable": true
+              },
+              "unique_id": {
+                "type": "string",
+                "nullable": true,
+                "description": "Username, without @."
+              },
+              "nickname": {
+                "type": "string",
+                "nullable": true
+              },
+              "sec_uid": {
+                "type": "string",
+                "nullable": true
+              },
+              "followers": {
+                "type": "integer",
+                "nullable": true
+              },
+              "avatar_url": {
+                "type": "string",
+                "format": "uri",
+                "nullable": true
+              }
+            }
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "viewers": {
+                "type": "integer",
+                "nullable": true,
+                "description": "Viewers watching when the search ran."
+              },
+              "total_viewers": {
+                "type": "integer",
+                "nullable": true,
+                "description": "Viewers since the LIVE started."
+              },
+              "likes": {
+                "type": "integer",
+                "nullable": true
+              },
+              "comments": {
+                "type": "integer",
+                "nullable": true
+              },
+              "shares": {
+                "type": "integer",
+                "nullable": true
+              }
+            }
+          },
+          "hashtags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Hashtags written in the title, without `#`.",
+            "example": [
+              "fortnite"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "nullable": true,
+            "description": "The LIVE's category on TikTok.",
+            "example": "Gaming"
+          },
+          "game_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "Fortnite"
+            ]
+          },
+          "cover_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "stream_urls": {
+            "type": "object",
+            "description": "Playback URLs, omitted when `include_stream_urls` is `false`. They play while the LIVE is on, and stop when it ends.",
+            "properties": {
+              "default_quality": {
+                "type": "string",
+                "nullable": true,
+                "description": "The quality TikTok plays by default.",
+                "example": "hd"
+              },
+              "flv": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "description": "HTTP-FLV URLs keyed by quality: `origin`, `uhd`, `hd`, `sd`, `ld` (only those the LIVE offers).",
+                "example": {
+                  "hd": "https://pull-f5-tt01.tiktokcdn-us.com/game/stream-123_hd.flv?expire=1795089584&sign=..."
+                }
+              },
+              "hls": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "description": "HLS (`.m3u8`) URLs keyed by quality, when TikTok provides them. Can be empty.",
+                "example": {
+                  "hd": "https://pull-hls-f16-tt01.tiktokcdn-us.com/game/stream-123_hd/index.m3u8?expire=1795089584&sign=..."
+                }
+              },
+              "audio_only": {
+                "type": "string",
+                "format": "uri",
+                "nullable": true,
+                "description": "HTTP-FLV URL of the audio-only stream."
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true,
+                "description": "Expiry of the URL signatures. The LIVE ending stops them sooner."
+              }
+            }
+          }
+        }
+      },
+      "TikTokLiveSearchTask": {
+        "type": "object",
+        "description": "TikTok LIVE search task returned by GET /tiktok/live/search/{task_id}. `results` keep TikTok's ranking.",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "task_status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "completed",
+              "failed"
+            ]
+          },
+          "query": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string",
+            "example": "us"
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "pages_fetched": {
+                "type": "integer",
+                "description": "TikTok pages fetched (up to 50 rooms each)."
+              },
+              "rooms_fetched": {
+                "type": "integer",
+                "description": "Distinct rooms TikTok returned, including any past `max_results`. Billed at 1 `residential_request` per 30, minimum 1 per search."
+              },
+              "results_count": {
+                "type": "integer"
+              },
+              "has_more": {
+                "type": "boolean",
+                "description": "Whether TikTok had more rooms when the search stopped."
+              },
+              "country": {
+                "type": "string",
+                "description": "Same as `country`."
+              }
+            }
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TikTokLiveRoom"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/TikTokProfilePagination"
+          },
+          "download_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "description": "Short-lived (~1 hour) signed storage URL with the full search result as a single JSON file (same shape as paginated `results` but unsliced). Same model as AWS S3 / CloudFront pre-signed URLs: time-limited and resource-scoped, so it can be used from browsers, no-code tools, or any HTTP client without forwarding header auth. Set once the task completes, when the full result was archived; otherwise null, and clients should paginate instead. Call GET /tiktok/live/search/{task_id} again at any time to mint a fresh URL.",
+            "example": "https://storage.example.com/api/tiktok_live_searches/user/task.json?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=..."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the task document and its download URL availability expire (~1 hour after creation)."
+          },
+          "error_message": {
+            "type": "string",
+            "nullable": true,
+            "description": "Human-readable failure reason. **Deprecated** \u2014 kept for existing integrations; use the `error` object, which carries a code you can branch on.",
+            "deprecated": true
           },
           "error": {
             "$ref": "#/components/schemas/AsyncJobError"
@@ -5631,7 +6394,9 @@
               "tiktok_profile.completed",
               "tiktok_profile.failed",
               "tiktok_search.completed",
-              "tiktok_search.failed"
+              "tiktok_search.failed",
+              "tiktok_live_search.completed",
+              "tiktok_live_search.failed"
             ]
           },
           "created_at": {
@@ -5820,7 +6585,7 @@
         }
       },
       "VideoNotFound": {
-        "description": "Video not found or transcript unavailable",
+        "description": "The video is gone (`video_unavailable`) or not published yet (`video_not_yet_available`), it has no transcript (`transcript_not_available`), or we could not reach it after our retries (`metadata_fetch_failed`, `transcript_unavailable` \u2014 may be temporary).",
         "content": {
           "application/json": {
             "schema": {
@@ -5835,9 +6600,11 @@
                 "error": {
                   "type": "string",
                   "enum": [
-                    "video_not_found",
                     "video_unavailable",
-                    "transcript_not_available"
+                    "video_not_yet_available",
+                    "transcript_not_available",
+                    "transcript_unavailable",
+                    "metadata_fetch_failed"
                   ]
                 },
                 "message": {
@@ -6064,7 +6831,7 @@
     },
     {
       "name": "TikTok",
-      "description": "Scrape TikTok profile metadata and per-video stats"
+      "description": "Scrape TikTok profiles, and search TikTok videos and LIVE rooms by keyword"
     },
     {
       "name": "Files",

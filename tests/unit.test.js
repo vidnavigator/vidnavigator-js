@@ -324,6 +324,75 @@ try {
   assert(failedProfile.videos.length === 0, 'TikTokProfileTask failed has empty videos');
 }
 
+// --- TikTok keyword search: country and billing stats ---
+{
+  const sub = sdk.TikTokSearchSubmission.fromJSON({ task_id: 's1', task_status: 'processing', query: 'football', country: 'fr' });
+  assert(sub.country === 'fr', 'TikTokSearchSubmission.country');
+  const task = sdk.TikTokSearchTask.fromJSON({
+    task_id: 's1', task_status: 'completed', query: 'football', country: 'fr',
+    stats: { pages_fetched: '2', videos_fetched: '58', results_count: 41, country: 'fr', parallel_search_slices: '2',
+             items_examined: 58, items_filtered_out: '17', items_deduplicated: 3 },
+  });
+  assert(task.country === 'fr' && task.stats.country === 'fr', 'TikTokSearchTask.country and stats.country');
+  assert(task.stats.videos_fetched === 58 && task.stats.parallel_search_slices === 2, 'TikTokSearchTask.stats.videos_fetched / parallel_search_slices integers');
+  assert(task.stats.items_examined === 58 && task.stats.items_filtered_out === 17 && task.stats.items_deduplicated === 3, 'TikTokSearchTask.stats.items_* integers');
+  const bare = sdk.TikTokSearchTask.fromJSON({ task_id: 's2', task_status: 'completed', stats: { pages_fetched: 1, results_count: 0 } });
+  assert(!('items_examined' in bare.stats) && !('country' in bare.stats), 'TikTokSearchTask.stats leaves out fields the API did not send');
+}
+
+// --- TikTok LIVE search models ---
+{
+  const sub = sdk.TikTokLiveSearchSubmission.fromJSON({
+    task_id: 'l1', task_status: 'processing', query: 'gaming', country: 'us', max_results: '0',
+    include_stream_urls: true, check_status_url: '/v1/tiktok/live/search/l1', webhook_url: null,
+  });
+  assert(sub instanceof sdk.TikTokLiveSearchSubmission, 'TikTokLiveSearchSubmission instance');
+  assert(sub.country === 'us' && sub.max_results === 0 && sub.include_stream_urls === true, 'TikTokLiveSearchSubmission fields');
+
+  const room = {
+    id: '7704440240265644830',
+    title: 'Ranked grind #fortnite #FYP',
+    url: 'https://www.tiktok.com/@creator/live',
+    started_at: '2026-11-04T22:04:46Z',
+    author: { id: '6628548115959152646', unique_id: 'creator', nickname: 'Creator', sec_uid: 'MS4wLjABAAAA', followers: 576168.0, avatar_url: 'https://p16.example/a.webp' },
+    stats: { viewers: 1296, total_viewers: 232347, likes: 301154, comments: null, shares: 360 },
+    hashtags: ['fortnite', 'FYP'],
+    category: 'Gaming',
+    game_tags: ['Fortnite'],
+    cover_url: 'https://p19.example/cover.webp',
+    stream_urls: {
+      default_quality: 'hd',
+      flv: { hd: 'https://pull-f5.example/stream_hd.flv?expire=1795089584' },
+      hls: { hd: 'https://pull-hls.example/stream_hd/index.m3u8?expire=1795089584' },
+      audio_only: 'https://pull-f5.example/stream.flv?expire=1795089584&only_audio=1',
+      expires_at: '2026-11-19T11:59:44Z',
+    },
+  };
+  const task = sdk.TikTokLiveSearchTask.fromJSON({
+    task_id: 'l1', task_status: 'completed', query: 'gaming', country: 'us',
+    stats: { pages_fetched: '1', rooms_fetched: '44', results_count: 44, has_more: false, country: 'us' },
+    results: [room, { id: '2', title: 'No streams' }],
+    pagination: { limit: 50, offset: 0, total_items: 2, has_next: false, has_prev: false },
+    webhook: null,
+  });
+  assert(task instanceof sdk.TikTokLiveSearchTask && task.country === 'us', 'TikTokLiveSearchTask instance');
+  assert(task.stats.rooms_fetched === 44 && task.stats.pages_fetched === 1 && task.stats.has_more === false, 'TikTokLiveSearchTask.stats');
+  const r = task.results[0];
+  assert(r instanceof sdk.TikTokLiveRoom, 'TikTokLiveSearchTask.results parsed as TikTokLiveRoom');
+  assert(r.started_at instanceof Date && r.started_at.toISOString() === '2026-11-04T22:04:46.000Z', 'TikTokLiveRoom.started_at Date');
+  assert(r.author.sec_uid === 'MS4wLjABAAAA' && r.author.followers === 576168, 'TikTokLiveRoom.author');
+  assert(r.stats.viewers === 1296 && r.stats.comments === null, 'TikTokLiveRoom.stats');
+  assert(r.hashtags.join(',') === 'fortnite,FYP' && r.category === 'Gaming' && r.game_tags[0] === 'Fortnite', 'TikTokLiveRoom hashtags / category / game_tags');
+  assert(r.stream_urls.default_quality === 'hd' && r.stream_urls.flv.hd.includes('_hd.flv'), 'TikTokLiveRoom.stream_urls.flv');
+  assert(r.stream_urls.hls.hd.includes('.m3u8') && r.stream_urls.audio_only.includes('only_audio=1'), 'TikTokLiveRoom.stream_urls.hls / audio_only');
+  assert(r.stream_urls.expires_at instanceof Date && r.stream_urls.expires_at.toISOString() === '2026-11-19T11:59:44.000Z', 'TikTokLiveRoom.stream_urls.expires_at Date');
+  const bare = task.results[1];
+  assert(bare.stream_urls === undefined && bare.hashtags.length === 0 && bare.game_tags.length === 0, 'TikTokLiveRoom without stream_urls / tags');
+  assert(task.webhook === null && task.error === null, 'TikTokLiveSearchTask webhook / error');
+  const noHls = sdk.TikTokLiveRoom.fromJSON({ id: '3', stream_urls: { default_quality: 'hd', flv: { hd: 'https://x/a.flv' } } });
+  assert(Object.keys(noHls.stream_urls.hls).length === 0 && noHls.stream_urls.audio_only === null && noHls.stream_urls.expires_at === null, 'TikTokLiveRoom stream_urls defaults');
+}
+
 // --- Async job models ---
 {
   const accepted = sdk.AsyncJobAccepted.fromJSON({
@@ -509,6 +578,7 @@ try {
     'extractVideoData', 'extractFileData',
     'submitTikTokProfileScrape', 'getTikTokProfileScrape',
     'submitTikTokSearch', 'getTikTokSearch',
+    'submitTikTokLiveSearch', 'getTikTokLiveSearch',
     'getTranscript', 'searchYouTube',
     'searchVideos', 'searchFiles',
     'getUsage', 'healthCheck',
@@ -520,7 +590,7 @@ try {
     );
   }
   const instance = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
-  for (const op of ['transcribe', 'extractVideo', 'tweetStatement', 'tiktokProfile', 'tiktokSearch']) {
+  for (const op of ['transcribe', 'extractVideo', 'tweetStatement', 'tiktokProfile', 'tiktokSearch', 'tiktokLiveSearch']) {
     assert(typeof instance[op] === 'function', `client.${op} is callable (blocking)`);
     assert(typeof instance[op].submit === 'function', `client.${op}.submit exists (non-blocking)`);
     assert(typeof instance[op].resume === 'function', `client.${op}.resume exists`);
@@ -909,6 +979,7 @@ function makeFakeApi(client) {
     '/tweet/statement/async': 'tweet_statement',
     '/tiktok/profile': 'tiktok_profile',
     '/tiktok/search': 'tiktok_search',
+    '/tiktok/live/search': 'tiktok_live_search',
   };
 
   client.request = async (method, url, data, params, extraHeaders) => {
@@ -923,7 +994,10 @@ function makeFakeApi(client) {
       const webhook_url = data && typeof data.webhook_url === 'string' && data.webhook_url ? data.webhook_url : null;
       const base = { task_id, task_status: 'processing', check_status_url: `/v1${url.replace('/async', '')}/${task_id}`, webhook_url };
       if (job_type === 'tiktok_profile') return { status: 'success', data: { ...base, profile_url: data.profile_url } };
-      if (job_type === 'tiktok_search') return { status: 'success', data: { ...base, query: data.query } };
+      if (job_type === 'tiktok_search') return { status: 'success', data: { ...base, query: data.query, country: data.country || 'gb' } };
+      if (job_type === 'tiktok_live_search') {
+        return { status: 'success', data: { ...base, query: data.query, country: data.country || 'us', include_stream_urls: data.include_stream_urls !== false } };
+      }
       return { status: 'success', data: { ...base, job_type } };
     }
 
@@ -1162,6 +1236,36 @@ async function runOperationTests() {
   const bareSearch = await client.tiktokSearch('cats', FAST);
   assert(api.calls.filter((c) => c.url === '/tiktok/search').pop().data.query === 'cats', 'tiktokSearch(query) sends query');
   assert(bareSearch.results[0] instanceof sdk.TikTokSearchResult, 'tiktokSearch results parsed');
+
+  // ── tiktokLiveSearch ──
+  const room = (id) => ({ id, url: `https://www.tiktok.com/@u${id}/live`, stats: { viewers: 10 },
+    stream_urls: { default_quality: 'hd', flv: { hd: `https://x/${id}_hd.flv` }, hls: {}, audio_only: null, expires_at: null } });
+  api.plan([{ task_status: 'processing', pages: [[room('a')], [room('b')]] }, { task_status: 'completed', pages: [[room('a')], [room('b')]], country: 'gb' }]);
+  const live = await client.tiktokLiveSearch({ query: 'music', country: 'gb', max_results: 20 }, { ...FAST, include_usage: true });
+  const liveSubmit = api.calls.filter((c) => c.url === '/tiktok/live/search').pop();
+  assert(liveSubmit.method === 'POST' && liveSubmit.data.country === 'gb' && liveSubmit.data.max_results === 20, 'tiktokLiveSearch passes options through');
+  assert(!('include_stream_urls' in liveSubmit.data), 'tiktokLiveSearch leaves include_stream_urls to the API default');
+  assert(live instanceof sdk.TikTokLiveSearchTask && live.results.map((x) => x.id).join('') === 'ab', 'tiktokLiveSearch collects rooms from every page');
+  assert(live.results[0] instanceof sdk.TikTokLiveRoom && live.results[0].stream_urls.flv.hd === 'https://x/a_hd.flv', 'tiktokLiveSearch rooms parsed');
+  assert(live.usage instanceof sdk.UsageBlock, 'tiktokLiveSearch result.usage');
+  const livePolls = api.calls.filter((c) => c.method === 'GET' && c.url.startsWith('/tiktok/live/search/'));
+  assert(livePolls.length > 0 && livePolls.every((c) => c.url.startsWith('/tiktok/live/search/tiktok_live_search-')), 'tiktokLiveSearch polls /tiktok/live/search/{task_id}');
+
+  api.plan([{ task_status: 'completed', pages: [[room('z')]] }]);
+  const liveJob = await client.tiktokLiveSearch.submit({ query: 'gaming', include_stream_urls: false, webhook_url: 'https://example.com/hook' });
+  assert(liveJob.job_type === 'tiktok_live_search' && liveJob.webhook_url === 'https://example.com/hook', 'tiktokLiveSearch.submit returns a Job with webhook_url');
+  assert(api.calls.filter((c) => c.url === '/tiktok/live/search').pop().data.include_stream_urls === false, 'tiktokLiveSearch sends include_stream_urls: false');
+  assert((await client.tiktokLiveSearch.resume(liveJob.task_id).result(FAST)).results[0].id === 'z', 'tiktokLiveSearch.resume(task_id).result()');
+
+  api.plan([{ task_status: 'completed', pages: [[room('q')]] }]);
+  await client.tiktokLiveSearch('cooking', FAST);
+  assert(api.calls.filter((c) => c.url === '/tiktok/live/search').pop().data.query === 'cooking', 'tiktokLiveSearch(query) sends query');
+
+  // ── tiktokSearch country ──
+  api.plan([{ task_status: 'completed', pages: [[result('fr1')]], country: 'fr' }]);
+  const frSearch = await client.tiktokSearch({ query: 'football', country: 'fr' }, FAST);
+  assert(api.calls.filter((c) => c.url === '/tiktok/search').pop().data.country === 'fr', 'tiktokSearch passes country through');
+  assert(frSearch.country === 'fr', 'tiktokSearch result.country');
 }
 
 async function runPollingTests() {

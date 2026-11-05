@@ -13,9 +13,11 @@ export type WebhookEventType =
   | 'tiktok_profile.completed'
   | 'tiktok_profile.failed'
   | 'tiktok_search.completed'
-  | 'tiktok_search.failed';
+  | 'tiktok_search.failed'
+  | 'tiktok_live_search.completed'
+  | 'tiktok_live_search.failed';
 
-/** `data.result` of a `tiktok_profile.*` / `tiktok_search.*` event: a summary, not the videos. */
+/** `data.result` of a `tiktok_profile.*` / `tiktok_search.*` / `tiktok_live_search.*` event: a summary, not the items. */
 export interface TikTokWebhookResult {
   /** Same fields as the task's `stats` (e.g. `videos_matched`, or `results_count` / `sort_by` for searches). */
   stats?: Record<string, unknown>;

@@ -48,6 +48,11 @@ export interface TikTokSearchRequest {
   min_views?: number;
   max_views?: number;
   /**
+   * Two-letter country code (`'fr'`, `'de'`, `'jp'`, ...) whose TikTok results you get. Default `'gb'`.
+   * `'us'` is refused: TikTok asks US visitors to log in. The API lists the accepted codes.
+   */
+  country?: string;
+  /**
    * Where to POST a notification when the task finishes. Overrides the account-level default
    * configured in Studio → API; pass an empty string to opt this task out of that default.
    * Must be a publicly reachable https URL. The event's `data.result` is a summary (`stats`, `download_url_available`);
@@ -110,13 +115,24 @@ function normalizeStats(stats: TikTokProfileStats | undefined): TikTokProfileSta
 
 function normalizeSearchStats(stats: TikTokSearchStats | undefined): TikTokSearchStats | undefined {
   if (!stats) return undefined;
-  return {
+  const normalized: TikTokSearchStats = {
     pages_fetched: toOptionalInteger(stats.pages_fetched),
+    videos_fetched: toOptionalInteger(stats.videos_fetched),
     results_count: toOptionalInteger(stats.results_count),
     next_search_cursor: toInteger(stats.next_search_cursor),
+    parallel_search_slices: toOptionalInteger(stats.parallel_search_slices),
     sort_by: stats.sort_by,
     published_within: stats.published_within,
+    country: stats.country,
+    items_examined: toOptionalInteger(stats.items_examined),
+    items_filtered_out: toOptionalInteger(stats.items_filtered_out),
+    items_deduplicated: toOptionalInteger(stats.items_deduplicated),
   };
+  // Leave out what the API did not send (the items_* counters are conditional).
+  for (const key of Object.keys(normalized) as Array<keyof TikTokSearchStats>) {
+    if (normalized[key] === undefined) delete normalized[key];
+  }
+  return normalized;
 }
 
 function normalizePagination(
@@ -173,6 +189,7 @@ export interface TikTokSearchSubmissionJSON {
   task_id: string;
   task_status: 'processing';
   query: string;
+  country?: string;
   max_results?: number;
   parallel_search_slices?: number;
   filters?: Record<string, unknown>;
@@ -186,6 +203,8 @@ export class TikTokSearchSubmission {
   task_id: string;
   task_status: 'processing';
   query: string;
+  /** Country whose TikTok results the search returns. */
+  country?: string;
   max_results?: number;
   parallel_search_slices?: number;
   filters?: Record<string, unknown>;
@@ -199,6 +218,7 @@ export class TikTokSearchSubmission {
     this.task_id = data.task_id;
     this.task_status = data.task_status;
     this.query = data.query;
+    this.country = data.country;
     this.max_results = toOptionalInteger(data.max_results);
     this.parallel_search_slices = toOptionalInteger(data.parallel_search_slices);
     this.filters = data.filters;
@@ -386,12 +406,27 @@ export interface TikTokSearchFilters {
 
 export interface TikTokSearchStats {
   pages_fetched?: number;
+  /**
+   * Distinct videos TikTok returned, including those your filters dropped. Billed at
+   * 1 `residential_request` per 30, minimum 1 per search.
+   */
+  videos_fetched?: number;
   results_count?: number;
   next_search_cursor?: number | null;
+  /** Slice count the search actually ran with. */
+  parallel_search_slices?: number;
   /** Sort order the search ran with (`relevance` when `sort_by` was omitted). */
   sort_by?: TikTokSearchSortBy;
   /** Date window the search ran with; `all` means no window. */
   published_within?: TikTokPublishedWithin;
+  /** Country whose TikTok results the search returned. */
+  country?: string;
+  /** Only when filters were set: videos checked against them. */
+  items_examined?: number;
+  /** Only when filters were set: videos they dropped. */
+  items_filtered_out?: number;
+  /** Only with `parallel_search_slices` > 1: videos several slices returned, counted once. */
+  items_deduplicated?: number;
 }
 
 export interface TikTokProfileTaskJSON {
@@ -461,6 +496,7 @@ export interface TikTokSearchTaskJSON {
   task_id: string;
   task_status: 'processing' | 'completed' | 'failed';
   query?: string;
+  country?: string;
   parallel_search_slices?: number;
   filters?: TikTokSearchFilters;
   stats?: TikTokSearchStats;
@@ -479,6 +515,8 @@ export class TikTokSearchTask {
   task_id: string;
   task_status: 'processing' | 'completed' | 'failed';
   query?: string;
+  /** Country whose TikTok results the search returned (`gb` by default). */
+  country?: string;
   parallel_search_slices?: number;
   filters?: TikTokSearchFilters;
   stats?: TikTokSearchStats;
@@ -501,6 +539,7 @@ export class TikTokSearchTask {
     this.task_id = data.task_id;
     this.task_status = data.task_status;
     this.query = data.query;
+    this.country = data.country;
     this.parallel_search_slices = toOptionalInteger(data.parallel_search_slices);
     this.filters = normalizeSearchFilters(data.filters);
     this.stats = normalizeSearchStats(data.stats);
@@ -517,5 +556,267 @@ export class TikTokSearchTask {
 
   static fromJSON(json: TikTokSearchTaskJSON): TikTokSearchTask {
     return new TikTokSearchTask(json);
+  }
+}
+
+// --- LIVE search ---
+
+export interface TikTokLiveSearchRequest {
+  query: string;
+  /** Cap on rooms. `0` or omitted means as many as TikTok serves, about 50 per keyword. */
+  max_results?: number;
+  /** Two-letter country code whose LIVE rooms you get. Default `'us'`. The API lists the accepted codes. */
+  country?: string;
+  /**
+   * The API returns each room's playback URLs by default (FLV and HLS by quality, plus an
+   * audio-only stream). Pass `false` to leave them out.
+   */
+  include_stream_urls?: boolean;
+  /**
+   * Where to POST a notification when the task finishes. Overrides the account-level default
+   * configured in Studio → API; pass an empty string to opt this task out of that default.
+   * The event's `data.result` is a summary; read the rooms with `vn.tiktokLiveSearch.resume(task_id).result()`.
+   */
+  webhook_url?: string;
+}
+
+export interface TikTokLiveSearchSubmissionJSON {
+  task_id: string;
+  task_status: 'processing';
+  query: string;
+  country?: string;
+  max_results?: number;
+  include_stream_urls?: boolean;
+  expires_at?: string;
+  check_status_url?: string;
+  message?: string;
+  webhook_url?: string | null;
+}
+
+export class TikTokLiveSearchSubmission {
+  task_id: string;
+  task_status: 'processing';
+  query: string;
+  country?: string;
+  max_results?: number;
+  include_stream_urls?: boolean;
+  expires_at?: string;
+  check_status_url?: string;
+  message?: string;
+  /** The URL this task's result notification will be POSTed to, or `null`. */
+  webhook_url?: string | null;
+
+  constructor(data: TikTokLiveSearchSubmissionJSON) {
+    this.task_id = data.task_id;
+    this.task_status = data.task_status;
+    this.query = data.query;
+    this.country = data.country;
+    this.max_results = toOptionalInteger(data.max_results);
+    this.include_stream_urls = data.include_stream_urls;
+    this.expires_at = data.expires_at;
+    this.check_status_url = data.check_status_url;
+    this.message = data.message;
+    this.webhook_url = data.webhook_url;
+  }
+
+  static fromJSON(json: TikTokLiveSearchSubmissionJSON): TikTokLiveSearchSubmission {
+    return new TikTokLiveSearchSubmission(json);
+  }
+}
+
+export interface TikTokLiveAuthor {
+  id?: string | null;
+  /** Username, without @. */
+  unique_id?: string | null;
+  nickname?: string | null;
+  sec_uid?: string | null;
+  followers?: number | null;
+  avatar_url?: string | null;
+}
+
+export interface TikTokLiveStats {
+  /** Watching when the search ran. */
+  viewers?: number | null;
+  /** Since the LIVE started. */
+  total_viewers?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+}
+
+/** Quality keys of the playback URLs: those the LIVE offers, best first. */
+export type TikTokLiveQuality = 'origin' | 'uhd' | 'hd' | 'sd' | 'ld' | (string & {});
+
+export interface TikTokLiveStreamUrlsJSON {
+  default_quality?: TikTokLiveQuality | null;
+  flv?: Record<string, string>;
+  hls?: Record<string, string>;
+  audio_only?: string | null;
+  expires_at?: string | null;
+}
+
+/** Playback URLs of a LIVE room. They stop working when the LIVE ends. */
+export interface TikTokLiveStreamUrls {
+  /** The quality TikTok plays by default (a key of `flv`). */
+  default_quality: TikTokLiveQuality | null;
+  /** HTTP-FLV URLs keyed by quality. */
+  flv: Record<string, string>;
+  /** HLS (`.m3u8`) URLs keyed by quality, when TikTok provides them. Can be empty. */
+  hls: Record<string, string>;
+  /** HTTP-FLV URL of the audio-only stream. */
+  audio_only: string | null;
+  /** Expiry of the URL signatures. */
+  expires_at: Date | null;
+}
+
+export interface TikTokLiveRoomJSON {
+  id?: string | null;
+  title?: string | null;
+  url?: string | null;
+  started_at?: string | null;
+  author?: TikTokLiveAuthor;
+  stats?: TikTokLiveStats;
+  hashtags?: string[];
+  category?: string | null;
+  game_tags?: string[];
+  cover_url?: string | null;
+  stream_urls?: TikTokLiveStreamUrlsJSON;
+}
+
+/** A TikTok LIVE room that was broadcasting when the search ran. */
+export class TikTokLiveRoom {
+  id?: string | null;
+  title?: string | null;
+  /** `https://www.tiktok.com/@username/live` */
+  url?: string | null;
+  started_at?: Date | null;
+  author?: TikTokLiveAuthor;
+  stats?: TikTokLiveStats;
+  /** `#tags` written in the title, without `#`. */
+  hashtags: string[];
+  /** The LIVE's category on TikTok, e.g. `'Gaming'`. */
+  category?: string | null;
+  game_tags: string[];
+  cover_url?: string | null;
+  /** Absent when the search was submitted with `include_stream_urls: false`. */
+  stream_urls?: TikTokLiveStreamUrls;
+
+  constructor(data: TikTokLiveRoomJSON) {
+    this.id = data.id;
+    this.title = data.title;
+    this.url = data.url;
+    this.started_at = toNullableDate(data.started_at);
+    this.author = data.author
+      ? { ...data.author, followers: toInteger(data.author.followers) }
+      : undefined;
+    this.stats = data.stats
+      ? {
+          viewers: toInteger(data.stats.viewers),
+          total_viewers: toInteger(data.stats.total_viewers),
+          likes: toInteger(data.stats.likes),
+          comments: toInteger(data.stats.comments),
+          shares: toInteger(data.stats.shares),
+        }
+      : undefined;
+    this.hashtags = data.hashtags ?? [];
+    this.category = data.category;
+    this.game_tags = data.game_tags ?? [];
+    this.cover_url = data.cover_url;
+    if (data.stream_urls) {
+      this.stream_urls = {
+        default_quality: data.stream_urls.default_quality ?? null,
+        flv: data.stream_urls.flv ?? {},
+        hls: data.stream_urls.hls ?? {},
+        audio_only: data.stream_urls.audio_only ?? null,
+        expires_at: toNullableDate(data.stream_urls.expires_at) ?? null,
+      };
+    }
+  }
+
+  static fromJSON(json: TikTokLiveRoomJSON): TikTokLiveRoom {
+    return new TikTokLiveRoom(json);
+  }
+}
+
+export interface TikTokLiveSearchStats {
+  /** TikTok pages fetched (up to 50 rooms each). */
+  pages_fetched?: number;
+  /**
+   * Distinct rooms TikTok returned, including any past `max_results`. Billed at
+   * 1 `residential_request` per 30, minimum 1 per search.
+   */
+  rooms_fetched?: number;
+  results_count?: number;
+  /** Whether TikTok had more rooms when the search stopped. */
+  has_more?: boolean;
+  country?: string;
+}
+
+export interface TikTokLiveSearchTaskJSON {
+  task_id: string;
+  task_status: 'processing' | 'completed' | 'failed';
+  query?: string;
+  country?: string;
+  stats?: TikTokLiveSearchStats;
+  results?: TikTokLiveRoomJSON[];
+  pagination?: TikTokProfilePagination;
+  download_url?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  completed_at?: string | null;
+  expires_at?: string | null;
+  error?: AsyncJobError | null;
+  webhook?: AsyncJobWebhookStatus | null;
+}
+
+export class TikTokLiveSearchTask {
+  task_id: string;
+  task_status: 'processing' | 'completed' | 'failed';
+  query?: string;
+  /** Country whose LIVE rooms the search returned (`us` by default). */
+  country?: string;
+  stats?: TikTokLiveSearchStats;
+  /** Rooms in TikTok's ranking. */
+  results: TikTokLiveRoom[];
+  pagination?: TikTokProfilePagination;
+  download_url?: string | null;
+  /** @deprecated Use `error`, which carries a machine-readable code. */
+  error_message?: string | null;
+  created_at?: string | null;
+  completed_at?: string | null;
+  expires_at?: string | null;
+  /** Present when `task_status === 'failed'`: error code, message and HTTP status. */
+  error: AsyncJobError | null;
+  /** Webhook delivery state, or `null` when no webhook was configured. */
+  webhook?: AsyncJobWebhookStatus | null;
+  /** Per-call usage, populated only when polled with `include_usage=true` and `task_status=completed`. */
+  usage?: UsageBlock;
+
+  constructor(data: TikTokLiveSearchTaskJSON) {
+    this.task_id = data.task_id;
+    this.task_status = data.task_status;
+    this.query = data.query;
+    this.country = data.country;
+    this.stats = data.stats
+      ? {
+          ...data.stats,
+          pages_fetched: toOptionalInteger(data.stats.pages_fetched),
+          rooms_fetched: toOptionalInteger(data.stats.rooms_fetched),
+          results_count: toOptionalInteger(data.stats.results_count),
+        }
+      : undefined;
+    this.results = data.results?.map(TikTokLiveRoom.fromJSON) ?? [];
+    this.pagination = normalizePagination(data.pagination);
+    this.download_url = data.download_url;
+    this.error_message = data.error_message;
+    this.created_at = data.created_at;
+    this.completed_at = data.completed_at;
+    this.expires_at = data.expires_at;
+    this.error = data.error ?? null;
+    this.webhook = data.webhook;
+  }
+
+  static fromJSON(json: TikTokLiveSearchTaskJSON): TikTokLiveSearchTask {
+    return new TikTokLiveSearchTask(json);
   }
 }

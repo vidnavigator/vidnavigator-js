@@ -38,6 +38,11 @@ import {
   TikTokSearchSubmissionJSON,
   TikTokSearchTask,
   TikTokSearchTaskJSON,
+  TikTokLiveSearchRequest,
+  TikTokLiveSearchSubmission,
+  TikTokLiveSearchSubmissionJSON,
+  TikTokLiveSearchTask,
+  TikTokLiveSearchTaskJSON,
   TweetStatement,
   AsyncJob,
   AsyncJobJSON,
@@ -56,7 +61,7 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '2.1.0';
+export const SDK_VERSION = '2.2.0';
 
 //region --- Interfaces ---
 export interface SDKConfig {
@@ -172,6 +177,8 @@ export type TweetStatementJob = Job<TweetStatementAsyncJob, TweetStatement>;
 export type TikTokProfileJob = Job<TikTokProfileTask, TikTokProfileTask>;
 /** `result()` resolves to the completed task with **all** pages of `results` collected. */
 export type TikTokSearchJob = Job<TikTokSearchTask, TikTokSearchTask>;
+/** `result()` resolves to the completed task with **all** pages of rooms collected. */
+export type TikTokLiveSearchJob = Job<TikTokLiveSearchTask, TikTokLiveSearchTask>;
 
 export type UploadFileSuccessResult = {
   status: 'success';
@@ -438,6 +445,13 @@ export class VidNavigatorClient {
    */
   readonly tiktokSearch: JobOperation<string | TikTokSearchRequest, TikTokSearchTask, TikTokSearchTask>;
 
+  /**
+   * TikTok LIVE search, built on `POST /tiktok/live/search`: rooms broadcasting now for a keyword,
+   * with their FLV / HLS / audio-only stream URLs. The result is the completed task with every
+   * page of `results` collected. Same shapes as {@link VidNavigatorClient.transcribe}.
+   */
+  readonly tiktokLiveSearch: JobOperation<string | TikTokLiveSearchRequest, TikTokLiveSearchTask, TikTokLiveSearchTask>;
+
   constructor(config: SDKConfig) {
     if (!config?.apiKey) {
       throw new Error('An API key is required to use the VidNavigator SDK.');
@@ -515,6 +529,22 @@ export class VidNavigatorClient {
       toResult: (task, options) =>
         collectAllPages(
           (query) => this.getTikTokSearch(task.task_id, query),
+          (page) => page.results,
+          (page, all) => { page.results = all; },
+          options.include_usage
+        ),
+    });
+
+    this.tiktokLiveSearch = this.defineOperation({
+      jobType: 'tiktok_live_search',
+      submit: async (input: string | TikTokLiveSearchRequest) => {
+        const sub = await this.submitTikTokLiveSearch(typeof input === 'string' ? { query: input } : input);
+        return { ...sub, job_type: 'tiktok_live_search' };
+      },
+      fetchTask: (task_id) => this.getTikTokLiveSearch(task_id, { limit: 1 }),
+      toResult: (task, options) =>
+        collectAllPages(
+          (query) => this.getTikTokLiveSearch(task.task_id, query),
           (page) => page.results,
           (page, all) => { page.results = all; },
           options.include_usage
@@ -606,7 +636,7 @@ export class VidNavigatorClient {
   //region --- Transcripts ---
   /**
    * Get a transcript for any supported video. The endpoint auto-detects the
-   * platform (YouTube, Vimeo, X/Twitter, TikTok, Facebook, Dailymotion, Loom, etc.)
+   * platform (YouTube, Vimeo, X/Twitter, TikTok, Facebook, Dailymotion, Loom, Snapchat, etc.)
    * from `video_url`. For Instagram, use {@link VidNavigatorClient.transcribeVideo}.
    */
   async getTranscript(payload: TranscriptRequestPayload): Promise<TranscriptResult> {
@@ -694,6 +724,30 @@ export class VidNavigatorClient {
       buildTikTokPollParams(query)
     );
     const task = TikTokSearchTask.fromJSON(response.data);
+    if (response.usage) task.usage = UsageBlock.fromJSON(response.usage);
+    return task;
+  }
+
+  async submitTikTokLiveSearch(payload: TikTokLiveSearchRequest): Promise<TikTokLiveSearchSubmission> {
+    const response = await this.request<ApiSuccessResponse<TikTokLiveSearchSubmissionJSON>>(
+      'POST',
+      '/tiktok/live/search',
+      payload
+    );
+    return TikTokLiveSearchSubmission.fromJSON(response.data);
+  }
+
+  async getTikTokLiveSearch(
+    task_id: string,
+    query?: { cursor?: string; limit?: number; include_usage?: boolean }
+  ): Promise<TikTokLiveSearchTask> {
+    const response = await this.request<ApiSuccessResponse<TikTokLiveSearchTaskJSON>>(
+      'GET',
+      `/tiktok/live/search/${task_id}`,
+      undefined,
+      buildTikTokPollParams(query)
+    );
+    const task = TikTokLiveSearchTask.fromJSON(response.data);
     if (response.usage) task.usage = UsageBlock.fromJSON(response.usage);
     return task;
   }

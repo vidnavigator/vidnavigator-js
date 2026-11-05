@@ -463,8 +463,69 @@ async function run() {
       assert(Array.isArray(task.results), 'tiktokSearch results array');
       if (task.results.length > 0) assert(task.results[0] instanceof sdk.TikTokSearchResult, 'tiktokSearch result type');
     } catch (e) { fail('tiktokSearch', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+    console.log('--- tiktokSearch with country ---');
+    try {
+      const task = await client.tiktokSearch(
+        { query: process.env.TEST_TIKTOK_SEARCH_QUERY, country: 'fr', max_results: 2, webhook_url: '' },
+        { timeoutMs: 600000, include_usage: true }
+      );
+      assert(task.task_status === 'completed', 'tiktokSearch country=fr completed');
+      assert(task.country === 'fr' && task.stats && task.stats.country === 'fr', 'tiktokSearch country echoed on the task and stats');
+      assert(Number.isInteger(task.stats.videos_fetched), 'tiktokSearch stats.videos_fetched integer');
+      assert(task.webhook === null || task.webhook === undefined, 'tiktokSearch without webhook has no webhook block');
+    } catch (e) { fail('tiktokSearch country', `${e.name}: ${e.message} task_id=${e.task_id}`); }
   } else {
     console.log('--- TikTok keyword search skipped (TEST_TIKTOK_SEARCH_QUERY not set) ---');
+  }
+
+  // ── TikTok country validation (400s, no credits) ──
+  console.log('--- TikTok country validation ---');
+  try {
+    await client.submitTikTokSearch({ query: 'football', country: 'us' });
+    fail('tiktokSearch country=us is refused');
+  } catch (e) {
+    assert(e instanceof sdk.BadRequestError && /log in/.test(e.message), 'tiktokSearch country=us refused with BadRequestError', e && `${e.name}: ${e.message}`);
+  }
+  try {
+    await client.submitTikTokLiveSearch({ query: 'gaming', country: 'cn' });
+    fail('tiktokLiveSearch country=cn is refused');
+  } catch (e) {
+    assert(e instanceof sdk.BadRequestError && e.error_code === 'invalid_country', 'tiktokLiveSearch unsupported country refused with invalid_country', e && `${e.name}: ${e.error_code}`);
+  }
+
+  // ── Optional TikTok LIVE search ──
+  if (process.env.TEST_TIKTOK_LIVE_QUERY) {
+    console.log('--- tiktokLiveSearch (blocking, all pages) ---');
+    try {
+      const live = await client.tiktokLiveSearch(
+        { query: process.env.TEST_TIKTOK_LIVE_QUERY, max_results: 5, webhook_url: '' },
+        { timeoutMs: 600000, include_usage: true }
+      );
+      assert(live instanceof sdk.TikTokLiveSearchTask && live.task_status === 'completed', 'tiktokLiveSearch completed');
+      assert(live.country === 'us', 'tiktokLiveSearch default country us');
+      assert(live.stats && Number.isInteger(live.stats.rooms_fetched), 'tiktokLiveSearch stats.rooms_fetched integer');
+      assert(!('transport' in (live.stats || {})), 'tiktokLiveSearch stats carry no internal fields');
+      assert(live.usage instanceof sdk.UsageBlock, 'tiktokLiveSearch usage on completion');
+      assert(live.results.length > 0, 'tiktokLiveSearch found rooms', `query=${process.env.TEST_TIKTOK_LIVE_QUERY}`);
+      for (const room of live.results) {
+        assert(room instanceof sdk.TikTokLiveRoom && room.id && /\/live$/.test(room.url || ''), 'TikTokLiveRoom id and url');
+        assert(room.author && room.author.unique_id, 'TikTokLiveRoom author.unique_id');
+        assert(room.stats && Number.isInteger(room.stats.viewers), 'TikTokLiveRoom stats.viewers integer');
+        assert(Array.isArray(room.hashtags), 'TikTokLiveRoom hashtags array');
+        assert(room.stream_urls && room.stream_urls.flv[room.stream_urls.default_quality], 'TikTokLiveRoom stream URLs returned by default');
+      }
+    } catch (e) { fail('tiktokLiveSearch', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+
+    console.log('--- tiktokLiveSearch without stream URLs ---');
+    try {
+      const job = await client.tiktokLiveSearch.submit({ query: process.env.TEST_TIKTOK_LIVE_QUERY, country: 'gb', max_results: 3, include_stream_urls: false, webhook_url: '' });
+      assert(job.job_type === 'tiktok_live_search', 'tiktokLiveSearch.submit job_type');
+      const live = await client.tiktokLiveSearch.resume(job.task_id).result({ timeoutMs: 600000 });
+      assert(live.country === 'gb', 'tiktokLiveSearch country=gb echoed');
+      assert(live.results.every((room) => room.stream_urls === undefined), 'tiktokLiveSearch include_stream_urls=false leaves stream_urls out');
+    } catch (e) { fail('tiktokLiveSearch without stream URLs', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+  } else {
+    console.log('--- TikTok LIVE search skipped (TEST_TIKTOK_LIVE_QUERY not set) ---');
   }
 
   // ── Optional tweet statement extraction ──
