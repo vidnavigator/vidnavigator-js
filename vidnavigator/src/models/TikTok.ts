@@ -738,6 +738,185 @@ export class TikTokLiveRoom {
   }
 }
 
+// --- LIVE room ---
+
+/** Exactly one of `room_id`, `username` or `url`. */
+export interface TikTokLiveRoomRequest {
+  /**
+   * A LIVE room ID, e.g. the `id` of a LIVE search room. Pass it as a string: room IDs have more
+   * digits than a JavaScript number holds.
+   */
+  room_id?: string;
+  /** The streamer, with or without `@`: their current LIVE, or their last one when they are offline. */
+  username?: string;
+  /** `https://www.tiktok.com/@username/live`, the profile URL, or a room's `share_url`. */
+  url?: string;
+  /**
+   * Also return the latest comments (up to 50, newest first), the pinned comment, the intro and the
+   * top viewers. Bills 2 `residential_request` instead of 1. Default `false`.
+   */
+  include_comments?: boolean;
+  /** At most this many comments, 1-50 (default 50). */
+  comments_limit?: number;
+  /** Playback URLs are returned by default; pass `false` to leave them out. */
+  include_stream_urls?: boolean;
+  /** Add the `usage` block to the result. */
+  include_usage?: boolean;
+}
+
+export interface TikTokLiveRoomAuthor extends TikTokLiveAuthor {
+  bio?: string | null;
+  /** Accounts the streamer follows. */
+  following?: number | null;
+}
+
+/** A single room's counters. Likes, comments and shares come with LIVE search only. */
+export interface TikTokLiveRoomStats {
+  /** Watching now (0 once the LIVE has ended). */
+  viewers?: number | null;
+  /** Since the LIVE started. */
+  total_viewers?: number | null;
+  /** Followers the streamer gained during this LIVE. */
+  new_followers?: number | null;
+}
+
+export interface TikTokLiveRoomDetailJSON extends TikTokLiveRoomJSON {
+  author?: TikTokLiveRoomAuthor;
+  stats?: TikTokLiveRoomStats;
+  status?: 'live' | 'ended' | 'unknown';
+  ended_at?: string | null;
+  share_url?: string | null;
+  age_restricted?: boolean;
+  subscribers_only?: boolean;
+  chat_enabled?: boolean;
+  products?: number;
+}
+
+/** One LIVE room, as `getTikTokLiveRoom` returns it. */
+export class TikTokLiveRoomDetail extends TikTokLiveRoom {
+  declare author?: TikTokLiveRoomAuthor;
+  declare stats?: TikTokLiveRoomStats;
+  /** `'live'` while broadcasting, `'ended'` once finished. */
+  status?: 'live' | 'ended' | 'unknown';
+  ended_at?: Date | null;
+  /** The room's share link; it can be passed back as `url`. */
+  share_url?: string | null;
+  age_restricted?: boolean;
+  /** Only the streamer's paying subscribers can watch. */
+  subscribers_only?: boolean;
+  chat_enabled?: boolean;
+  /** Products on sale in the LIVE. */
+  products?: number;
+
+  constructor(data: TikTokLiveRoomDetailJSON) {
+    super(data);
+    this.author = data.author
+      ? { ...data.author, followers: toInteger(data.author.followers), following: toInteger(data.author.following) }
+      : undefined;
+    this.stats = data.stats
+      ? {
+          viewers: toInteger(data.stats.viewers),
+          total_viewers: toInteger(data.stats.total_viewers),
+          new_followers: toInteger(data.stats.new_followers),
+        }
+      : undefined;
+    this.status = data.status;
+    this.ended_at = toNullableDate(data.ended_at);
+    this.share_url = data.share_url;
+    this.age_restricted = data.age_restricted;
+    this.subscribers_only = data.subscribers_only;
+    this.chat_enabled = data.chat_enabled;
+    this.products = toOptionalInteger(data.products);
+  }
+
+  get isLive(): boolean {
+    return this.status === 'live';
+  }
+
+  static fromJSON(json: TikTokLiveRoomDetailJSON): TikTokLiveRoomDetail {
+    return new TikTokLiveRoomDetail(json);
+  }
+}
+
+export interface TikTokLiveCommentJSON {
+  id?: string | null;
+  text?: string | null;
+  language?: string | null;
+  created_at?: string | null;
+  author?: TikTokLiveAuthor;
+  author_is_follower?: boolean;
+  author_is_moderator?: boolean;
+  author_is_subscriber?: boolean;
+}
+
+/** A comment posted in a LIVE's chat. */
+export interface TikTokLiveComment {
+  id?: string | null;
+  text?: string | null;
+  /** ISO 639-1 code TikTok detected, or `null`. */
+  language?: string | null;
+  created_at?: Date | null;
+  author?: TikTokLiveAuthor;
+  author_is_follower?: boolean;
+  author_is_moderator?: boolean;
+  /** A paying subscriber of the streamer. */
+  author_is_subscriber?: boolean;
+}
+
+/** One of a LIVE's top viewers, ranked by the gifts they sent. */
+export interface TikTokLiveTopViewer {
+  rank?: number | null;
+  score?: number | null;
+  user?: TikTokLiveAuthor;
+}
+
+export interface TikTokLiveRoomResultJSON {
+  room: TikTokLiveRoomDetailJSON;
+  comments?: TikTokLiveCommentJSON[];
+  pinned_comment?: TikTokLiveCommentJSON | null;
+  intro?: string | null;
+  top_viewers?: TikTokLiveTopViewer[];
+}
+
+export interface TikTokLiveRoomResult {
+  room: TikTokLiveRoomDetail;
+  /** Latest comments, newest first (TikTok keeps about the last 50). Only with `include_comments`. */
+  comments?: TikTokLiveComment[];
+  /** The comment the streamer pinned. Only with `include_comments`. */
+  pinned_comment?: TikTokLiveComment | null;
+  /** The LIVE's intro text. Only with `include_comments`. */
+  intro?: string | null;
+  /** Top viewers by gifts sent. Only with `include_comments`. */
+  top_viewers?: TikTokLiveTopViewer[];
+  /** Present when called with `include_usage: true`. */
+  usage?: UsageBlock;
+}
+
+function liveCommentFromJSON(json: TikTokLiveCommentJSON): TikTokLiveComment {
+  return {
+    ...json,
+    created_at: toNullableDate(json.created_at),
+    author: json.author ? { ...json.author, followers: toInteger(json.author.followers) } : undefined,
+  };
+}
+
+export function tiktokLiveRoomResultFromJSON(json: TikTokLiveRoomResultJSON): TikTokLiveRoomResult {
+  const result: TikTokLiveRoomResult = { room: TikTokLiveRoomDetail.fromJSON(json.room) };
+  if (json.comments !== undefined) result.comments = (json.comments ?? []).map(liveCommentFromJSON);
+  if (json.pinned_comment !== undefined) {
+    result.pinned_comment = json.pinned_comment ? liveCommentFromJSON(json.pinned_comment) : null;
+  }
+  if (json.intro !== undefined) result.intro = json.intro;
+  if (json.top_viewers !== undefined) {
+    result.top_viewers = (json.top_viewers ?? []).map((v) => ({
+      ...v,
+      rank: toInteger(v.rank),
+      score: toInteger(v.score),
+    }));
+  }
+  return result;
+}
+
 export interface TikTokLiveSearchStats {
   /** TikTok pages fetched (up to 50 rooms each). */
   pages_fetched?: number;

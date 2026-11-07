@@ -43,6 +43,10 @@ import {
   TikTokLiveSearchSubmissionJSON,
   TikTokLiveSearchTask,
   TikTokLiveSearchTaskJSON,
+  TikTokLiveRoomRequest,
+  TikTokLiveRoomResult,
+  TikTokLiveRoomResultJSON,
+  tiktokLiveRoomResultFromJSON,
   TweetStatement,
   AsyncJob,
   AsyncJobJSON,
@@ -61,7 +65,13 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '2.2.0';
+export const SDK_VERSION = '2.3.0';
+
+/**
+ * A LIVE room usually answers in 1-5 s, up to ~30 s when the API has to open a TikTok page, and two
+ * minutes at worst. A shorter configured axios timeout is raised to this for that call only.
+ */
+const LIVE_ROOM_TIMEOUT_MS = 120_000;
 
 //region --- Interfaces ---
 export interface SDKConfig {
@@ -614,8 +624,13 @@ export class VidNavigatorClient {
     url: string,
     data?: any,
     params?: any,
-    extraHeaders?: any
+    extraHeaders?: any,
+    minTimeoutMs?: number
   ): Promise<T> {
+    // A call known to run long raises a configured timeout, never lowers it
+    // (0 / unset means no timeout at all).
+    const configured = this.client.defaults.timeout;
+    const timeout = minTimeoutMs && configured ? Math.max(configured, minTimeoutMs) : undefined;
     try {
       const response = await this.client.request<T>({
         method,
@@ -623,6 +638,7 @@ export class VidNavigatorClient {
         data,
         params,
         headers: extraHeaders,
+        ...(timeout !== undefined ? { timeout } : {}),
       });
       return response.data;
     } catch (error: any) {
@@ -750,6 +766,44 @@ export class VidNavigatorClient {
     const task = TikTokLiveSearchTask.fromJSON(response.data);
     if (response.usage) task.usage = UsageBlock.fromJSON(response.usage);
     return task;
+  }
+
+  /**
+   * One TikTok LIVE room, right away (`POST /tiktok/live/room`, no job): by `room_id`, `username`
+   * or `url`, exactly one. The room says whether it is live or ended (and when), its viewers and new
+   * followers, the streamer's bio, and more. With `include_comments: true` the result also has the
+   * latest comments (up to 50), the pinned comment, the intro and the top viewers.
+   *
+   * The room has no likes, comment count or share count: TikTok gives those to LIVE search only.
+   * A room or account that does not exist throws `NotFoundError` (`error_code` `live_not_found`)
+   * and is not billed. Billing: 1 `residential_request`, 2 with `include_comments`.
+   */
+  async getTikTokLiveRoom(payload: TikTokLiveRoomRequest): Promise<TikTokLiveRoomResult> {
+    const targets = (['room_id', 'username', 'url'] as const).filter((key) => payload?.[key]);
+    if (targets.length !== 1) {
+      throw new VidNavigatorError('Pass exactly one of room_id, username or url');
+    }
+    let body: TikTokLiveRoomRequest = payload;
+    const roomId: unknown = payload.room_id;
+    if (typeof roomId === 'number') {
+      if (!Number.isSafeInteger(roomId)) {
+        throw new VidNavigatorError(
+          'room_id has more digits than a JavaScript number holds: pass it as a string'
+        );
+      }
+      body = { ...payload, room_id: String(roomId) };
+    }
+    const response = await this.request<ApiSuccessResponse<TikTokLiveRoomResultJSON>>(
+      'POST',
+      '/tiktok/live/room',
+      body,
+      undefined,
+      undefined,
+      LIVE_ROOM_TIMEOUT_MS
+    );
+    const result = tiktokLiveRoomResultFromJSON(response.data);
+    if (response.usage) result.usage = UsageBlock.fromJSON(response.usage);
+    return result;
   }
   //endregion
 

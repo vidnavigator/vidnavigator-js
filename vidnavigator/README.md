@@ -12,6 +12,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 - **Multi-platform transcription** — YouTube, Instagram Reels & carousel posts, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, Snapchat, and more.
 - **Any video length** — transcription, extraction, and tweet analysis run as background jobs, so there is no duration limit. Get the result with one `await`, or submit many jobs and collect them as they finish.
 - **Async TikTok profile scraping, keyword search and LIVE search** — collect public TikTok videos, or LIVE rooms with their stream URLs, in the background, then read results via cursor pagination or a signed `download_url`, optionally notified by webhook.
+- **TikTok LIVE room** — check one room or streamer right away, with its latest comments, pinned comment and top viewers.
 - **Instagram carousel support** — select a specific video by index, or transcribe every video in a carousel post with one call.
 - **AI-powered analysis** — get summaries, people mentioned, places, key subjects, and direct answers to questions about any video or audio.
 - **Structured data extraction** — define a JSON schema and receive typed, structured fields extracted from any transcript (powered by LLMs).
@@ -493,6 +494,27 @@ for (const room of task.results) {
 - `country` defaults to `'us'`. Results keep TikTok's ranking; a keyword with no LIVE room in that country at that moment completes with zero results.
 - Billing: 1 `residential_request` per 30 rooms TikTok returned (`task.stats.rooms_fetched`), minimum 1 per search.
 
+### 6c. TikTok LIVE room (sync)
+
+`vn.getTikTokLiveRoom()` returns one LIVE room right away, no job: by `room_id`, `username` or `url` (exactly one). Use it to check whether someone is live, to follow a room found by LIVE search, or to read its latest comments:
+
+```ts
+const { room, comments } = await vn.getTikTokLiveRoom({ username: 'tiktok', include_comments: true });
+
+console.log(room.status, room.title, room.stats?.viewers, room.stats?.new_followers);
+if (room.isLive) {
+  for (const c of comments ?? []) console.log(c.created_at, c.author?.unique_id, c.text);
+} else {
+  console.log('ended at', room.ended_at);
+}
+```
+
+- `room_id`: a LIVE room id, as a string (room ids have more digits than a JavaScript number holds). `username`: the streamer, with or without `@`: their current LIVE, or their last one when they are offline. `url`: `https://www.tiktok.com/@username/live`, the profile URL, or a room's `share_url`.
+- The room (`TikTokLiveRoomDetail`) has the LIVE search room fields plus `status` (`'live'` / `'ended'`, also `room.isLive`), `ended_at`, `stats.new_followers`, `author.bio`, `author.following`, `share_url`, `chat_enabled`, `subscribers_only`, `age_restricted` and `products` (items on sale). It has no likes, comment count or share count: LIVE search returns those.
+- `include_comments: true` adds `comments` (newest first, up to `comments_limit`, max 50; TikTok keeps only about the last 50 of a LIVE), `pinned_comment`, `intro` and `top_viewers`. An ended room has no comments.
+- A room or account that does not exist throws `NotFoundError` (`error_code` `'live_not_found'`). The call usually takes a few seconds; a shorter `axiosConfig.timeout` is raised to two minutes for it.
+- Billing: 1 `residential_request` per room, 2 with `include_comments` (1 when the room has ended). Not billed when the room is not found.
+
 ### 7. Instagram carousel posts (multiple videos)
 
 Instagram carousel posts can contain multiple videos. You can select a specific video by index, or transcribe them all at once:
@@ -810,6 +832,7 @@ Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → 
 | `getTikTokSearch(task_id, query?)` | Poll search status and retrieve a page of results. Options: `cursor`, `limit`, `include_usage` |
 | `submitTikTokLiveSearch(payload)` | Start an async TikTok LIVE search. Returns a `task_id` immediately. Options: `max_results`, `country`, `include_stream_urls`, `webhook_url` |
 | `getTikTokLiveSearch(task_id, query?)` | Poll LIVE search status and retrieve a page of rooms. Options: `cursor`, `limit`, `include_usage` |
+| `getTikTokLiveRoom(payload)` | One LIVE room right away, by `room_id`, `username` or `url`. Options: `include_comments`, `comments_limit`, `include_stream_urls`, `include_usage` |
 
 Completed profile tasks include `videos`; completed search tasks include `results`. Both include `pagination`, optional `stats`, and an optional short-lived `download_url` for retrieving the whole result as JSON. Failed tasks include `error` (`{ error, message, http_status }`); the older `error_message` string still works but is deprecated. Datetime filters use `after_datetime` and `before_datetime`, each accepting either `YYYY-MM-DD` or full ISO datetime strings with timezone; TikTok `published_at` values are parsed into JavaScript `Date` objects, and numeric counters such as `views` and `likes` are normalized to integers.
 
@@ -958,6 +981,7 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveSearchSubmission` | Async TikTok LIVE search submission: `task_id`, query, country, `include_stream_urls`, expiry, `webhook_url` |
 | `TikTokLiveSearchTask` | TikTok LIVE search task with status, rooms, pagination, `download_url`, `error`, `webhook`; `stats.rooms_fetched` is what is billed |
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
+| `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
 
 ## Links

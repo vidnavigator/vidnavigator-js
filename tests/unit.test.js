@@ -578,7 +578,7 @@ try {
     'extractVideoData', 'extractFileData',
     'submitTikTokProfileScrape', 'getTikTokProfileScrape',
     'submitTikTokSearch', 'getTikTokSearch',
-    'submitTikTokLiveSearch', 'getTikTokLiveSearch',
+    'submitTikTokLiveSearch', 'getTikTokLiveSearch', 'getTikTokLiveRoom',
     'getTranscript', 'searchYouTube',
     'searchVideos', 'searchFiles',
     'getUsage', 'healthCheck',
@@ -1455,7 +1455,82 @@ async function runErrorMappingTests() {
   assert(network.task_id === undefined, 'submit errors have no task_id (no task was created)');
 }
 
+async function runLiveRoomTests() {
+  const client = new sdk.VidNavigatorClient({ apiKey: 'test-key', axiosConfig: { timeout: 30000 } });
+  const calls = [];
+  const roomJSON = {
+    id: '7705498471838665494', title: 'Night stream', url: 'https://www.tiktok.com/@streamer/live',
+    status: 'live', ended_at: null, share_url: 'https://m.tiktok.com/share/live/7705498471838665494',
+    started_at: '2026-11-07T16:00:00Z',
+    author: { unique_id: 'streamer', followers: 18867, bio: 'Live every night', following: 9011 },
+    stats: { viewers: 936, total_viewers: 4005, new_followers: 12 },
+    hashtags: ['fr'], age_restricted: false, subscribers_only: false, chat_enabled: true, products: 2,
+  };
+  let reply = null;
+  client.request = async (method, url, data, params, extraHeaders, minTimeoutMs) => {
+    calls.push({ method, url, data, minTimeoutMs });
+    return reply;
+  };
+
+  reply = {
+    status: 'success',
+    data: {
+      room: roomJSON,
+      comments: [{ id: '3', text: 'hello', language: 'fr', created_at: '2026-11-07T16:46:42.500Z',
+                   author: { unique_id: 'bob', followers: 5 }, author_is_follower: true,
+                   author_is_moderator: false, author_is_subscriber: false }],
+      pinned_comment: null,
+      intro: 'Welcome',
+      top_viewers: [{ rank: 1, score: 300, user: { unique_id: 'bob' } }],
+    },
+    usage: { charges: [{ service_type: 'residential_request', quantity: 2, credits: 0.01 }], total_credits: 0.01 },
+  };
+  const res = await client.getTikTokLiveRoom({ room_id: '7705498471838665494', include_comments: true, comments_limit: 10, include_usage: true });
+  const call = calls.pop();
+  assert(call.method === 'POST' && call.url === '/tiktok/live/room', 'getTikTokLiveRoom posts /tiktok/live/room');
+  assert(call.data.room_id === '7705498471838665494' && call.data.include_comments === true && call.data.comments_limit === 10, 'getTikTokLiveRoom passes the request through');
+  assert(call.minTimeoutMs === 120000, 'getTikTokLiveRoom asks for a 120 s minimum timeout');
+  assert(res.room instanceof sdk.TikTokLiveRoomDetail && res.room instanceof sdk.TikTokLiveRoom, 'room parsed as TikTokLiveRoomDetail');
+  assert(res.room.isLive && res.room.ended_at === null, 'TikTokLiveRoomDetail.isLive / ended_at');
+  assert(res.room.stats.viewers === 936 && res.room.stats.total_viewers === 4005 && res.room.stats.new_followers === 12, 'TikTokLiveRoomDetail.stats');
+  assert(!('likes' in res.room.stats) && !('shares' in res.room.stats), 'room stats carry no likes / shares');
+  assert(res.room.author.bio === 'Live every night' && res.room.author.following === 9011, 'TikTokLiveRoomDetail.author bio / following');
+  assert(res.room.chat_enabled === true && res.room.products === 2 && res.room.share_url.includes('/share/live/'), 'TikTokLiveRoomDetail details');
+  assert(res.comments[0].created_at instanceof Date && res.comments[0].created_at.toISOString() === '2026-11-07T16:46:42.500Z', 'comment created_at Date');
+  assert(res.comments[0].author.unique_id === 'bob' && res.comments[0].author_is_follower === true, 'comment author');
+  assert(res.pinned_comment === null && res.intro === 'Welcome' && res.top_viewers[0].user.unique_id === 'bob', 'pinned_comment / intro / top_viewers');
+  assert(res.usage instanceof sdk.UsageBlock, 'getTikTokLiveRoom result.usage');
+
+  reply = { status: 'success', data: { room: { ...roomJSON, status: 'ended', ended_at: '2026-11-07T18:51:31Z' } } };
+  const ended = await client.getTikTokLiveRoom({ username: '@streamer' });
+  assert(!ended.room.isLive && ended.room.ended_at.toISOString() === '2026-11-07T18:51:31.000Z', 'ended room');
+  assert(ended.comments === undefined && ended.top_viewers === undefined && ended.usage === undefined, 'no chat fields without include_comments');
+
+  calls.length = 0;
+  for (const bad of [{}, { room_id: '1', username: 'a' }, { username: 'a', url: 'https://www.tiktok.com/@a/live' }]) {
+    const err = await client.getTikTokLiveRoom(bad).catch((e) => e);
+    assert(err instanceof sdk.VidNavigatorError && err.message.includes('exactly one'), `getTikTokLiveRoom refuses ${JSON.stringify(bad)}`);
+  }
+  const unsafe = await client.getTikTokLiveRoom({ room_id: 7705498471838665494 }).catch((e) => e);
+  assert(unsafe instanceof sdk.VidNavigatorError && unsafe.message.includes('string'), 'getTikTokLiveRoom refuses a room_id number past 2^53');
+  assert(calls.length === 0, 'refused calls never reach the API');
+  await client.getTikTokLiveRoom({ room_id: 123 });
+  assert(calls.pop().data.room_id === '123', 'getTikTokLiveRoom sends a small numeric room_id as a string');
+
+  // The timeout is raised for this call only, and never lowered.
+  const seen = [];
+  const real = new sdk.VidNavigatorClient({ apiKey: 'k', axiosConfig: { timeout: 30000 } });
+  real.client.request = async (config) => { seen.push(config.timeout); return { data: reply }; };
+  await real.getTikTokLiveRoom({ url: 'https://www.tiktok.com/@streamer/live' });
+  real.client.defaults.timeout = 300000;
+  await real.getTikTokLiveRoom({ url: 'https://www.tiktok.com/@streamer/live' });
+  real.client.defaults.timeout = 0;
+  await real.getTikTokLiveRoom({ url: 'https://www.tiktok.com/@streamer/live' });
+  assert(seen[0] === 120000 && seen[1] === 300000 && seen[2] === undefined, `LIVE room timeout raised, never lowered (${seen})`);
+}
+
 runClientMethodTests()
+  .then(runLiveRoomTests)
   .then(runOperationTests)
   .then(runPollingTests)
   .then(runErrorMappingTests)

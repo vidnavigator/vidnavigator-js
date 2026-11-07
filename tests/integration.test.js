@@ -524,6 +524,28 @@ async function run() {
       assert(live.country === 'gb', 'tiktokLiveSearch country=gb echoed');
       assert(live.results.every((room) => room.stream_urls === undefined), 'tiktokLiveSearch include_stream_urls=false leaves stream_urls out');
     } catch (e) { fail('tiktokLiveSearch without stream URLs', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+
+    console.log('--- getTikTokLiveRoom ---');
+    try {
+      const live = await client.tiktokLiveSearch({ query: process.env.TEST_TIKTOK_LIVE_QUERY, max_results: 5, webhook_url: '' }, { timeoutMs: 600000 });
+      const busiest = live.results.reduce((a, b) => ((b.stats?.viewers ?? 0) > (a.stats?.viewers ?? 0) ? b : a));
+      const plain = await client.getTikTokLiveRoom({ room_id: busiest.id, include_usage: true });
+      assert(plain.room instanceof sdk.TikTokLiveRoomDetail && plain.room.id === busiest.id, 'getTikTokLiveRoom returns the room');
+      assert(['live', 'ended'].includes(plain.room.status), 'getTikTokLiveRoom status live / ended');
+      assert(plain.comments === undefined, 'getTikTokLiveRoom has no comments without include_comments');
+      assert(plain.usage && plain.usage.charges.find((c) => c.service_type === 'residential_request').quantity === 1, 'getTikTokLiveRoom bills 1 residential_request');
+      const chat = await client.getTikTokLiveRoom({ room_id: busiest.id, include_comments: true, comments_limit: 10, include_usage: true });
+      assert(Array.isArray(chat.comments) && chat.comments.length <= 10, 'getTikTokLiveRoom include_comments returns up to comments_limit');
+      assert(chat.comments.every((c) => c.text && c.author && c.author.unique_id), 'getTikTokLiveRoom comments have text and author');
+      const expected = chat.room.isLive ? 2 : 1;
+      assert(chat.usage.charges.find((c) => c.service_type === 'residential_request').quantity === expected, `getTikTokLiveRoom with comments bills ${expected}`);
+    } catch (e) { fail('getTikTokLiveRoom', `${e.name}: ${e.message}`); }
+    try {
+      await client.getTikTokLiveRoom({ room_id: '123' });
+      fail('getTikTokLiveRoom unknown room throws');
+    } catch (e) {
+      assert(e instanceof sdk.NotFoundError && e.error_code === 'live_not_found', 'getTikTokLiveRoom unknown room throws NotFoundError live_not_found', e && `${e.name}: ${e.error_code}`);
+    }
   } else {
     console.log('--- TikTok LIVE search skipped (TEST_TIKTOK_LIVE_QUERY not set) ---');
   }
