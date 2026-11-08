@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "VidNavigator Developer API",
-    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nCheck the documentation for the rate limits for each endpoint.\n\n## Long videos and async jobs\nThe speech-to-text endpoints (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400). The metadata fetch needed to read the video's duration is billed (`standard_request` or `residential_request`) and is **not** refunded: the limit is documented, so the proxy call was spent answering a request that could not be served. No `transcription_hour` is charged \u2014 no audio is processed.\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints \u2014 they have no duration cap. See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/guides/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/reference/errors",
+    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nCheck the documentation for the rate limits for each endpoint.\n\n## Long videos and async jobs\nThe speech-to-text endpoints (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints \u2014 they have no duration cap. See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/guides/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/reference/errors",
     "version": "1.0.0",
     "contact": {
       "name": "VidNavigator Support",
@@ -29,7 +29,7 @@
     "/transcript": {
       "post": {
         "summary": "Get transcript for any supported video",
-        "description": "Extract transcript from any supported online video (YouTube, Vimeo, Twitter/X, TikTok, Facebook, Dailymotion, Loom, Snapchat, etc.) with optional language selection. The endpoint auto-detects the platform from the URL and routes internally.\n\n The URL inside `video_url` is what determines the upstream behavior.\n\n**Note:** for Instagram videos, use `/transcribe` instead (speech-to-text).\n\nOptions:\n- `transcript_text=true`: Returns the transcript as a single plain-text string instead of an array of segments.\n- `metadata_only=true`: Returns only video metadata (no transcript).\n- `fallback_to_metadata=true`: If transcript is unavailable, returns video metadata with an empty transcript instead of a 404 error (ignored when `metadata_only=true`).\n\n**Billing** depends on the URL:\n- YouTube (full transcript OR `metadata_only=true`) \u2192 1\u00d7 `residential_request` (the transcript fetch routes through the residential proxy)\n- Non-YouTube \u2192 1\u00d7 `standard_request` (some platforms internally use residential and would be billed accordingly)\n\nThe charge applies whether or not a transcript is returned (mirrors the proxy hop we paid for). Set `include_usage=true` to receive a `usage` block in the response.",
+        "description": "Extract transcript from any supported online video (YouTube, Vimeo, Twitter/X, TikTok, Facebook, Dailymotion, Loom, Snapchat, etc.) with optional language selection. The endpoint auto-detects the platform from the URL and routes internally.\n\n**Note:** for Instagram videos, use `/transcribe` instead (speech-to-text).\n\nOptions:\n- `transcript_text=true`: Returns the transcript as a single plain-text string instead of an array of segments.\n- `metadata_only=true`: Returns only video metadata (no transcript).\n- `fallback_to_metadata=true`: If transcript is unavailable, returns video metadata with an empty transcript instead of a 404 error (ignored when `metadata_only=true`).\n\nSet `include_usage=true` to receive the `usage` block in the response.",
         "operationId": "getTranscript",
         "tags": [
           "Transcripts"
@@ -75,7 +75,7 @@
                   "include_usage": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the response includes a `usage` block listing every meter charged during this request, the total credits deducted, and the user's remaining balance."
+                    "description": "When true, the response includes the `usage` block of this request."
                   }
                 }
               }
@@ -142,7 +142,7 @@
     "/transcribe": {
       "post": {
         "summary": "Transcribe online videos",
-        "description": "Transcribe online videos (e.g., Instagram, TikTok, Snapchat) using speech-to-text models when a transcript is not available.\n\n**Instagram Carousel Posts:**\n- For posts with multiple videos, the URL can include `?img_index=N` to select a specific video\n- Example: `https://www.instagram.com/p/ABC123/?img_index=2` transcribes the second video\n- Without `img_index`, the first video is transcribed\n- Set `all_videos=true` to transcribe ALL videos in a carousel post\n- Snapchat highlights with several videos work the same way: `img_index=N` is the Nth video\n\n**Options:**\n- `transcript_text=true`: Returns transcript as a single text string instead of segments\n- `all_videos=true`: For carousel posts, returns all videos with their transcripts\n\n**Billing:** on cache miss, one `standard_request` or `residential_request` is charged for the metadata fetch (residential for Instagram, Facebook-watch, Rumble; standard otherwise), plus `transcription_hour` proportional to the audio duration. On cache hit (same URL transcribed before for any user), only `transcription_hour` is charged \u2014 the metadata fetch is skipped. Users with the `free_on_cache_hit` sponsorship flag get the cache-hit `transcription_hour` waived (`waived: true` in the per-charge entry). Set `include_usage=true` to see the breakdown.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /transcribe/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). The metadata fetch needed to read the video's duration is billed (`standard_request` or `residential_request`) and is **not** refunded: the limit is documented, so the proxy call was spent answering a request that could not be served. No `transcription_hour` is charged \u2014 no audio is processed. Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
+        "description": "Transcribe online videos (e.g., Instagram, TikTok, Snapchat) using speech-to-text models when a transcript is not available.\n\n**Instagram Carousel Posts:**\n- For posts with multiple videos, the URL can include `?img_index=N` to select a specific video\n- Example: `https://www.instagram.com/p/ABC123/?img_index=2` transcribes the second video\n- Without `img_index`, the first video is transcribed\n- Set `all_videos=true` to transcribe ALL videos in a carousel post\n- Snapchat highlights with several videos work the same way: `img_index=N` is the Nth video\n\n**Options:**\n- `transcript_text=true`: Returns transcript as a single text string instead of segments\n- `all_videos=true`: For carousel posts, returns all videos with their transcripts\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /transcribe/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
         "operationId": "transcribeVideo",
         "tags": [
           "Transcripts"
@@ -176,7 +176,7 @@
                   "include_usage": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the response includes a `usage` block listing every meter charged during this request, the total credits deducted, and the user's remaining balance."
+                    "description": "When true, the response includes the `usage` block of this request."
                   }
                 }
               }
@@ -248,7 +248,7 @@
             }
           },
           "400": {
-            "description": "Bad request \u2014 invalid parameters, no videos found, or the video exceeds the synchronous duration cap (`video_too_long`; use `POST /transcribe/async`). The cap is 10 minutes. A `video_too_long` rejection still bills the metadata fetch that read the duration; it bills no `transcription_hour`.",
+            "description": "Bad request \u2014 invalid parameters, no videos found, or the video exceeds the synchronous duration cap (`video_too_long`; use `POST /transcribe/async`). The cap is 10 minutes.",
             "content": {
               "application/json": {
                 "schema": {
@@ -299,7 +299,7 @@
     "/tiktok/profile": {
       "post": {
         "summary": "Submit a TikTok profile scrape (async)",
-        "description": "Start an asynchronous TikTok profile scrape and return a `task_id` immediately.\n\nThe scrape runs in the background with shallow extraction so it can stop early when filters are satisfied. Results are retained for 1 hour and, when cloud storage is configured, also uploaded as a single JSON file accessible through `download_url`.\n\n**Billing:** Each TikTok API page fetched is billed as one standard request. One page is pre-charged when the task is accepted; remaining pages are reconciled when the scrape completes. If the scrape fails after charging additional pages, all charged pages are reversed. TikTok currently returns ~15 videos per page; this is an internal estimate and may change.\n\n**Filters:** All filters are applied as the scraper iterates. `max_posts` and `after_datetime` allow the scraper to stop fetching new pages early; the other filters reduce result size but do not stop pagination.\n\n**Usage disclosure:** This endpoint does NOT accept `include_usage`. Because billing happens in the background worker after the 202 response is sent, there is nothing to disclose at submit time. Pass `include_usage=true` on `GET /tiktok/profile/{task_id}` instead \u2014 the GET endpoint replays the final charges once `task_status=completed`.\n\nUse `GET /tiktok/profile/{task_id}` to poll status and retrieve paginated results, or follow `download_url` for the complete JSON.",
+        "description": "Start an asynchronous TikTok profile scrape and return a `task_id` immediately.\n\nThe scrape runs in the background and can stop early when filters are satisfied. Results are retained for 1 hour and, when cloud storage is configured, also uploaded as a single JSON file accessible through `download_url`.\n\n**Filters:** All filters are applied as the scraper iterates. `max_posts` and `after_datetime` allow the scraper to stop fetching new pages early; the other filters reduce result size but do not stop pagination.\n\n**Usage disclosure:** this endpoint does not accept `include_usage`; pass `include_usage=true` on `GET /tiktok/profile/{task_id}` once `task_status=completed`.\n\nUse `GET /tiktok/profile/{task_id}` to poll status and retrieve paginated results, or follow `download_url` for the complete JSON.",
         "operationId": "submitTikTokProfileScrape",
         "tags": [
           "TikTok"
@@ -453,7 +453,7 @@
     "/tiktok/profile/{task_id}": {
       "get": {
         "summary": "Get TikTok profile scrape result",
-        "description": "Poll an async TikTok profile scrape task and retrieve a cursor-paginated page of videos.\n\n**Cursor pagination:** The cursor encodes an absolute offset, so it is safe to change `limit` between calls without skipping or duplicating videos. Pass the `next_cursor` returned from a previous response as `cursor` in the next request. Omit `cursor` to start from the beginning.\n\n**TTL:** Tasks (and their `download_url` availability) expire ~1 hour after creation. Poll while `task_status` is `processing`, and switch to `download_url` for very large profiles.\n\nThis endpoint does not consume credits \u2014 polling is free.\n\n**Usage disclosure:** Set `include_usage=true` to receive a `usage` block describing the charges the background worker recorded for this task. Returned only when `task_status=completed` (processing tasks haven't finished billing; failed tasks have all charges refunded). Charges are `standard_request` units, one per TikTok page consumed.",
+        "description": "Poll an async TikTok profile scrape task and retrieve a cursor-paginated page of videos.\n\n**Cursor pagination:** The cursor encodes an absolute offset, so it is safe to change `limit` between calls without skipping or duplicating videos. Pass the `next_cursor` returned from a previous response as `cursor` in the next request. Omit `cursor` to start from the beginning.\n\n**TTL:** Tasks (and their `download_url` availability) expire ~1 hour after creation. Poll while `task_status` is `processing`, and switch to `download_url` for very large profiles.\n\n**Usage disclosure:** set `include_usage=true` to receive the task's `usage` block once `task_status=completed`.",
         "operationId": "getTikTokProfileScrape",
         "tags": [
           "TikTok"
@@ -493,7 +493,7 @@
             "name": "include_usage",
             "in": "query",
             "required": false,
-            "description": "When true and `task_status=completed`, attach a `usage` block describing the charges the background worker recorded (`standard_request` \u00d7 `pages_consumed`).",
+            "description": "When true and `task_status=completed`, attach the task's `usage` block.",
             "schema": {
               "type": "boolean",
               "default": false
@@ -585,7 +585,7 @@
     "/tiktok/search": {
       "post": {
         "summary": "Submit a TikTok keyword search (async)",
-        "description": "Start an asynchronous TikTok keyword search task and return a `task_id` immediately. Poll `GET /tiktok/search/{task_id}` for cursor-paginated results. Results are retained for ~1 hour.\n\nResults are returned sorted by `published_at` descending (newest first) across pagination, full retrieval, and the signed `download_url` payload, unless `sort_by` is set, in which case that order is kept.\n\nThe search returns TikTok's results for `country` (default `gb`); `us` is rejected because TikTok asks US visitors to log in.\n\n**Billing:** 1 `residential_request` per 30 videos fetched from TikTok (`stats.videos_fetched`, including videos your filters drop), minimum 1 per search.\n\n**parallel_search_slices billing:** by default (`1`), the search runs a single paginated query chain and is naturally capped at roughly 115-140 items by TikTok. Setting `parallel_search_slices` to `2..4` runs that many concurrent chains in parallel and dedups by video id, lifting the effective ceiling. Cost scales linearly: each additional slice fetches up to ~1x the videos of a single search, so an N-slice request bills up to **Nx the residential requests**. Extra slices add the most on searches without a date window; with `published_within` set, every slice searches the same window and can return largely the same videos. `parallel_search_slices` is *not* a time filter \u2014 use `published_within`, `after_datetime` or `before_datetime` for time windows.\n\n**Usage disclosure:** This endpoint does NOT accept `include_usage`. Billing happens in the background worker after the 202 response is sent, so there is nothing to disclose at submit time. Pass `include_usage=true` on `GET /tiktok/search/{task_id}` instead \u2014 the GET endpoint replays the final charges once `task_status=completed`.",
+        "description": "Start an asynchronous TikTok keyword search task and return a `task_id` immediately. Poll `GET /tiktok/search/{task_id}` for cursor-paginated results. Results are retained for ~1 hour.\n\nResults are returned sorted by `published_at` descending (newest first) across pagination, full retrieval, and the signed `download_url` payload, unless `sort_by` is set, in which case that order is kept.\n\nThe search returns TikTok's results for `country` (default `gb`); `us` is rejected because TikTok asks US visitors to log in.\n\n**parallel_search_slices:** by default (`1`), the search runs a single paginated query chain and is naturally capped at roughly 115-140 items by TikTok. Setting `parallel_search_slices` to `2..4` runs that many concurrent chains in parallel and dedups by video id, lifting the effective ceiling. Extra slices add the most on searches without a date window; with `published_within` set, every slice searches the same window and can return largely the same videos. `parallel_search_slices` is *not* a time filter \u2014 use `published_within`, `after_datetime` or `before_datetime` for time windows.\n\n**Usage disclosure:** this endpoint does not accept `include_usage`; pass `include_usage=true` on `GET /tiktok/search/{task_id}` once `task_status=completed`.",
         "operationId": "submitTikTokSearch",
         "tags": [
           "TikTok"
@@ -751,7 +751,7 @@
                     "type": "integer",
                     "minimum": 0,
                     "default": 0,
-                    "description": "Optional upper bound on results the background task will try to collect. `0` (the default) or omitted means **unlimited** \u2014 pagination only stops when TikTok has no more results or the page cap is reached. With `parallel_search_slices=1` that naturally yields ~115-140 items (TikTok serves ~5 pages of ~30 items per chain); with `parallel_search_slices=4` up to ~480 unique items. A positive integer caps the merged result count. **No hard server-side cap is enforced** \u2014 a caller asking for `3000` will be billed 1 `residential_request` per 30 videos actually fetched and receive whatever TikTok delivers."
+                    "description": "Optional upper bound on results the background task will try to collect. `0` (the default) or omitted means **unlimited** \u2014 pagination only stops when TikTok has no more results or the page cap is reached. With `parallel_search_slices=1` that naturally yields ~115-140 items (TikTok serves ~5 pages of ~30 items per chain); with `parallel_search_slices=4` up to ~480 unique items. A positive integer caps the merged result count. **No hard server-side cap is enforced** \u2014 a caller asking for `3000` receives whatever TikTok delivers."
                   },
                   "parallel_search_slices": {
                     "type": "integer",
@@ -759,7 +759,7 @@
                     "maximum": 4,
                     "default": 1,
                     "example": 2,
-                    "description": "How many concurrent paginated query chains to run and dedup by video id. `1` (the default) is a single chain naturally capped at roughly 115-140 items. `2..4` runs that many additional chains in parallel, lifting the effective ceiling at the cost of up to **~Nx the residential requests** of a single search. Diminishing returns: 2 slices yield ~+43% unique items, 3 slices ~+22%, 4 slices ~+13% on a representative query without a date window, so 4 already saturates TikTok's natural ~480-item dedup ceiling for most queries. With `published_within` set, every slice searches the same window and extra slices can return largely the same videos, so keep `1` unless you have measured a gain. `parallel_search_slices` is *not* a time filter \u2014 use `published_within`, `after_datetime` or `before_datetime` for time windows."
+                    "description": "How many concurrent paginated query chains to run and dedup by video id. `1` (the default) is a single chain naturally capped at roughly 115-140 items. `2..4` runs that many additional chains in parallel, lifting the effective ceiling. Diminishing returns: 2 slices yield ~+43% unique items, 3 slices ~+22%, 4 slices ~+13% on a representative query without a date window, so 4 already saturates TikTok's natural ~480-item dedup ceiling for most queries. With `published_within` set, every slice searches the same window and extra slices can return largely the same videos, so keep `1` unless you have measured a gain. `parallel_search_slices` is *not* a time filter \u2014 use `published_within`, `after_datetime` or `before_datetime` for time windows."
                   },
                   "sort_by": {
                     "type": "string",
@@ -769,7 +769,7 @@
                       "newest"
                     ],
                     "example": "newest",
-                    "description": "Sort order applied by TikTok itself (the same control as the app's search Filters sheet). `relevance` returns results in TikTok's ranking, `most_liked` by like count, `newest` by publish date, newest first. When omitted, results are returned newest first, and the search itself is ordered to fit your filters: newest first when `after_datetime` or `before_datetime` is set (stopping once it passes `after_datetime`), most liked first when only `min_likes` or `min_views` is set. That returns more matching videos per billed page."
+                    "description": "Sort order applied by TikTok itself (the same control as the app's search Filters sheet). `relevance` returns results in TikTok's ranking, `most_liked` by like count, `newest` by publish date, newest first. When omitted, results are returned newest first, and the search itself is ordered to fit your filters: newest first when `after_datetime` or `before_datetime` is set (stopping once it passes `after_datetime`), most liked first when only `min_likes` or `min_views` is set. That returns more matching videos per page."
                   },
                   "published_within": {
                     "type": "string",
@@ -786,7 +786,7 @@
                   },
                   "after_datetime": {
                     "type": "string",
-                    "description": "Only include videos published on or after this boundary. Accepts YYYY-MM-DD or ISO datetime with timezone. Unless `sort_by` or `published_within` is set, it also makes the search run newest first and stop once it passes this boundary, so more results in range come back per billed page."
+                    "description": "Only include videos published on or after this boundary. Accepts YYYY-MM-DD or ISO datetime with timezone. Unless `sort_by` or `published_within` is set, it also makes the search run newest first and stop once it passes this boundary, so more results in range come back per page."
                   },
                   "before_datetime": {
                     "type": "string",
@@ -899,7 +899,7 @@
     "/tiktok/search/{task_id}": {
       "get": {
         "summary": "Get TikTok keyword search result",
-        "description": "Poll an async TikTok keyword search task and retrieve cursor-paginated normalized result items.\n\nThis endpoint does not consume credits \u2014 polling is free.\n\n**Usage disclosure:** Set `include_usage=true` to receive a `usage` block describing the charges the background worker recorded for this task. Returned only when `task_status=completed` (processing tasks haven't finished billing; failed tasks have all charges refunded). Charges are 1 `residential_request` per 30 `videos_fetched`, minimum 1 (no `search_request` is billed for TikTok keyword search).",
+        "description": "Poll an async TikTok keyword search task and retrieve cursor-paginated normalized result items.\n\n**Usage disclosure:** set `include_usage=true` to receive the task's `usage` block once `task_status=completed`.",
         "operationId": "getTikTokSearch",
         "tags": [
           "TikTok"
@@ -936,7 +936,7 @@
             "name": "include_usage",
             "in": "query",
             "required": false,
-            "description": "When true and `task_status=completed`, attach a `usage` block describing the charges the background worker recorded (1 `residential_request` per 30 `videos_fetched`, minimum 1; no `search_request` for TikTok keyword search).",
+            "description": "When true and `task_status=completed`, attach the task's `usage` block.",
             "schema": {
               "type": "boolean",
               "default": false
@@ -980,7 +980,7 @@
     "/tiktok/live/search": {
       "post": {
         "summary": "Submit a TikTok LIVE search (async)",
-        "description": "Search TikTok LIVE rooms broadcasting right now for a keyword, and return a `task_id` immediately. Poll `GET /tiktok/live/search/{task_id}` for cursor-paginated results. Each room comes with its author, live counters (`stats.viewers`, likes, ...), `hashtags`, `category`, `game_tags` and, unless `include_stream_urls` is `false`, its playback URLs (FLV and HLS by quality, plus an audio-only stream). Results are retained for ~1 hour.\n\nResults keep TikTok's ranking and are localized to `country`. TikTok serves about 50 rooms per keyword; some keywords have no live room in a given country at a given time, which completes with zero results.\n\n**Billing:** 1 `residential_request` per 30 rooms TikTok returned (`stats.rooms_fetched`), minimum 1 per search. A keyword typically yields up to about 45 rooms, so 1 or 2 residential requests.\n\n**Usage disclosure:** This endpoint does NOT accept `include_usage`. Pass `include_usage=true` on `GET /tiktok/live/search/{task_id}` instead.",
+        "description": "Search TikTok LIVE rooms broadcasting right now for a keyword, and return a `task_id` immediately. Poll `GET /tiktok/live/search/{task_id}` for cursor-paginated results. Each room comes with its author, live counters (`stats.viewers`, likes, ...), `hashtags`, `category`, `game_tags` and, unless `include_stream_urls` is `false`, its playback URLs (FLV and HLS by quality, plus an audio-only stream). Results are retained for ~1 hour.\n\nResults keep TikTok's ranking and are localized to `country`. TikTok serves about 50 rooms per keyword; some keywords have no live room in a given country at a given time, which completes with zero results.\n\n**Usage disclosure:** this endpoint does not accept `include_usage`; pass `include_usage=true` on `GET /tiktok/live/search/{task_id}` once `task_status=completed`.",
         "operationId": "submitTikTokLiveSearch",
         "tags": [
           "TikTok"
@@ -1131,7 +1131,7 @@
                   "include_stream_urls": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Return each room's playback URLs in `stream_urls` (FLV and HLS by quality, plus an audio-only FLV). On by default; they come at no extra cost. Pass `false` to leave them out."
+                    "description": "Return each room's playback URLs in `stream_urls` (FLV and HLS by quality, plus an audio-only FLV). On by default. Pass `false` to leave them out."
                   },
                   "webhook_url": {
                     "type": "string",
@@ -1218,7 +1218,7 @@
     "/tiktok/live/search/{task_id}": {
       "get": {
         "summary": "Get TikTok LIVE search result",
-        "description": "Poll an async TikTok LIVE search task and retrieve cursor-paginated rooms.\n\nThis endpoint does not consume credits \u2014 polling is free.\n\n**Usage disclosure:** Set `include_usage=true` to receive a `usage` block. Charges are 1 `residential_request` per 30 `rooms_fetched`, minimum 1; failed tasks are refunded.",
+        "description": "Poll an async TikTok LIVE search task and retrieve cursor-paginated rooms.\n\n**Usage disclosure:** set `include_usage=true` to receive the task's `usage` block once `task_status=completed`.",
         "operationId": "getTikTokLiveSearch",
         "tags": [
           "TikTok"
@@ -1255,7 +1255,7 @@
             "name": "include_usage",
             "in": "query",
             "required": false,
-            "description": "When true and `task_status=completed`, attach a `usage` block (1 `residential_request` per 30 `rooms_fetched`, minimum 1).",
+            "description": "When true and `task_status=completed`, attach the task's `usage` block.",
             "schema": {
               "type": "boolean",
               "default": false
@@ -1299,7 +1299,7 @@
     "/tiktok/live/room": {
       "post": {
         "summary": "Get one TikTok LIVE room (sync)",
-        "description": "Get one TikTok LIVE room, synchronously: by `room_id`, by streamer (`username`), or by LIVE URL. Send exactly one of the three.\n\nThe room comes with its current state: whether it is live or has ended (and when), viewers now and since the start, followers gained during the LIVE, the streamer's bio, whether chat is on or the LIVE is for subscribers only, the number of products on sale, and playback URLs. A `username` returns the streamer's current LIVE, or their last one when they are offline (`status: \"ended\"`).\n\nWith `include_comments: true`, the response also has the latest comments (up to 50, newest first), the pinned comment, the LIVE's intro text and its top viewers. TikTok only keeps the latest ~50 comments of a LIVE available: earlier ones cannot be retrieved. A room that has ended returns no comments.\n\nThe likes, comment count and share count of a room are not available here: `POST /tiktok/live/search` returns them for each room it finds.\n\nUsually answers in 1-5 s, sometimes up to ~30 s; allow a client timeout of 120 s.\n\n**Billing:** 1 `residential_request` per room, 2 with `include_comments`. When the room has ended, the comments are not billed. A room or account that does not exist (404) and a failed lookup (502) are not billed.",
+        "description": "Get one TikTok LIVE room, synchronously: by `room_id`, by streamer (`username`), or by LIVE URL. Send exactly one of the three.\n\nThe room comes with its current state: whether it is live or has ended (and when), viewers now and since the start, followers gained during the LIVE, the streamer's bio, whether chat is on or the LIVE is for subscribers only, the number of products on sale, and playback URLs. A `username` returns the streamer's current LIVE, or their last one when they are offline (`status: \"ended\"`).\n\nWith `include_comments: true`, the response also has the latest comments (up to 50, newest first), the pinned comment, the LIVE's intro text and its top viewers. TikTok only keeps the latest ~50 comments of a LIVE available: earlier ones cannot be retrieved. A room that has ended returns no comments.\n\nThe likes, comment count and share count of a room are not available here: `POST /tiktok/live/search` returns them for each room it finds.\n\nUsually answers in 1-5 s, sometimes up to ~30 s; allow a client timeout of 120 s.",
         "operationId": "getTikTokLiveRoom",
         "tags": [
           "TikTok"
@@ -1331,7 +1331,7 @@
                   "include_comments": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Also return the latest comments, the pinned comment, the intro and the top viewers. Bills a second `residential_request`."
+                    "description": "Also return the latest comments, the pinned comment, the intro and the top viewers."
                   },
                   "comments_limit": {
                     "type": "integer",
@@ -1348,7 +1348,7 @@
                   "include_usage": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the response includes a `usage` block listing the charges of this request."
+                    "description": "When true, the response includes the `usage` block of this request."
                   }
                 }
               }
@@ -1420,7 +1420,7 @@
             "$ref": "#/components/responses/PaymentRequired"
           },
           "404": {
-            "description": "No such LIVE room: the room ID does not exist, or the account does not exist or has never gone LIVE. Not billed.",
+            "description": "No such LIVE room: the room ID does not exist, or the account does not exist or has never gone LIVE.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1456,7 +1456,7 @@
             "$ref": "#/components/responses/InternalServerError"
           },
           "502": {
-            "description": "TikTok did not serve the room. Retry later. Not billed.",
+            "description": "TikTok did not serve the room. Retry later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1667,7 +1667,7 @@
     "/analyze/video": {
       "post": {
         "summary": "Analyze online video",
-        "description": "Analyze an online video and return comprehensive analysis results with intelligent caching.\n\n**Behavior:**\n- If no query provided: Returns summary analysis (cached if available)\n- If query provided: Returns both summary (from cache if available) and fresh question analysis\n\n**Caching:**\n- Summary analyses are cached and reused\n- Question/query analyses are not cached (always fresh)\n- Transcripts are cached for optimization\n\n**Billing:** `analysis_request` is token-based \u2014 `quantity = ceil(total_tokens / 15000)`. One unit is charged up front as a credit gate; additional units are topped up at the end if the LLM call exceeded 15,000 tokens. When the transcript isn't cached, one additional `residential_request` or `standard_request` is charged for the fetch (residential for YouTube/Instagram/Facebook-watch/Rumble, standard otherwise). Set `include_usage=true` to receive the per-charge breakdown \u2014 the consolidated `analysis_request` entry carries a nested `tokens` object with `prompt_tokens`/`completion_tokens`/`total_tokens`.\n\nOptional: set `transcript_text=true` to return the transcript as a single text string instead of an array of segments.",
+        "description": "Analyze an online video and return comprehensive analysis results with intelligent caching.\n\n**Behavior:**\n- If no query provided: Returns summary analysis (cached if available)\n- If query provided: Returns both summary (from cache if available) and fresh question analysis\n\n**Caching:**\n- Summary analyses are cached and reused\n- Question/query analyses are not cached (always fresh)\n- Transcripts are cached for optimization\n\nSet `include_usage=true` to receive the `usage` block, with the request's token counts.\n\nOptional: set `transcript_text=true` to return the transcript as a single text string instead of an array of segments.",
         "operationId": "analyzeVideo",
         "tags": [
           "Analysis"
@@ -1701,7 +1701,7 @@
                   "include_usage": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the response includes a `usage` block listing every meter charged during this request, the total credits deducted, and the user's remaining balance."
+                    "description": "When true, the response includes the `usage` block of this request."
                   }
                 }
               }
@@ -1768,7 +1768,7 @@
     "/analyze/file": {
       "post": {
         "summary": "Analyze uploaded file",
-        "description": "Analyze an uploaded file and return comprehensive analysis results with intelligent caching.\n\n**Behavior:**\n- If no query provided: Returns summary analysis (cached if available)\n- If query provided: Returns both summary (from cache if available) and fresh question analysis\n\n**Billing:** `analysis_request` is token-based \u2014 `quantity = ceil(total_tokens / 15000)`. One unit is charged up front as a credit gate; additional units are topped up at the end if the LLM call exceeded 15,000 tokens. The file's transcript is read locally from your storage \u2014 no proxy fetch is involved. Set `include_usage=true` to receive the per-charge breakdown.\n\nOptional: set `transcript_text=true` to return the transcript as a single text string instead of an array of segments.",
+        "description": "Analyze an uploaded file and return comprehensive analysis results with intelligent caching.\n\n**Behavior:**\n- If no query provided: Returns summary analysis (cached if available)\n- If query provided: Returns both summary (from cache if available) and fresh question analysis\n\nSet `include_usage=true` to receive the `usage` block, with the request's token counts.\n\nOptional: set `transcript_text=true` to return the transcript as a single text string instead of an array of segments.",
         "operationId": "analyzeFile",
         "tags": [
           "Analysis"
@@ -1800,7 +1800,7 @@
                   "include_usage": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the response includes a `usage` block listing every meter charged during this request, the total credits deducted, and the user's remaining balance."
+                    "description": "When true, the response includes the `usage` block of this request."
                   }
                 }
               }
@@ -1864,7 +1864,7 @@
     "/extract/video": {
       "post": {
         "summary": "Extract structured data from online video",
-        "description": "Extract structured data from an online video's transcript using a custom schema.\n\nProvide a `video_url` and a `schema` describing the fields to extract. Optionally include `what_to_extract` to guide the extraction.\n\n**Auto-transcription:** For non-YouTube videos without an existing transcript (e.g. Instagram, TikTok, Facebook), the API automatically transcribes the video audio when `transcribe` is `true` (the default). This uses speech-to-text credits (`transcription_hour` usage). YouTube videos rely on platform captions and cannot be auto-transcribed. Set `transcribe=false` to disable this behavior.\n\n**Schema format:** Each field must have `type` and `description`. Supported types: `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`. Max 10 root fields, max 3 nesting levels.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Billing:** Each extraction consumes at least 1 analysis_request unit. For longer transcripts, billing scales as `ceil(total_tokens / 15000)` analysis_request units. If auto-transcription is triggered, transcription_hour usage is also charged based on video duration. All charges are reverted if the request fails.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/video/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). The metadata fetch needed to read the video's duration is billed (`standard_request` or `residential_request`) and is **not** refunded: the limit is documented, so the proxy call was spent answering a request that could not be served. No `transcription_hour` is charged \u2014 no audio is processed. Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
+        "description": "Extract structured data from an online video's transcript using a custom schema.\n\nProvide a `video_url` and a `schema` describing the fields to extract. Optionally include `what_to_extract` to guide the extraction.\n\n**Auto-transcription:** For non-YouTube videos without an existing transcript (e.g. Instagram, TikTok, Facebook), the API automatically transcribes the video audio when `transcribe` is `true` (the default). YouTube videos rely on platform captions and cannot be auto-transcribed. Set `transcribe=false` to disable this behavior.\n\n**Schema format:** Each field must have `type` and `description`. Supported types: `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`. Max 10 root fields, max 3 nesting levels.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/video/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
         "operationId": "extractVideoData",
         "tags": [
           "Extraction"
@@ -1897,7 +1897,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.). Uses speech-to-text credits based on video duration."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -1932,7 +1932,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.). Uses speech-to-text credits based on video duration."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -1967,7 +1967,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.). Uses speech-to-text credits based on video duration."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -2002,7 +2002,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.). Uses speech-to-text credits based on video duration."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -2039,7 +2039,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.). Uses speech-to-text credits based on video duration."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -2173,7 +2173,7 @@
     "/extract/file": {
       "post": {
         "summary": "Extract structured data from uploaded file",
-        "description": "Extract structured data from an uploaded file's transcript using a custom schema.\n\nProvide a `file_id` and a `schema` describing the fields to extract. The file must be processed and have a transcript available. Optionally include `what_to_extract` to guide the extraction.\n\n**Schema format:** Each field must have `type` and `description`. Supported types: `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`. Max 10 root fields, max 3 nesting levels.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `file_id` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file. If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `file_id` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Billing:** Each extraction consumes at least 1 analysis credit. For longer transcripts, billing scales as `ceil(total_tokens / 15000)` credits. All charges are reverted if the request fails.",
+        "description": "Extract structured data from an uploaded file's transcript using a custom schema.\n\nProvide a `file_id` and a `schema` describing the fields to extract. The file must be processed and have a transcript available. Optionally include `what_to_extract` to guide the extraction.\n\n**Schema format:** Each field must have `type` and `description`. Supported types: `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`. Max 10 root fields, max 3 nesting levels.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `file_id` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file. If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `file_id` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.",
         "operationId": "extractFileData",
         "tags": [
           "Extraction"
@@ -2413,7 +2413,7 @@
     "/youtube/search": {
       "post": {
         "summary": "Search YouTube for videos",
-        "description": "Search YouTube for videos using AI analysis and ranking with optional filters.\n\n**Process:**\n1. Enhanced search with prompt engineering to find relevant videos\n2. AI analysis of video content and transcripts (per-video residential proxy fetch + per-video LLM analysis)\n3. Intelligent ranking based on query relevance\n4. Structured results with rich metadata\n\n**Billing:** for each candidate video the API bills one `residential_request` when fetching the transcript \u2014 set `max_results` to cap how many candidates are processed and therefore how many residential charges fire. After all per-video AI analyses AND the ranking step complete, a single consolidated `analysis_request` charge is recorded with `quantity = ceil(total_tokens / 15000)`, where `total_tokens` is the sum of LLM input + output tokens across all videos analyzed plus the ranking call. No `search_request` is billed \u2014 the residential fetches + analysis fully cover the workflow. If the search returns zero results, nothing is billed. Set `include_usage=true` to receive the full per-charge breakdown \u2014 the consolidated `analysis_request` entry also carries a nested `tokens` object reporting `prompt_tokens` / `completion_tokens` / `total_tokens`.\n\n**Partial results:** if the user runs out of `residential_request` credits mid-search, the endpoint returns HTTP `402` with `status: \"partial\"`, the videos analyzed so far in `data.results`, and `error_code: \"insufficient_credits_video_search\"`. The `usage` block (when `include_usage=true`) reflects only the charges that succeeded.",
+        "description": "Search YouTube for videos using AI analysis and ranking with optional filters.\n\n**Process:**\n1. Search for relevant videos\n2. AI analysis of video content and transcripts\n3. Intelligent ranking based on query relevance\n4. Structured results with rich metadata\n\nSet `include_usage=true` to receive the `usage` block, with the request's token counts.\n\n**Partial results:** if credits run out mid-search, the endpoint returns HTTP `402` with `status: \"partial\"`, the videos analyzed so far in `data.results`, and `error_code: \"insufficient_credits_video_search\"`.",
         "operationId": "searchYouTube",
         "tags": [
           "Search"
@@ -2466,13 +2466,13 @@
                   "max_results": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": "Maximum number of videos to analyse and return. Each candidate triggers one `residential_request` (transcript fetch) and contributes tokens to the consolidated `analysis_request` charge, so lowering this caps the per-call cost. When omitted, defaults to the user's plan ceiling (`videos_per_search_count`). Values above the plan ceiling are silently clamped down.",
+                    "description": "Maximum number of videos to analyse and return. When omitted, defaults to your plan's limit; higher values are clamped to it.",
                     "example": 2
                   },
                   "include_usage": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the response includes a `usage` block listing every meter charged during this request, the total credits deducted, and the user's remaining balance."
+                    "description": "When true, the response includes the `usage` block of this request."
                   }
                 }
               }
@@ -2591,7 +2591,7 @@
     "/search/file": {
       "post": {
         "summary": "Search uploaded files",
-        "description": "Search through user's uploaded files using vector similarity with AI reranking.\n\n**Namespace filtering:** Pass `namespace_ids` to restrict the search to files in specific namespaces. If omitted, all namespaces are searched.\n\n**Process:**\n1. Vector similarity search using text embeddings\n2. Initial ranking by semantic similarity\n3. AI reranking for improved relevance\n4. Rich metadata and signed URLs for file access\n5. Optional per-file AI analysis for people, places, key subjects, and key moments\n\nEach result includes the `namespace_ids` and resolved `namespaces` the file belongs to.\n\n**Billing:** one `search_request` per call. The AI analysis pass (per-file + overall aggregation) bills `analysis_request` as `ceil(total_tokens / 15000)` units (minimum 1 when analysis ran). Set `include_usage=true` to receive the per-charge breakdown \u2014 the consolidated `analysis_request` entry carries a nested `tokens` object.",
+        "description": "Search through user's uploaded files using vector similarity with AI reranking.\n\n**Namespace filtering:** Pass `namespace_ids` to restrict the search to files in specific namespaces. If omitted, all namespaces are searched.\n\n**Process:**\n1. Vector similarity search using text embeddings\n2. Initial ranking by semantic similarity\n3. AI reranking for improved relevance\n4. Rich metadata and signed URLs for file access\n5. Optional per-file AI analysis for people, places, key subjects, and key moments\n\nEach result includes the `namespace_ids` and resolved `namespaces` the file belongs to.\n\nSet `include_usage=true` to receive the `usage` block, with the request's token counts.",
         "operationId": "searchFiles",
         "tags": [
           "Search"
@@ -2621,7 +2621,7 @@
                   "include_usage": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the response includes a `usage` block listing every meter charged during this request, the total credits deducted, and the user's remaining balance."
+                    "description": "When true, the response includes the `usage` block of this request."
                   }
                 }
               }
@@ -3556,7 +3556,7 @@
     "/tweet/statement": {
       "post": {
         "summary": "Extract structured claim from an X/Twitter tweet",
-        "description": "Fetches the tweet content (including any quoted tweet and attached media), then uses AI to extract a rich structured analysis: the core claim, classification axes, topics, entities, and raw tweet data.\n\n**Multimodal media handling:** attached media is processed by type. Videos are transcribed (platform captions or speech-to-text) and summarized; images are described by a vision model \u2014 transcribed text, chart/graph data points, recognisable people and logos, and any claims they make \u2014 and folded into the analysis.\n\n**Classification axes** (`claim_type`, `intent`, `tone`, `emotion`, `authority`) reflect **only the original tweet text**, not quoted content, media, or images.\n\n**Billing (consolidated, mirrors `/v1/analyze/video`):**\n- exactly one `analysis_request` charge with `quantity = ceil(total_tokens / 15000)`, summing tokens across the optional per-media extraction calls, the optional image vision calls, AND the main statement-extraction call. A typical tweet+quoted tweet with one video or an attached image runs several LLM calls but produces just one billing entry when the combined tokens stay under 15k. Image analysis is billed through this same `analysis_request` meter.\n- one `standard_request` per media URL whose transcript or metadata is fetched (mirrors `/v1/transcript`).\n- `transcription_hour` proportional to the audio duration if speech-to-text runs for a media video that has no platform transcript. Waived for users with `users.free_on_cache_hit=true` when STT was served from cache (same waiver as `/v1/transcribe`).\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /tweet/statement/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). The metadata fetch needed to read the video's duration is billed (`standard_request` or `residential_request`) and is **not** refunded: the limit is documented, so the proxy call was spent answering a request that could not be served. No `transcription_hour` is charged \u2014 no audio is processed. Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
+        "description": "Fetches the tweet content (including any quoted tweet and attached media), then uses AI to extract a rich structured analysis: the core claim, classification axes, topics, entities, and raw tweet data.\n\n**Multimodal media handling:** attached media is processed by type. Videos are transcribed (platform captions or speech-to-text) and summarized; images are described by a vision model \u2014 transcribed text, chart/graph data points, recognisable people and logos, and any claims they make \u2014 and folded into the analysis.\n\n**Classification axes** (`claim_type`, `intent`, `tone`, `emotion`, `authority`) reflect **only the original tweet text**, not quoted content, media, or images.\n\nSet `include_usage=true` to receive the `usage` block, with the request's token counts.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /tweet/statement/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
         "operationId": "getTweetStatement",
         "tags": [
           "Tweet Analysis"
@@ -3770,7 +3770,7 @@
     "/transcribe/async": {
       "post": {
         "summary": "Transcribe a video asynchronously (long videos)",
-        "description": "Queue a speech-to-text transcription and return a `task_id` immediately.\n\n**Use this instead of `POST /transcribe` for anything longer than ~10 minutes.** A synchronous transcription holds the HTTP connection open for the whole download and speech-to-text pass; past roughly ten minutes of audio that starts failing against client timeouts, reverse proxies and marketplace gateways. This endpoint has no duration cap.\n\nAccepts the same body as `POST /transcribe`, plus `webhook_url`.\n\n**Billing** is identical to the synchronous endpoint and happens in the background worker. Because the `202` fires before any charge is made, `include_usage` is not accepted here \u2014 pass it on `GET /transcribe/{task_id}` instead, which replays the final charges once `task_status=completed`. A failed job has all of its charges reverted.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time credit gate:** the submit endpoint returns `402` instead of a `task_id` when the account has less than 60 seconds of transcription credit left. This is a spam gate, not a quote \u2014 the real, duration-accurate charge happens when the job runs, and a job whose video exceeds the remaining balance still fails on the same credit check a synchronous call would hit. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
+        "description": "Queue a speech-to-text transcription and return a `task_id` immediately.\n\n**Use this instead of `POST /transcribe` for anything longer than ~10 minutes.** A synchronous transcription holds the HTTP connection open for the whole download and speech-to-text pass; past roughly ten minutes of audio that starts failing against client timeouts, reverse proxies and marketplace gateways. This endpoint has no duration cap.\n\nAccepts the same body as `POST /transcribe`, plus `webhook_url`.\n\n`include_usage` is not accepted here: pass it on `GET /transcribe/{task_id}` once `task_status=completed`.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time check:** the submit endpoint returns `402` instead of a `task_id` when the account has almost no credits left. A job can still fail later with `402` when the media needs more than the remaining balance. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
         "operationId": "transcribeVideoAsync",
         "tags": [
           "Transcripts"
@@ -3827,7 +3827,7 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "402": {
-            "description": "Insufficient credits to queue the job. Returned when the account has less than 60 seconds of transcription credit remaining; no task is created.",
+            "description": "Insufficient credits to queue the job; no task is created.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3895,7 +3895,7 @@
     "/transcribe/{task_id}": {
       "get": {
         "summary": "Get async transcription result",
-        "description": "Poll an async transcription job submitted with `POST /transcribe/async`.\n\nPolling is free \u2014 no credits are consumed by this endpoint. Poll while `task_status` is `processing`; a few seconds between polls is plenty. Results are retained for 1 hour **after the job finishes**, not from submission, so a long transcription still leaves a full window to collect it.\n\nOn `completed`, `data.result` holds exactly what the synchronous endpoint would have returned in its `data` block, so the same parsing code works for both. On `failed`, `data.error` carries the synchronous endpoint's own error code and HTTP status.\n\nReading a task does **not** consume or delete it \u2014 poll and re-read the same `task_id` as often as you like until it expires.",
+        "description": "Poll an async transcription job submitted with `POST /transcribe/async`.\n\nPoll while `task_status` is `processing`; a few seconds between polls is plenty. Results are retained for 1 hour **after the job finishes**, not from submission, so a long transcription still leaves a full window to collect it.\n\nOn `completed`, `data.result` holds exactly what the synchronous endpoint would have returned in its `data` block, so the same parsing code works for both. On `failed`, `data.error` carries the synchronous endpoint's own error code and HTTP status.\n\nReading a task does **not** consume or delete it \u2014 poll and re-read the same `task_id` as often as you like until it expires.",
         "operationId": "getTranscribeAsyncJob",
         "tags": [
           "Transcripts"
@@ -3914,7 +3914,7 @@
             "name": "include_usage",
             "in": "query",
             "required": false,
-            "description": "When true and `task_status=completed`, attach a `usage` block with the charges the background worker recorded. Omitted while the job is still running (billing is not finished) and when it failed (charges are reverted).",
+            "description": "When true and `task_status=completed`, attach the job's `usage` block. Omitted while the job is still running and when it failed.",
             "schema": {
               "type": "boolean",
               "default": false
@@ -3982,7 +3982,7 @@
     "/extract/video/async": {
       "post": {
         "summary": "Extract structured data from a video asynchronously (long videos)",
-        "description": "Queue a structured-data extraction and return a `task_id` immediately.\n\n**Use this instead of `POST /extract/video` whenever `transcribe` is left on and the video may run past ~10 minutes.** The extraction itself is fast; the speech-to-text step in front of it is what makes a synchronous request time out. This endpoint has no duration cap.\n\nAccepts the same body as `POST /extract/video` \u2014 JSON, YAML and `multipart/form-data` all work here too \u2014 plus `webhook_url`. The schema is validated at submit time, so an invalid schema is rejected on the `POST` rather than after a transcription you would have been billed for.\n\n**Billing** is identical to the synchronous endpoint and happens in the background. Pass `include_usage=true` on `GET /extract/video/{task_id}` for the breakdown.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time credit gate:** the submit endpoint returns `402` instead of a `task_id` when the account has less than 60 seconds of transcription credit left. This is a spam gate, not a quote \u2014 the real, duration-accurate charge happens when the job runs, and a job whose video exceeds the remaining balance still fails on the same credit check a synchronous call would hit. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
+        "description": "Queue a structured-data extraction and return a `task_id` immediately.\n\n**Use this instead of `POST /extract/video` whenever `transcribe` is left on and the video may run past ~10 minutes.** The extraction itself is fast; the speech-to-text step in front of it is what makes a synchronous request time out. This endpoint has no duration cap.\n\nAccepts the same body as `POST /extract/video` \u2014 JSON, YAML and `multipart/form-data` all work here too \u2014 plus `webhook_url`. The schema is validated at submit time, so an invalid schema is rejected on the `POST`, before any transcription.\n\n`include_usage` is not accepted here: pass it on `GET /extract/video/{task_id}` once `task_status=completed`.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time check:** the submit endpoint returns `402` instead of a `task_id` when the account has almost no credits left. A job can still fail later with `402` when the media needs more than the remaining balance. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
         "operationId": "extractVideoDataAsync",
         "tags": [
           "Extraction"
@@ -4069,7 +4069,7 @@
             }
           },
           "402": {
-            "description": "Insufficient credits to queue the job. Returned when the account has less than 60 seconds of transcription credit remaining; no task is created.",
+            "description": "Insufficient credits to queue the job; no task is created.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4137,7 +4137,7 @@
     "/extract/video/{task_id}": {
       "get": {
         "summary": "Get async extraction result",
-        "description": "Poll an async extraction job submitted with `POST /extract/video/async`.\n\nPolling is free \u2014 no credits are consumed by this endpoint. Poll while `task_status` is `processing`; a few seconds between polls is plenty. Results are retained for 1 hour **after the job finishes**, not from submission, so a long transcription still leaves a full window to collect it.\n\nOn `completed`, `data.result` holds exactly what the synchronous endpoint would have returned in its `data` block, so the same parsing code works for both. On `failed`, `data.error` carries the synchronous endpoint's own error code and HTTP status.\n\nReading a task does **not** consume or delete it \u2014 poll and re-read the same `task_id` as often as you like until it expires.",
+        "description": "Poll an async extraction job submitted with `POST /extract/video/async`.\n\nPoll while `task_status` is `processing`; a few seconds between polls is plenty. Results are retained for 1 hour **after the job finishes**, not from submission, so a long transcription still leaves a full window to collect it.\n\nOn `completed`, `data.result` holds exactly what the synchronous endpoint would have returned in its `data` block, so the same parsing code works for both. On `failed`, `data.error` carries the synchronous endpoint's own error code and HTTP status.\n\nReading a task does **not** consume or delete it \u2014 poll and re-read the same `task_id` as often as you like until it expires.",
         "operationId": "getExtractVideoAsyncJob",
         "tags": [
           "Extraction"
@@ -4156,7 +4156,7 @@
             "name": "include_usage",
             "in": "query",
             "required": false,
-            "description": "When true and `task_status=completed`, attach a `usage` block with the charges the background worker recorded. Omitted while the job is still running (billing is not finished) and when it failed (charges are reverted).",
+            "description": "When true and `task_status=completed`, attach the job's `usage` block. Omitted while the job is still running and when it failed.",
             "schema": {
               "type": "boolean",
               "default": false
@@ -4224,7 +4224,7 @@
     "/tweet/statement/async": {
       "post": {
         "summary": "Analyze a tweet's claim asynchronously (long attached video)",
-        "description": "Queue a tweet claim analysis and return a `task_id` immediately.\n\n**Use this instead of `POST /tweet/statement` when the tweet (or the tweet it quotes) carries a long video.** That media is transcribed in full before the claim can be extracted, so the request inherits the same timeout problem as `/transcribe`.\n\nAccepts the same body as `POST /tweet/statement`, plus `webhook_url`.\n\n**Billing** is identical to the synchronous endpoint and happens in the background. Pass `include_usage=true` on `GET /tweet/statement/{task_id}` for the breakdown.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time credit gate:** the submit endpoint returns `402` instead of a `task_id` when the account has less than 60 seconds of transcription credit left. This is a spam gate, not a quote \u2014 the real, duration-accurate charge happens when the job runs, and a job whose video exceeds the remaining balance still fails on the same credit check a synchronous call would hit. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
+        "description": "Queue a tweet claim analysis and return a `task_id` immediately.\n\n**Use this instead of `POST /tweet/statement` when the tweet (or the tweet it quotes) carries a long video.** That media is transcribed in full before the claim can be extracted, so the request inherits the same timeout problem as `/transcribe`.\n\nAccepts the same body as `POST /tweet/statement`, plus `webhook_url`.\n\n`include_usage` is not accepted here: pass it on `GET /tweet/statement/{task_id}` once `task_status=completed`.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time check:** the submit endpoint returns `402` instead of a `task_id` when the account has almost no credits left. A job can still fail later with `402` when the media needs more than the remaining balance. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
         "operationId": "getTweetStatementAsync",
         "tags": [
           "Tweet Analysis"
@@ -4270,7 +4270,7 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "402": {
-            "description": "Insufficient credits to queue the job. Returned when the account has less than 60 seconds of transcription credit remaining; no task is created.",
+            "description": "Insufficient credits to queue the job; no task is created.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4338,7 +4338,7 @@
     "/tweet/statement/{task_id}": {
       "get": {
         "summary": "Get async tweet claim analysis result",
-        "description": "Poll an async tweet claim analysis submitted with `POST /tweet/statement/async`.\n\nPolling is free \u2014 no credits are consumed by this endpoint. Poll while `task_status` is `processing`; a few seconds between polls is plenty. Results are retained for 1 hour **after the job finishes**, not from submission, so a long transcription still leaves a full window to collect it.\n\nOn `completed`, `data.result` holds exactly what the synchronous endpoint would have returned in its `data` block, so the same parsing code works for both. On `failed`, `data.error` carries the synchronous endpoint's own error code and HTTP status.\n\nReading a task does **not** consume or delete it \u2014 poll and re-read the same `task_id` as often as you like until it expires.",
+        "description": "Poll an async tweet claim analysis submitted with `POST /tweet/statement/async`.\n\nPoll while `task_status` is `processing`; a few seconds between polls is plenty. Results are retained for 1 hour **after the job finishes**, not from submission, so a long transcription still leaves a full window to collect it.\n\nOn `completed`, `data.result` holds exactly what the synchronous endpoint would have returned in its `data` block, so the same parsing code works for both. On `failed`, `data.error` carries the synchronous endpoint's own error code and HTTP status.\n\nReading a task does **not** consume or delete it \u2014 poll and re-read the same `task_id` as often as you like until it expires.",
         "operationId": "getTweetStatementAsyncJob",
         "tags": [
           "Tweet Analysis"
@@ -4357,7 +4357,7 @@
             "name": "include_usage",
             "in": "query",
             "required": false,
-            "description": "When true and `task_status=completed`, attach a `usage` block with the charges the background worker recorded. Omitted while the job is still running (billing is not finished) and when it failed (charges are reverted).",
+            "description": "When true and `task_status=completed`, attach the job's `usage` block. Omitted while the job is still running and when it failed.",
             "schema": {
               "type": "boolean",
               "default": false
@@ -4435,11 +4435,11 @@
     "schemas": {
       "UsageBlock": {
         "type": "object",
-        "description": "Per-call usage disclosure. Returned only when the caller passes `include_usage=true` in the request body. Lists every meter that fired during this request and the credits actually deducted. Multiple charges of the same meter inside one request are consolidated into a single entry (their quantities and credits are summed). When a charge was waived through a cache-hit sponsorship (e.g. NGO), it carries `waived: true` + `credits_saved`, and a top-level `waived.credits_saved` summary appears.\n\nFor endpoints that involve LLM analysis (`/extract/video`, `/extract/file`, `/analyze/video`, `/analyze/file`, `/youtube/search`), the consolidated `analysis_request` charge entry carries a nested `tokens` object reporting the LLM input/output token tally for the request.",
+        "description": "Per-call usage, returned only when the request sets `include_usage=true`: the charges of this request, one entry per `service_type`, and the total credits deducted. A waived charge carries `waived: true` and `credits_saved`, with a top-level `waived.credits_saved` summary.\n\nFor endpoints that run an AI analysis (`/extract/video`, `/extract/file`, `/analyze/video`, `/analyze/file`, `/youtube/search`), the `analysis_request` entry carries a nested `tokens` object with the request's token counts.",
         "properties": {
           "charges": {
             "type": "array",
-            "description": "Every billed meter for this request, consolidated: one entry per `service_type`. Multiple billings of the same meter inside the request sum into a single entry. Rollbacks net against the matching charge \u2014 if a charge is fully refunded inside the request, the entry is dropped from the response entirely.",
+            "description": "The charges of this request, one entry per `service_type`. A charge reversed within the request is left out.",
             "items": {
               "type": "object",
               "properties": {
@@ -4453,19 +4453,19 @@
                     "search_request",
                     "scene_analysis_hour"
                   ],
-                  "description": "Which meter fired."
+                  "description": "The kind of charge."
                 },
                 "quantity": {
                   "type": "number",
-                  "description": "Net units consumed. For `analysis_request`, this is computed as `ceil(total_tokens / 15000)`. For `transcription_hour` / `scene_analysis_hour`, it's in hours."
+                  "description": "Net units consumed (hours for `transcription_hour`)."
                 },
                 "credits": {
                   "type": "number",
-                  "description": "Net credits actually deducted for this meter. Will be 0 when the charge was waived."
+                  "description": "Net credits deducted for this charge; 0 when it was waived."
                 },
                 "waived": {
                   "type": "boolean",
-                  "description": "True when these charges were waived (cache hit + user has free_on_cache_hit sponsorship)."
+                  "description": "True when this charge was waived."
                 },
                 "credits_saved": {
                   "type": "number",
@@ -4473,15 +4473,15 @@
                 },
                 "tokens": {
                   "type": "object",
-                  "description": "Only present on the `analysis_request` entry for endpoints that run LLM analysis. Reports the cumulative LLM token tally for this request (sum across all internal AI calls).",
+                  "description": "Only on the `analysis_request` entry of endpoints that run an AI analysis: the request's total token counts.",
                   "properties": {
                     "prompt_tokens": {
                       "type": "integer",
-                      "description": "Total LLM input tokens."
+                      "description": "Total input tokens."
                     },
                     "completion_tokens": {
                       "type": "integer",
-                      "description": "Total LLM output tokens."
+                      "description": "Total output tokens."
                     },
                     "total_tokens": {
                       "type": "integer",
@@ -4502,7 +4502,7 @@
             "properties": {
               "credits_saved": {
                 "type": "number",
-                "description": "Total credits saved via cache-hit sponsorship on this request."
+                "description": "Total credits waived on this request."
               }
             }
           }
@@ -5387,7 +5387,7 @@
                 "$ref": "#/components/schemas/UsageBlock"
               }
             ],
-            "description": "Per-call billing + LLM token usage. Only present when include_usage=true. For /extract/*, the block carries the credit-charge fields (charges, total_credits, credits_remaining_after, waived) AND the LLM token fields (prompt_tokens, completion_tokens, total_tokens) in a single object."
+            "description": "Per-call usage, only present when include_usage=true: the charges (charges, total_credits, credits_remaining_after, waived) and the token counts (prompt_tokens, completion_tokens, total_tokens) in one object."
           }
         }
       },
@@ -5633,7 +5633,7 @@
           },
           "pages_consumed": {
             "type": "integer",
-            "description": "Estimated number of TikTok API pages fetched. Charged 1:1 as transcript retrievals."
+            "description": "TikTok pages fetched."
           }
         }
       },
@@ -5881,7 +5881,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 4,
-            "description": "Slice count the task was created with. An N-slice request ran as N concurrent paginated TikTok query chains and was billed at up to ~Nx the residential requests of a single search."
+            "description": "Slice count the task was created with. An N-slice request ran as N concurrent paginated TikTok query chains."
           },
           "filters": {
             "type": "object",
@@ -5930,7 +5930,7 @@
               },
               "videos_fetched": {
                 "type": "integer",
-                "description": "Distinct videos TikTok returned, including those your filters dropped. Billed at 1 `residential_request` per 30, minimum 1 per search."
+                "description": "Distinct videos TikTok returned, including those your filters dropped."
               },
               "results_count": {
                 "type": "integer"
@@ -6221,7 +6221,7 @@
               },
               "rooms_fetched": {
                 "type": "integer",
-                "description": "Distinct rooms TikTok returned, including any past `max_results`. Billed at 1 `residential_request` per 30, minimum 1 per search."
+                "description": "Distinct rooms TikTok returned, including any past `max_results`."
               },
               "results_count": {
                 "type": "integer"
@@ -7273,7 +7273,7 @@
                 },
                 "charge_user": {
                   "type": "boolean",
-                  "description": "Always false for overload errors \u2014 the request was not billed"
+                  "description": "Always false for overload errors."
                 }
               }
             }
