@@ -470,7 +470,7 @@ for (const result of task.results) {
 - `parallel_search_slices` (`2` to `4`) runs several search chains in parallel to collect more results than TikTok's single-chain limit (about 115 to 140 items). Billing grows with the number of slices, so keep it at `1` unless you need the extra results, and especially when `published_within` is set, since every slice searches the same window.
 
 - `country` picks whose TikTok results you get (`'fr'`, `'de'`, `'jp'`, ..., default `'gb'`). `'us'` is refused: TikTok asks US visitors to log in.
-- Billing: 1 `residential_request` per 30 videos TikTok returned (`task.stats.videos_fetched`, including the ones your filters dropped), minimum 1 per search.
+- Billing: 1 `residential_request` per 30 results returned (`task.stats.results_count`), minimum 1 per search and 1 per 5 TikTok pages read (`task.stats.pages_fetched`).
 
 ### 6b. TikTok LIVE search (async)
 
@@ -492,7 +492,7 @@ for (const room of task.results) {
 - Each room has the same `id`, `url`, `author` and `stats` fields as a keyword search result, plus `started_at` (a `Date`), `stats.viewers` / `stats.total_viewers`, `hashtags` (the `#tags` of the title), `category` (the LIVE's category on TikTok, e.g. `'Gaming'`) and `game_tags`.
 - `stream_urls` holds `flv` and `hls` URLs keyed by quality (`origin`, `uhd`, `hd`, `sd`, `ld`), `default_quality`, an `audio_only` stream and `expires_at`. The URLs play while the LIVE is on. They are returned by default; pass `include_stream_urls: false` to leave them out. Not every LIVE offers HLS, so `hls` can be empty.
 - `country` defaults to `'us'`. Results keep TikTok's ranking; a keyword with no LIVE room in that country at that moment completes with zero results.
-- Billing: 1 `residential_request` per 30 rooms TikTok returned (`task.stats.rooms_fetched`), minimum 1 per search.
+- Billing: 1 `residential_request` per 30 rooms returned (`task.stats.results_count`), minimum 1 per search.
 
 ### 6c. TikTok LIVE room (sync)
 

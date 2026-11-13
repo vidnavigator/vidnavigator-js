@@ -407,8 +407,9 @@ export interface TikTokSearchFilters {
 export interface TikTokSearchStats {
   pages_fetched?: number;
   /**
-   * Distinct videos TikTok returned, including those your filters dropped. Billed at
-   * 1 `residential_request` per 30, minimum 1 per search.
+   * Distinct videos TikTok returned, including those your filters dropped. For information:
+   * billing follows `results_count` (1 `residential_request` per 30, minimum 1 per search)
+   * and `pages_fetched` (at least 1 per 5).
    */
   videos_fetched?: number;
   results_count?: number;
@@ -921,8 +922,8 @@ export interface TikTokLiveSearchStats {
   /** TikTok pages fetched (up to 50 rooms each). */
   pages_fetched?: number;
   /**
-   * Distinct rooms TikTok returned, including any past `max_results`. Billed at
-   * 1 `residential_request` per 30, minimum 1 per search.
+   * Distinct rooms TikTok returned, including any past `max_results`. For information:
+   * billing follows `results_count` (1 `residential_request` per 30, minimum 1 per search).
    */
   rooms_fetched?: number;
   results_count?: number;
