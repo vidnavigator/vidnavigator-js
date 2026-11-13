@@ -684,7 +684,7 @@ Search YouTube videos and uploaded files with AI-powered ranking/reranking.
 // Search YouTube videos
 const videoResults = await vn.searchYouTube({
   query: 'how to deploy a Node.js app',
-  focus: 'relevance',   // 'relevance' (default) | 'popularity' | 'brevity'
+  focus: 'relevance',   // 'relevance' (default) | 'recency' | 'popularity' | 'brevity'
   max_results: 5,       // caps how many candidates are analysed (and the cost)
   include_usage: true,  // attach a per-call usage block
 });
@@ -699,6 +699,15 @@ for (const r of videoResults.results) {
 if (videoResults.status === 'partial') {
   console.log('Partial results:', videoResults.error_code); // "insufficient_credits_video_search"
 }
+
+// The filters combine: the most recent videos of five minutes at most, published since 2025
+const recent = await vn.searchYouTube({
+  query: 'how to deploy a Node.js app',
+  focus: 'recency',
+  duration: 300,
+  start_year: 2025,
+  max_results: 5,
+});
 
 // Search uploaded files — optionally scoped to a namespace
 const fileResults = await vn.searchFiles({
@@ -896,7 +905,7 @@ Returns `transcript_analysis` containing:
 | `searchVideos(payload)` | **Deprecated** — forwards to `searchYouTube()` |
 | `searchFiles(payload)` | Semantic search across uploaded files, with optional `namespace_ids` scope |
 
-**`searchYouTube` options:** `query` (required), `use_enhanced_search` (default `true`), `start_year`, `end_year`, `focus` (`'relevance'` (default) \| `'popularity'` \| `'brevity'`), `duration`, `max_results` (caps candidates analysed & cost; defaults to your plan ceiling), `include_usage`.
+**`searchYouTube` options:** `query` (required), `use_enhanced_search` (default `true`), `start_year` / `end_year` (only videos published in or after / in or before that year), `focus` (what comes first among the matches: `'relevance'` (default) \| `'recency'` \| `'popularity'` \| `'brevity'`), `duration` (maximum length in seconds; longer videos are left out), `max_results` (caps candidates analysed & cost; defaults to your plan ceiling), `include_usage`.
 
 Results include `relevance_score`, `transcript_summary`, `people`, `places`, `key_subjects`, `query_answer`, `timestamps`, and `relevant_text`. If credits run out mid-search the API returns a partial result: `searchYouTube` surfaces it as `{ status: 'partial', error_code: 'insufficient_credits_video_search', results, usage? }` instead of throwing.
 

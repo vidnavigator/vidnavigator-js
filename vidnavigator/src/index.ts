@@ -65,7 +65,7 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '2.3.0';
+export const SDK_VERSION = '2.3.1';
 
 /**
  * A LIVE room usually answers in 1-5 s, up to ~30 s when the API has to open a TikTok page, and two
@@ -218,14 +218,23 @@ export interface ExtractDataResult {
   usage?: UsageBlock;
 }
 
-export type YouTubeSearchFocus = 'relevance' | 'popularity' | 'brevity';
+/**
+ * What comes first among the videos that match the query: the best matches
+ * (`relevance`), the most recent (`recency`), the most viewed (`popularity`)
+ * or the shortest (`brevity`).
+ */
+export type YouTubeSearchFocus = 'relevance' | 'recency' | 'popularity' | 'brevity';
 
 export type SearchYouTubePayload = {
   query: string;
   use_enhanced_search?: boolean;
+  /** Only videos published in or after this year. */
   start_year?: number;
+  /** Only videos published in or before this year. */
   end_year?: number;
+  /** Defaults to `relevance`. With another value, `explanation` is empty. */
   focus?: YouTubeSearchFocus;
+  /** Maximum duration in seconds: longer videos are left out. */
   duration?: number;
   max_results?: number;
   include_usage?: boolean;

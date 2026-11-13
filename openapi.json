@@ -2440,27 +2440,28 @@
                   },
                   "start_year": {
                     "type": "integer",
-                    "description": "Filter by start year",
+                    "description": "Only videos published in or after this year",
                     "example": 2020
                   },
                   "end_year": {
                     "type": "integer",
-                    "description": "Filter by end year",
+                    "description": "Only videos published in or before this year",
                     "example": 2024
                   },
                   "focus": {
                     "type": "string",
                     "enum": [
                       "relevance",
+                      "recency",
                       "popularity",
                       "brevity"
                     ],
                     "default": "relevance",
-                    "description": "Search focus"
+                    "description": "What comes first among the videos that match the query: the best matches (`relevance`), the most recent (`recency`), the most viewed (`popularity`) or the shortest (`brevity`). With a value other than `relevance`, `explanation` is empty."
                   },
                   "duration": {
                     "type": "integer",
-                    "description": "Maximum duration in seconds",
+                    "description": "Maximum duration in seconds: longer videos are left out",
                     "example": 600
                   },
                   "max_results": {

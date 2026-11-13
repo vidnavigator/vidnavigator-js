@@ -592,6 +592,42 @@ async function run() {
     }
   } catch (e) { fail('searchYouTube', e.message); }
 
+  // ── Search YouTube filters: maximum duration, year range, most recent first ──
+  console.log('--- searchYouTube filters ---');
+  try {
+    // Years of the results that carry a full date (not "3 weeks ago").
+    const publishedYears = (results) => results
+      .map((r) => String(r.published_date || '').slice(0, 4))
+      .filter((year) => /^\d{4}$/.test(year))
+      .map(Number);
+
+    const bounded = await withTimeout(
+      client.searchYouTube({
+        query: 'how transformers work',
+        use_enhanced_search: false,
+        duration: 300,
+        start_year: 2021,
+        end_year: 2023,
+        max_results: 4,
+      }),
+      180000, 'searchYouTube filters'
+    );
+    assert(bounded.results.length > 0, 'searchYouTube with filters returns results');
+    assert(bounded.results.every((r) => !r.duration || r.duration <= 300), 'searchYouTube duration is a maximum length');
+    const years = publishedYears(bounded.results);
+    assert(years.length > 0 && years.every((year) => year >= 2021 && year <= 2023), 'searchYouTube keeps to start_year and end_year');
+
+    const recent = await withTimeout(
+      client.searchYouTube({ query: 'how transformers work', use_enhanced_search: false, focus: 'recency', max_results: 4 }),
+      180000, 'searchYouTube recency'
+    );
+    const recentYears = publishedYears(recent.results);
+    assert(
+      recentYears.length > 0 && Math.min(...recentYears) >= new Date().getFullYear() - 1,
+      'searchYouTube focus=recency returns videos of this year or the last'
+    );
+  } catch (e) { fail('searchYouTube filters', e.message); }
+
   // ── Search files (with timeout) ──
   console.log('--- searchFiles ---');
   try {

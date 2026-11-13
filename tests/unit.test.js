@@ -936,6 +936,21 @@ async function runClientMethodTests() {
   assert(yts.usage instanceof sdk.UsageBlock, 'searchYouTube parses usage as UsageBlock');
   assert(yts.usage.analysis_tokens.total_tokens === 1000, 'searchYouTube usage.analysis_tokens');
 
+  // Every filter reaches the API as given, the `recency` focus included.
+  await client.searchYouTube({
+    query: 'react hooks',
+    focus: 'recency',
+    start_year: 2024,
+    end_year: 2025,
+    duration: 300,
+  });
+  {
+    const sent = calls[calls.length - 1].data;
+    assert(sent.focus === 'recency', 'searchYouTube sends focus=recency');
+    assert(sent.start_year === 2024 && sent.end_year === 2025, 'searchYouTube sends start_year and end_year');
+    assert(sent.duration === 300, 'searchYouTube sends duration');
+  }
+
   // searchVideos is a deprecated alias forwarding to /youtube/search with a warning.
   {
     const originalWarn = console.warn;
