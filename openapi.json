@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "VidNavigator Developer API",
-    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nCheck the documentation for the rate limits for each endpoint.\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe speech-to-text endpoints (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints \u2014 they have no duration cap. See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/guides/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/reference/errors",
+    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nCheck the documentation for the rate limits for each endpoint.\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe speech-to-text endpoints (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`, `/watch`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n| `POST /watch` | `POST /watch/async` | `GET /watch/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints \u2014 they have no duration cap. See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/guides/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/reference/errors",
     "version": "1.0.0",
     "contact": {
       "name": "VidNavigator Support",
@@ -4422,6 +4422,442 @@
           }
         }
       }
+    },
+    "/watch": {
+      "post": {
+        "summary": "Watch a video",
+        "description": "Read what a video **shows**, along with what it says. The response holds the video's transcript and a list of `scenes`: for each one, when it starts and ends, a description of the picture, and the text readable on screen.\n\nWorks with every platform `POST /transcript` and `POST /transcribe` support. The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise.\n\n**Options:**\n- `detail`: how closely the picture is followed (`low`, `auto`, `high`). The number of frames depends on the video at every level: few on a fixed shot, many on a fast-cut clip\n- `include_transcript=false`: the scenes only\n- `transcript_text=true`: the transcript as a single text string instead of segments\n\nA video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned.\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous. For media longer than ~10 minutes use `POST /watch/async` instead, which returns a `task_id` and can call your webhook when it finishes. See https://docs.vidnavigator.com/guides/async-jobs\n\nVideos longer than 2 hours are not accepted (`video_too_long`), except on YouTube.",
+        "operationId": "watchVideo",
+        "tags": [
+          "Watch"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "video_url"
+                ],
+                "properties": {
+                  "video_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL of the video to watch. For Instagram carousel posts and Snapchat highlights, append ?img_index=N to select a specific video.",
+                    "example": "https://www.tiktok.com/@nasa/video/7300000000000000000"
+                  },
+                  "detail": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "auto",
+                      "high"
+                    ],
+                    "default": "auto",
+                    "description": "How closely the picture is followed. At every level a frame is taken where the picture changes, and at least one every 10 seconds; the level sets how small a change counts. `low` keeps the larger changes, `auto` is the balanced default, `high` follows faster cuts and looks at a still picture twice as often. A higher level analyzes more frames on a video whose picture changes often."
+                  },
+                  "include_transcript": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "When false, only the scenes are returned and no transcript is fetched or produced."
+                  },
+                  "transcript_text": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, returns the transcript as a single plain-text string instead of an array of segments."
+                  },
+                  "include_usage": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, the response includes the `usage` block of this request."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The video was watched.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "success"
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/WatchResult"
+                    },
+                    "usage": {
+                      "$ref": "#/components/schemas/UsageBlock"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request \u2014 invalid parameters, no videos found, or the video exceeds the synchronous duration cap (`video_too_long`; use `POST /watch/async`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "request_body_required",
+                        "missing_parameter",
+                        "invalid_parameter",
+                        "invalid_url",
+                        "no_videos_found",
+                        "video_too_long"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/ContentRestricted"
+          },
+          "404": {
+            "description": "The video is gone (`video_unavailable`) or not published yet (`video_not_yet_available`), its picture cannot be read (`frames_not_available`: a live stream, or a clip of a few seconds), or we could not reach it after our retries (`metadata_fetch_failed` \u2014 may be temporary).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "video_unavailable",
+                        "video_not_yet_available",
+                        "frames_not_available",
+                        "metadata_fetch_failed"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "451": {
+            "$ref": "#/components/responses/GeoRestricted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "502": {
+            "description": "The video could not be watched this time (`video_download_failed`, `watch_failed`, `watch_unavailable`). Temporary: try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "video_download_failed",
+                        "watch_failed",
+                        "watch_unavailable"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The video could not be watched this time (`video_download_failed`, `watch_failed`, `watch_unavailable`). Temporary: try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "video_download_failed",
+                        "watch_failed",
+                        "watch_unavailable"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/watch/async": {
+      "post": {
+        "summary": "Watch a video asynchronously (long videos)",
+        "description": "Queue a video to watch and return a `task_id` immediately.\n\n**Use this instead of `POST /watch` for anything longer than ~10 minutes.**\n\nAccepts the same body as `POST /watch`, plus `webhook_url`.\n\n`include_usage` is not accepted here: pass it on `GET /watch/{task_id}` once `task_status=completed`.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time check:** the submit endpoint returns `402` instead of a `task_id` when the account has almost no credits left. A job can still fail later with `402` when the video needs more than the remaining balance. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.\n\nVideos longer than 2 hours are not accepted (`video_too_long`), except on YouTube.",
+        "operationId": "watchVideoAsync",
+        "tags": [
+          "Watch"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "video_url"
+                ],
+                "properties": {
+                  "video_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL of the video to watch. For Instagram carousel posts and Snapchat highlights, append ?img_index=N to select a specific video.",
+                    "example": "https://www.tiktok.com/@nasa/video/7300000000000000000"
+                  },
+                  "detail": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "auto",
+                      "high"
+                    ],
+                    "default": "auto",
+                    "description": "How closely the picture is followed. At every level a frame is taken where the picture changes, and at least one every 10 seconds; the level sets how small a change counts. `low` keeps the larger changes, `auto` is the balanced default, `high` follows faster cuts and looks at a still picture twice as often. A higher level analyzes more frames on a video whose picture changes often."
+                  },
+                  "include_transcript": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "When false, only the scenes are returned and no transcript is fetched or produced."
+                  },
+                  "transcript_text": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, returns the transcript as a single plain-text string instead of an array of segments."
+                  },
+                  "webhook_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/guides/webhooks",
+                    "example": "https://example.com/hooks/vidnavigator"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted and started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsyncJobAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "402": {
+            "description": "Insufficient credits to queue the job; no task is created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "limit_exceeded"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "limit_exceeded"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many jobs already running for this account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "too_many_active_jobs"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/watch/{task_id}": {
+      "get": {
+        "summary": "Get async watch result",
+        "description": "Poll an async watch job submitted with `POST /watch/async`.\n\nPoll while `task_status` is `processing`; a few seconds between polls is plenty. Results are retained for 1 hour **after the job finishes**, not from submission, so a long video still leaves a full window to collect it.\n\nOn `completed`, `data.result` holds exactly what the synchronous endpoint would have returned in its `data` block, so the same parsing code works for both. On `failed`, `data.error` carries the synchronous endpoint's own error code and HTTP status.\n\nReading a task does **not** consume or delete it \u2014 poll and re-read the same `task_id` as often as you like until it expires.",
+        "operationId": "getWatchAsyncJob",
+        "tags": [
+          "Watch"
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "The `task_id` returned by the matching async submit endpoint.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "include_usage",
+            "in": "query",
+            "required": false,
+            "description": "When true and `task_status=completed`, attach the job's `usage` block. Omitted while the job is still running and when it failed.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task found. `task_status` may be `processing`, `completed` or `failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "success"
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/WatchAsyncJob"
+                    },
+                    "usage": {
+                      "$ref": "#/components/schemas/UsageBlock"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found, expired (results are kept 1 hour after the job finishes), not owned by this account, or not a watch task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "task_not_found"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4452,13 +4888,14 @@
                     "transcription_hour",
                     "analysis_request",
                     "search_request",
-                    "scene_analysis_hour"
+                    "scene_analysis_hour",
+                    "frame_analysis"
                   ],
                   "description": "The kind of charge."
                 },
                 "quantity": {
                   "type": "number",
-                  "description": "Net units consumed (hours for `transcription_hour`)."
+                  "description": "Net units consumed (hours for `transcription_hour`, frames for `frame_analysis`)."
                 },
                 "credits": {
                   "type": "number",
@@ -4633,6 +5070,14 @@
                   }
                 ],
                 "description": "Speech-to-text usage in hours"
+              },
+              "frame_analysis": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ActivityCount"
+                  }
+                ],
+                "description": "Video frames analyzed by `/watch`"
               }
             }
           },
@@ -6312,7 +6757,8 @@
                 "enum": [
                   "transcribe",
                   "extract_video",
-                  "tweet_statement"
+                  "tweet_statement",
+                  "watch"
                 ]
               },
               "expires_at": {
@@ -6584,6 +7030,8 @@
               "extract_video.failed",
               "tweet_statement.completed",
               "tweet_statement.failed",
+              "watch.completed",
+              "watch.failed",
               "tiktok_profile.completed",
               "tiktok_profile.failed",
               "tiktok_search.completed",
@@ -6936,6 +7384,142 @@
           "products": {
             "type": "integer",
             "description": "Number of products on sale in the LIVE (0 when none)."
+          }
+        }
+      },
+      "VideoScene": {
+        "type": "object",
+        "description": "What the video shows between `start` and `end`.",
+        "properties": {
+          "start": {
+            "type": "number",
+            "description": "Start of the scene, in seconds from the beginning of the video."
+          },
+          "end": {
+            "type": "number",
+            "description": "End of the scene, in seconds: the start of the next scene, or the end of the video."
+          },
+          "description": {
+            "type": "string",
+            "description": "What is visible: people, setting, action, objects."
+          },
+          "on_screen_text": {
+            "type": "string",
+            "description": "Text readable on screen (captions, titles, signs), verbatim. Empty when there is none."
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "description",
+          "on_screen_text"
+        ],
+        "example": {
+          "start": 4.0,
+          "end": 12.0,
+          "description": "A presenter stands in front of a world map and points at Europe.",
+          "on_screen_text": "BREAKING NEWS"
+        }
+      },
+      "WatchResult": {
+        "type": "object",
+        "description": "A watched video: its metadata, its transcript and its scenes.",
+        "properties": {
+          "video_info": {
+            "$ref": "#/components/schemas/VideoInfo"
+          },
+          "transcript": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptOutput"
+              }
+            ],
+            "description": "What is said. Left out when `include_transcript=false`; empty when the video has no transcript (see `transcript_error`)."
+          },
+          "transcript_error": {
+            "type": "object",
+            "description": "Present only when the transcript could not be had, for instance on a video without speech. The scenes are returned all the same.",
+            "properties": {
+              "error": {
+                "type": "string",
+                "example": "transcript_not_available"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "scenes": {
+            "type": "array",
+            "description": "What is shown, in chronological order.",
+            "items": {
+              "$ref": "#/components/schemas/VideoScene"
+            }
+          },
+          "frames_analyzed": {
+            "type": "integer",
+            "description": "Number of frames of the video that were analyzed to produce the scenes.",
+            "example": 23
+          }
+        }
+      },
+      "WatchAsyncJob": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "task_status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "completed",
+              "failed"
+            ],
+            "description": "`processing` = accepted and being worked on. `completed` and `failed` are terminal."
+          },
+          "job_type": {
+            "type": "string"
+          },
+          "request": {
+            "type": "object",
+            "description": "Echo of the submitted parameters. `webhook_url` is never echoed."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "check_status_url": {
+            "type": "string"
+          },
+          "webhook": {
+            "$ref": "#/components/schemas/AsyncJobWebhookStatus"
+          },
+          "result": {
+            "nullable": true,
+            "description": "Present only when `task_status=completed`. Identical to the `data` block of a successful synchronous `POST /watch`.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WatchResult"
+              }
+            ]
+          },
+          "error": {
+            "$ref": "#/components/schemas/AsyncJobError"
           }
         }
       }
@@ -7317,6 +7901,10 @@
     {
       "name": "Transcripts",
       "description": "Extract transcripts from online videos"
+    },
+    {
+      "name": "Watch",
+      "description": "Read what a video shows, scene by scene, along with its transcript"
     },
     {
       "name": "TikTok",
