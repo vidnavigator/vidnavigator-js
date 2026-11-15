@@ -11,6 +11,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 
 - **Multi-platform transcription** — YouTube, Instagram Reels & carousel posts, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, Snapchat, and more.
 - **Any video length** — transcription, extraction, and tweet analysis run as background jobs, so there is no duration limit. Get the result with one `await`, or submit many jobs and collect them as they finish.
+- **Watch a video** — what it shows, scene by scene, with the text readable on screen, next to its transcript, in one result.
 - **Async TikTok profile scraping, keyword search and LIVE search** — collect public TikTok videos, or LIVE rooms with their stream URLs, in the background, then read results via cursor pagination or a signed `download_url`, optionally notified by webhook.
 - **TikTok LIVE room** — check one room or streamer right away, with its latest comments, pinned comment and top viewers.
 - **Instagram carousel support** — select a specific video by index, or transcribe every video in a carousel post with one call.
@@ -24,21 +25,21 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 
 ## Supported Platforms
 
-| Platform | Transcript | Transcribe (speech-to-text) | Carousel |
-|----------|:----------:|:---------------------------:|:--------:|
-| YouTube | Yes | - | - |
-| Instagram Reels | - | Yes | Yes |
-| Instagram Posts | - | Yes | Yes (`all_videos`) |
-| TikTok | Yes | Yes | - |
-| X / Twitter | Yes | Yes | - |
-| Vimeo | Yes | Yes | - |
-| Facebook | Yes | Yes | - |
-| Dailymotion | Yes | Yes | - |
-| Loom | Yes | Yes | - |
-| Snapchat | Yes, when Snapchat has a transcript | Yes | Yes (highlights: `img_index`, `all_videos`) |
-| Uploaded files | Yes | Yes | - |
+| Platform | Transcript | Transcribe (speech-to-text) | Watch (scenes) | Carousel |
+|----------|:----------:|:---------------------------:|:--------------:|:--------:|
+| YouTube | Yes | - | Yes | - |
+| Instagram Reels | - | Yes | Yes | Yes |
+| Instagram Posts | - | Yes | Yes | Yes (`all_videos`) |
+| TikTok | Yes | Yes | Yes | - |
+| X / Twitter | Yes | Yes | Yes | - |
+| Vimeo | Yes | Yes | Yes | - |
+| Facebook | Yes | Yes | Yes | - |
+| Dailymotion | Yes | Yes | Yes | - |
+| Loom | Yes | Yes | Yes | - |
+| Snapchat | Yes, when Snapchat has a transcript | Yes | Yes | Yes (highlights: `img_index`, `all_videos`) |
+| Uploaded files | Yes | Yes | - | - |
 
-> **Transcript** = fast caption/subtitle extraction. **Transcribe** = speech-to-text via AI models (works when captions are unavailable).
+> **Transcript** = fast caption/subtitle extraction. **Transcribe** = speech-to-text via AI models (works when captions are unavailable). **Watch** = what the video shows, scene by scene, next to its transcript, via `vn.watch()`.
 
 ## Installation
 
@@ -152,15 +153,75 @@ const tweet = await vn.getTranscript({
 });
 ```
 
+### 2b. Watch a video: scenes next to the transcript
+
+`vn.watch()` reads what a video **shows**, next to what it says. The result holds the transcript and a list of scenes: for each one, when it starts and ends, a description of the picture, and the text readable on screen. It works with every platform `getTranscript` and `transcribe` support, and runs as a [background job](#3-background-jobs-one-call-or-many-at-once).
+
+```ts
+const watched = await vn.watch('https://www.tiktok.com/@nasa/video/7300000000000000000');
+
+for (const scene of watched.scenes) {
+  console.log(`[${scene.start.toFixed(0)}s - ${scene.end.toFixed(0)}s] ${scene.description}`);
+  if (scene.on_screen_text) console.log(`    on screen: ${scene.on_screen_text}`);
+}
+// [4s - 12s] A presenter stands in front of a world map and points at Europe.
+//     on screen: BREAKING NEWS
+
+if (Array.isArray(watched.transcript)) {
+  for (const seg of watched.transcript) console.log(`[${seg.start.toFixed(1)}s] ${seg.text}`);
+}
+
+console.log(watched.frames_analyzed); // number of frames that were analyzed
+```
+
+The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise. A video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned. The same goes for a YouTube video without captions.
+
+```ts
+const watched = await vn.watch(url);
+if (watched.transcript_error) {
+  console.log(watched.transcript_error.error); // e.g. "transcript_not_available"
+}
+console.log(watched.scenes.length, 'scenes');
+```
+
+Pass an object instead of a URL for more options:
+
+| Option | Type | Description |
+|---|---|---|
+| `video_url` | `string` | URL of the video (`?img_index=N` selects one video of an Instagram carousel or a Snapchat highlight) |
+| `detail` | `string` | How closely the picture is followed: `'low'`, `'auto'` (the default) or `'high'`. The number of frames depends on the video at every level: few on a fixed shot, many on a fast-cut clip. A higher level analyzes more frames when the picture changes often. |
+| `include_transcript` | `boolean` | Default `true`. `false` returns the scenes only (the result has no `transcript`). |
+| `transcript_text` | `boolean` | Return the transcript as a single string instead of segments |
+| `webhook_url` | `string` | Optional; see [Webhooks](#4-webhooks) |
+
+The waiting options (`timeoutMs`, `include_usage`, ...) go in the second argument, as for every background job. With `include_usage: true` the result has a `usage` block; the frames are its `frame_analysis` charge.
+
+To start it without waiting, use the handle, as for any background job:
+
+```ts
+const job = await vn.watch.submit({ video_url: url, detail: 'high' }, { include_usage: true });
+console.log(job.task_id);
+
+const watched = await job.result();                                  // waits if needed
+console.log(watched.usage?.charge_for('frame_analysis')?.quantity);  // frames charged
+
+const later = vn.watch.resume(savedTaskId);                          // the same handle, later
+```
+
+`vn.watchVideo({ video_url, detail, include_usage: true })` is the same call with `include_usage` in the payload, like `transcribeVideo()`.
+
+Errors worth handling: `NotFoundError` with `error_code` `'frames_not_available'` (a live stream, or a clip of a few seconds, has no picture to read) and `BadRequestError` with `error_code` `'video_too_long'` (videos longer than 2 hours are not accepted, except on YouTube).
+
 ### 3. Background jobs: one call, or many at once
 
-Transcription, structured extraction, tweet analysis, and TikTok scraping run as background jobs on VidNavigator. The SDK always uses the async API endpoints, so **video length is never a problem**. You never deal with the request-response limits of long transcriptions.
+Transcription, watch, structured extraction, tweet analysis, and TikTok scraping run as background jobs on VidNavigator. The SDK always uses the async API endpoints, so **video length is never a problem**. You never deal with the request-response limits of long transcriptions.
 
 Each of these operations comes in two shapes:
 
 | Operation | Wait for the result | Start it and come back later |
 |---|---|---|
 | Transcription | `await vn.transcribe(url)` | `await vn.transcribe.submit(url)` |
+| Watch (scenes and transcript) | `await vn.watch(url)` | `await vn.watch.submit(url)` |
 | Structured extraction | `await vn.extractVideo({ video_url, schema })` | `await vn.extractVideo.submit({ ... })` |
 | Tweet claim analysis | `await vn.tweetStatement(tweetId)` | `await vn.tweetStatement.submit(tweetId)` |
 | TikTok profile scrape | `await vn.tiktokProfile(profileUrl)` | `await vn.tiktokProfile.submit(profileUrl)` |
@@ -310,7 +371,7 @@ function pending(): string[] {
 
 ### 4. Webhooks
 
-You can also have VidNavigator call your server when a job finishes. Pass `webhook_url` to any of the operations above (transcription, extraction, tweet analysis, TikTok profile and search), or set an account-wide default in **Studio → API**. A per-job `webhook_url` overrides the default, and `webhook_url: ''` turns the default off for that one job. The URL must be a public `https` endpoint; private and loopback hosts are rejected with a `BadRequestError`.
+You can also have VidNavigator call your server when a job finishes. Pass `webhook_url` to any of the operations above (transcription, watch, extraction, tweet analysis, TikTok profile and search), or set an account-wide default in **Studio → API**. A per-job `webhook_url` overrides the default, and `webhook_url: ''` turns the default off for that one job. The URL must be a public `https` endpoint; private and loopback hosts are rejected with a `BadRequestError`.
 
 Webhooks are optional. Waiting with `result()` or the one-liners works exactly the same whether or not a webhook is set, and it remains the source of truth.
 
@@ -359,7 +420,7 @@ app.post('/hooks/vidnavigator', express.raw({ type: 'application/json' }), async
 });
 ```
 
-- `event.data.result` holds the raw result for transcription, extraction, and tweet events, unless it was over 256 KB (`result_truncated: true`). For TikTok events it is only a summary, `{ stats, download_url_available }`, since a scrape can hold thousands of videos. In every case, `resume(task_id).result()` gets the full parsed result.
+- `event.data.result` holds the raw result for transcription, watch, extraction, and tweet events, unless it was over 256 KB (`result_truncated: true`). For TikTok events it is only a summary, `{ stats, download_url_available }`, since a scrape can hold thousands of videos. In every case, `resume(task_id).result()` gets the full parsed result.
 - `verifyWebhookSignature(rawBody, signatureHeader, secret)` returns `true` or `false` instead of throwing.
 - Deliveries older than 5 minutes are rejected by default. Change this with `{ toleranceSeconds }`; `0` turns the check off.
 - Failed deliveries (5xx, 429, network errors) are retried 5 times over about 13 minutes. Other 4xx responses are not retried.
@@ -758,7 +819,7 @@ console.log(`Channels indexed: ${usage.channelsIndexed.used} / ${usage.channelsI
 
 ### Per-call usage
 
-Pass `include_usage: true` to most endpoints (`getTranscript`, `transcribeVideo`, `analyzeVideo`, `analyzeFile`, `extractVideoData`, `extractFileData`, `searchYouTube`, `searchFiles`) to receive a `usage` block describing exactly what the request cost. For background jobs, pass it in the options: `vn.transcribe(url, { include_usage: true })`, `vn.transcribe.submit(url, { include_usage: true })`, or `vn.transcribe.resume(taskId, { include_usage: true })`. The result's `usage` is filled in once the job completes. A failed job has all its charges reverted, so it has no usage.
+Pass `include_usage: true` to most endpoints (`getTranscript`, `transcribeVideo`, `watchVideo`, `analyzeVideo`, `analyzeFile`, `extractVideoData`, `extractFileData`, `searchYouTube`, `searchFiles`) to receive a `usage` block describing exactly what the request cost. For background jobs, pass it in the options: `vn.transcribe(url, { include_usage: true })`, `vn.transcribe.submit(url, { include_usage: true })`, or `vn.transcribe.resume(taskId, { include_usage: true })`. The result's `usage` is filled in once the job completes. A failed job has all its charges reverted, so it has no usage.
 
 The `usage` field is a `UsageBlock`:
 
@@ -784,7 +845,7 @@ if (usage) {
 }
 ```
 
-`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*`, `/analyze/*`, and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived via a cache-hit sponsorship, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
+`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `frame_analysis`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*`, `/analyze/*`, and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived via a cache-hit sponsorship, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
 
 ---
 
@@ -803,11 +864,18 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 
 **Common options:** `video_url`, `language`, `metadata_only`, `fallback_to_metadata`, `transcript_text`, `include_usage`
 
+### Watch
+
+| Method | Description |
+|--------|-------------|
+| `watch(urlOrInput, options?)` | What a video shows, scene by scene, next to its transcript. Input: `video_url`, `detail` (`'low'`, `'auto'`, `'high'`), `include_transcript`, `transcript_text`, `webhook_url`. Returns a `WatchResult`. See [Background jobs](#background-jobs) |
+| `watchVideo(payload, options?)` | Same as `watch()`, with `include_usage` in the payload |
+
 ### Background jobs
 
 | Member | Description |
 |--------|-------------|
-| `vn.transcribe`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokProfile`, `vn.tiktokSearch`, `vn.tiktokLiveSearch` | Call directly to submit and wait for the result. Options: `include_usage`, `timeoutMs`, `intervalMs`, `fastStart`, `signal`, `onPoll` |
+| `vn.transcribe`, `vn.watch`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokProfile`, `vn.tiktokSearch`, `vn.tiktokLiveSearch` | Call directly to submit and wait for the result. Options: `include_usage`, `timeoutMs`, `intervalMs`, `fastStart`, `signal`, `onPoll` |
 | `.submit(input, { include_usage? })` | Start the job and return a `Job` immediately |
 | `.resume(task_id, { include_usage? })` | Get a `Job` for a job you already started (no request is made) |
 | `job.task_id`, `job.job_type`, `job.check_status_url`, `job.webhook_url` | Job details from the submit response |
@@ -816,7 +884,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 | `job.result(options?)` | Wait until finished and return the result. Throws on failure or timeout; every error carries `task_id` |
 | `job.wait(options?)` | Wait until finished and return the final task, without throwing on failure |
 
-Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → `{ data, video_info, usage? }`; `tweetStatement` → `TweetStatement`; `tiktokProfile` / `tiktokSearch` / `tiktokLiveSearch` → the completed task with every page of `videos` / `results`.
+Results: `transcribe` → same shape as `transcribeVideo()`; `watch` → `WatchResult` (`video_info`, `transcript`, `scenes`, `frames_analyzed`, `usage?`); `extractVideo` → `{ data, video_info, usage? }`; `tweetStatement` → `TweetStatement`; `tiktokProfile` / `tiktokSearch` / `tiktokLiveSearch` → the completed task with every page of `videos` / `results`.
 
 ### Webhooks
 
@@ -826,7 +894,7 @@ Results: `transcribe` → same shape as `transcribeVideo()`; `extractVideo` → 
 | `verifyWebhookSignature(rawBody, signatureHeader, secret, options?)` | Same check, returning `true` / `false` |
 | `WEBHOOK_HEADERS` | Header names: `signature`, `delivery`, `event`, `taskId` |
 
-`options`: `toleranceSeconds` (default `300`, `0` turns the check off). Event types: `transcribe.*`, `extract_video.*`, `tweet_statement.*`, `tiktok_profile.*`, `tiktok_search.*`, `tiktok_live_search.*`, each with `.completed` or `.failed`.
+`options`: `toleranceSeconds` (default `300`, `0` turns the check off). Event types: `transcribe.*`, `watch.*`, `extract_video.*`, `tweet_statement.*`, `tiktok_profile.*`, `tiktok_search.*`, `tiktok_live_search.*`, each with `.completed` or `.failed`.
 
 ### TikTok
 
@@ -980,7 +1048,9 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `CarouselInfo` | Carousel summary: total items, video/image count, transcribed count, total duration |
 | `CarouselVideoResult` | Per-video result in a carousel: index, status, video info, transcript |
 | `Job` | Handle returned by `.submit()` / `.resume()`: `task_id`, `status()`, `refresh()`, `result()`, `wait()` |
-| `AsyncJob<T>` | Task snapshot of a transcription, extraction, or tweet job (from `job.refresh()` / `job.wait()`): `task_status`, `result`, `error`, `webhook`, `request`, timestamps |
+| `AsyncJob<T>` | Task snapshot of a transcription, watch, extraction, or tweet job (from `job.refresh()` / `job.wait()`): `task_status`, `result`, `error`, `webhook`, `request`, timestamps |
+| `WatchResult` | A watched video, from `watch()`: `video_info`, `transcript` (left out with `include_transcript: false`), `transcript_error`, `scenes`, `frames_analyzed`, `usage` |
+| `VideoScene` | What a video shows between `start` and `end` (seconds): `description`, `on_screen_text` |
 | `TikTokProfileScrapeSubmission` | Async scrape submission: `task_id`, status, profile URL, expiry, `webhook_url` |
 | `TikTokProfileTask` | TikTok profile scrape task with status, profile metadata, videos, pagination, `download_url`, `error`, `webhook` |
 | `TikTokVideo` | Public TikTok video metadata returned by profile scraping, including `published_at` as a `Date` and integer counters |
@@ -992,6 +1062,10 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
+
+## What's new in 2.4.0
+
+- **Watch:** [`vn.watch()`](#2b-watch-a-video-scenes-next-to-the-transcript) reads what a video shows, next to what it says: a list of scenes (`start`, `end`, `description`, `on_screen_text`) and the transcript, in one result. `detail` sets how closely the picture is followed, `include_transcript: false` returns the scenes only. Runs as a background job like `vn.transcribe()`, with `vn.watch.submit()`, `vn.watch.resume(task_id)`, `watchVideo()` and the `watch.completed` / `watch.failed` webhook events.
 
 ## Links
 

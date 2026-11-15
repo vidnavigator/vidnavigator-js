@@ -11,3 +11,4 @@ export * from './TranscriptSegment';
 export * from './TweetStatement';
 export * from './VideoInfo';
 export * from './Usage';
+export * from './Watch';

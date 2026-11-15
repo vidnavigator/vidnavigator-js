@@ -48,6 +48,8 @@ import {
   TikTokLiveRoomResultJSON,
   tiktokLiveRoomResultFromJSON,
   TweetStatement,
+  WatchResult,
+  WatchResultJSON,
   AsyncJob,
   AsyncJobJSON,
   AsyncJobAccepted,
@@ -65,7 +67,7 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '2.3.1';
+export const SDK_VERSION = '2.4.0';
 
 /**
  * A LIVE room usually answers in 1-5 s, up to ~30 s when the API has to open a TikTok page, and two
@@ -117,6 +119,27 @@ export type TranscribeInput = {
   all_videos?: boolean;
 } & WebhookOption;
 
+/** How closely {@link VidNavigatorClient.watch} follows the picture. */
+export type WatchDetail = 'low' | 'auto' | 'high';
+
+/** Input for {@link VidNavigatorClient.watch}. A plain string is treated as `video_url`. */
+export type WatchInput = {
+  /** `?img_index=N` selects one video of an Instagram carousel or a Snapchat highlight. */
+  video_url: string;
+  /**
+   * How closely the picture is followed. Default `auto`. The number of frames depends on the
+   * video at every level; a higher level analyzes more frames when the picture changes often.
+   */
+  detail?: WatchDetail;
+  /** Default true. `false` returns the scenes only: the result has no `transcript`. */
+  include_transcript?: boolean;
+  /** Return the transcript as a single string instead of segments. */
+  transcript_text?: boolean;
+} & WebhookOption;
+
+/** Payload of {@link VidNavigatorClient.watchVideo}: a {@link WatchInput} with `include_usage`. */
+export type WatchVideoPayload = WatchInput & { include_usage?: boolean };
+
 /** Input for {@link VidNavigatorClient.extractVideo}: a JSON `schema`, or a JSON/YAML `schemaFilePath`. */
 export type ExtractVideoInput =
   | ({
@@ -160,6 +183,9 @@ export type TranscribeVideoResult = TranscribeVideoSingleResult | TranscribeVide
 /** Snapshot of a transcription task. `result` has the same shape as {@link VidNavigatorClient.transcribe}'s return value. */
 export type TranscribeAsyncJob = AsyncJob<TranscribeVideoResult>;
 
+/** Snapshot of a watch task. `result` is a {@link WatchResult}. */
+export type WatchAsyncJob = AsyncJob<WatchResult>;
+
 /** Snapshot of an extraction task. `result` is the extracted object, shaped like your schema. */
 export type ExtractVideoAsyncJob = AsyncJob<Record<string, unknown>>;
 
@@ -181,6 +207,7 @@ export interface TranscribeOperation extends JobOperation<string | TranscribeInp
   submit(input: SingleTranscribeInput, options?: SubmitOptions): Promise<Job<TranscribeAsyncJob, TranscribeVideoSingleResult>>;
   submit(input: string | TranscribeInput, options?: SubmitOptions): Promise<Job<TranscribeAsyncJob, TranscribeVideoResult>>;
 }
+export type WatchJob = Job<WatchAsyncJob, WatchResult>;
 export type ExtractVideoJob = Job<ExtractVideoAsyncJob, ExtractDataResult>;
 export type TweetStatementJob = Job<TweetStatementAsyncJob, TweetStatement>;
 /** `result()` resolves to the completed task with **all** pages of `videos` collected. */
@@ -441,6 +468,17 @@ export class VidNavigatorClient {
   readonly transcribe: TranscribeOperation;
 
   /**
+   * What a video shows, scene by scene, next to what it says, built on `POST /watch/async`. The
+   * result is a {@link WatchResult}: `scenes` (for each one its `start` and `end` in seconds, a
+   * `description` of the picture and the `on_screen_text`), the `transcript` and `frames_analyzed`.
+   * Works with every platform `getTranscript` and `transcribe` support.
+   *
+   * A video without a transcript is not an error: `transcript` is empty and `transcript_error`
+   * says why. Same shapes as {@link VidNavigatorClient.transcribe}.
+   */
+  readonly watch: JobOperation<string | WatchInput, WatchAsyncJob, WatchResult>;
+
+  /**
    * Structured-data extraction from a video of any length, built on `POST /extract/video/async`.
    * The schema is validated when you submit. Same shapes as {@link VidNavigatorClient.transcribe}.
    */
@@ -493,6 +531,21 @@ export class VidNavigatorClient {
         this.getAsyncJob(`/transcribe/${encodeURIComponent(task_id)}`, options, (raw) => parseTranscribeData(raw)),
       toResult: async (task) => ({ ...requireResult(task), usage: task.usage }),
     }) as TranscribeOperation;
+
+    this.watch = this.defineOperation({
+      jobType: 'watch',
+      submit: (input: string | WatchInput) =>
+        this.submitAsyncJob('/watch/async', typeof input === 'string' ? { video_url: input } : input),
+      fetchTask: (task_id, options) =>
+        this.getAsyncJob(`/watch/${encodeURIComponent(task_id)}`, options, (raw: WatchResultJSON) =>
+          WatchResult.fromJSON(raw)
+        ),
+      toResult: async (task) => {
+        const watched = requireResult(task);
+        watched.usage = task.usage;
+        return watched;
+      },
+    });
 
     this.extractVideo = this.defineOperation({
       jobType: 'extract_video',
@@ -699,6 +752,18 @@ export class VidNavigatorClient {
   ): Promise<TranscribeVideoResult> {
     const { include_usage, ...input } = payload;
     return this.transcribe(input, { ...options, include_usage });
+  }
+  //endregion
+
+  //region --- Watch ---
+  /**
+   * What a video shows, scene by scene, next to what it says. Blocking convenience wrapper around
+   * {@link VidNavigatorClient.watch}: submits to `POST /watch/async` and polls until the job
+   * finishes, so media of any length works.
+   */
+  async watchVideo(payload: WatchVideoPayload, options?: PollOptions<WatchAsyncJob>): Promise<WatchResult> {
+    const { include_usage, ...input } = payload;
+    return this.watch(input, { ...options, include_usage });
   }
   //endregion
 

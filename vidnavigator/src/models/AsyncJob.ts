@@ -1,8 +1,8 @@
 import { UsageBlock } from './Usage';
 import { VideoInfo, VideoInfoJSON } from './VideoInfo';
 
-/** Async job kinds returned by the `/transcribe/async`, `/extract/video/async` and `/tweet/statement/async` endpoints. */
-export type AsyncJobType = 'transcribe' | 'extract_video' | 'tweet_statement';
+/** Async job kinds returned by the `/transcribe/async`, `/watch/async`, `/extract/video/async` and `/tweet/statement/async` endpoints. */
+export type AsyncJobType = 'transcribe' | 'watch' | 'extract_video' | 'tweet_statement';
 
 /** `processing` = accepted and being worked on. `completed` and `failed` are terminal. */
 export type AsyncTaskStatus = 'processing' | 'completed' | 'failed';

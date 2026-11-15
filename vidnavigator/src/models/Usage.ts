@@ -5,6 +5,7 @@ export type UsageServiceType =
   | 'standard_request'
   | 'residential_request'
   | 'transcription_hour'
+  | 'frame_analysis'
   | 'analysis_request'
   | 'search_request'
   | 'scene_analysis_hour';
