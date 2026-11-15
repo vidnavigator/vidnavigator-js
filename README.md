@@ -56,6 +56,12 @@ const vn = new VidNavigatorClient({
 const { video_info, transcript } = await vn.getTranscript({
   video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
 });
+
+// What a video shows, scene by scene, next to what it says
+const { scenes } = await vn.watch('https://youtube.com/watch?v=dQw4w9WgXcQ');
+for (const scene of scenes) {
+  console.log(scene.start, scene.end, scene.description, scene.on_screen_text);
+}
 ```
 
 For full SDK documentation, see [`vidnavigator/README.md`](./vidnavigator/README.md).

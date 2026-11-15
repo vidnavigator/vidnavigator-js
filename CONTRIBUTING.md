@@ -64,6 +64,7 @@ Some live tests are slow or cost extra credits, so they only run when their vari
 | `TEST_TIKTOK_SEARCH_QUERY` | TikTok keyword search with `sort_by` / `published_within`, and with `country: 'fr'` (e.g. `ai tools`) |
 | `TEST_TIKTOK_LIVE_QUERY` | TikTok LIVE search: rooms, stream URLs, `include_stream_urls: false`, `country: 'gb'` (e.g. `gaming`, which had LIVE rooms in the US in every run) |
 | `TEST_TWEET_ID` | `getTweetStatement` and `tweetStatement.submit()` (use a tweet with real content, e.g. `1585841080431321088`) |
+| `TEST_WATCH_URL` | Watch success path: `watch()` with its scenes, transcript and usage, `watch.submit()` with `include_transcript: false`, and `watchVideo()` (a short video on any supported platform) |
 
 ### Test media files
 

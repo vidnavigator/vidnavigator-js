@@ -224,6 +224,75 @@ async function run() {
     assert(e.task_id === undefined, 'rejected submit has no task_id');
   }
 
+  // ── Watch: refused before a job exists (400 / 404, no credits) ──
+  console.log('--- watch (unknown detail rejected at submit) ---');
+  try {
+    await client.watch.submit({ video_url: TEST_YOUTUBE_URL, detail: 'extreme', webhook_url: '' });
+    fail('watch unknown detail throws BadRequestError');
+  } catch (e) {
+    assert(e instanceof sdk.BadRequestError, 'watch unknown detail throws BadRequestError', e && `${e.name}: ${e.message}`);
+    assert(e.task_id === undefined, 'rejected watch submit has no task_id');
+  }
+
+  console.log('--- watch.resume (unknown task) ---');
+  try {
+    await client.watch.resume('00000000-0000-0000-0000-000000000000').result();
+    fail('unknown watch task throws NotFoundError');
+  } catch (e) {
+    assert(e instanceof sdk.NotFoundError, 'unknown watch task throws NotFoundError', e && e.name);
+    assert(e.error_code === 'task_not_found', 'unknown watch task error_code task_not_found', e && e.error_code);
+  }
+
+  // ── Optional watch: scenes next to the transcript ──
+  if (process.env.TEST_WATCH_URL) {
+    const watchUrl = process.env.TEST_WATCH_URL;
+
+    console.log('--- watch (blocking) ---');
+    try {
+      const watched = await client.watch(watchUrl, { include_usage: true, timeoutMs: 300000 });
+      assert(watched instanceof sdk.WatchResult, 'watch returns a WatchResult');
+      assert(watched.video_info instanceof sdk.VideoInfo, 'watch result.video_info');
+      assert(watched.scenes.length > 0, 'a watched video has at least one scene');
+      for (const scene of watched.scenes) {
+        assert(scene instanceof sdk.VideoScene && scene.end >= scene.start && scene.start >= 0, 'watch scene start / end');
+        assert(typeof scene.description === 'string' && scene.description.length > 0, 'watch scene description');
+        assert(typeof scene.on_screen_text === 'string', 'watch scene on_screen_text is a string');
+      }
+      assert(Number.isInteger(watched.frames_analyzed) && watched.frames_analyzed > 0, 'watch result.frames_analyzed');
+      // The transcript is there by default: segments, or empty with the reason.
+      assert(Array.isArray(watched.transcript), 'watch result.transcript is a list of segments by default');
+      if (Array.isArray(watched.transcript) && watched.transcript.length === 0) {
+        assert(!!watched.transcript_error, 'watch without a transcript says why (transcript_error)');
+      }
+      assert(watched.usage instanceof sdk.UsageBlock, 'watch result.usage (include_usage read on the poll)');
+      assert(!!watched.usage.charge_for('frame_analysis'), 'watch usage has the frame_analysis charge');
+    } catch (e) { fail('watch (blocking)', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+
+    console.log('--- watch.submit / resume (scenes only) ---');
+    try {
+      const job = await client.watch.submit({ video_url: watchUrl, detail: 'low', include_transcript: false, webhook_url: '' });
+      assert(job instanceof sdk.Job && job.job_type === 'watch', 'watch.submit returns a Job (job_type watch)');
+      assert(typeof job.task_id === 'string' && job.task_id.length > 0, 'watch Job.task_id');
+      assert(typeof job.check_status_url === 'string' && job.check_status_url.endsWith(job.task_id), 'watch Job.check_status_url');
+      const resumed = client.watch.resume(job.task_id);
+      const scenesOnly = await resumed.result({ timeoutMs: 300000 });
+      assert(scenesOnly.scenes.length > 0, 'watch scenes only: scenes returned');
+      assert(scenesOnly.transcript === undefined, 'watch include_transcript: false leaves the transcript out');
+      assert(resumed.task.task_status === 'completed', 'watch resumed Job.task is the completed task');
+      assert(resumed.task.request && resumed.task.request.video_url === watchUrl, 'watch task request echo');
+    } catch (e) { fail('watch.submit', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+
+    console.log('--- watchVideo ---');
+    try {
+      const viaMethod = await client.watchVideo({ video_url: watchUrl, transcript_text: true }, { timeoutMs: 300000 });
+      assert(viaMethod instanceof sdk.WatchResult && viaMethod.scenes.length > 0, 'watchVideo returns a WatchResult');
+      assert(typeof viaMethod.transcript === 'string', 'watchVideo transcript_text returns one string');
+      assert(viaMethod.usage === undefined, 'watchVideo without include_usage has no usage');
+    } catch (e) { fail('watchVideo', `${e.name}: ${e.message} task_id=${e.task_id}`); }
+  } else {
+    console.log('--- watch skipped (TEST_WATCH_URL not set) ---');
+  }
+
   // ── Analyze video ──
   console.log('--- analyzeVideo ---');
   try {

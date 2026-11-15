@@ -467,6 +467,55 @@ try {
   assert(statement.topics.length === 1, 'TweetStatement.topics');
 }
 
+// --- Watch models ---
+{
+  const scene = sdk.VideoScene.fromJSON({
+    start: 4.0, end: 12.0,
+    description: 'A presenter stands in front of a world map and points at Europe.',
+    on_screen_text: 'BREAKING NEWS',
+  });
+  assert(scene instanceof sdk.VideoScene, 'VideoScene instance');
+  assert(scene.start === 4 && scene.end === 12, 'VideoScene start / end');
+  assert(scene.description.startsWith('A presenter') && scene.on_screen_text === 'BREAKING NEWS', 'VideoScene description / on_screen_text');
+  const bare = sdk.VideoScene.fromJSON({ start: 0, end: 1 });
+  assert(bare.description === '' && bare.on_screen_text === '', 'VideoScene text fields default to an empty string');
+
+  const watched = sdk.WatchResult.fromJSON({
+    video_info: { title: 'Evening news', duration: 12.5, url: 'https://example.com/v' },
+    transcript: [{ text: 'Good evening.', start: 0.4, end: 1.6 }],
+    scenes: [
+      { start: 0, end: 4, description: 'A presenter stands in front of a world map.', on_screen_text: 'BREAKING NEWS' },
+      { start: 4, end: 12.5, description: 'Aerial view of a harbour at dusk.', on_screen_text: '' },
+    ],
+    frames_analyzed: 9,
+  });
+  assert(watched instanceof sdk.WatchResult, 'WatchResult instance');
+  assert(watched.video_info instanceof sdk.VideoInfo && watched.video_info.title === 'Evening news', 'WatchResult.video_info is VideoInfo');
+  assert(watched.transcript[0] instanceof sdk.TranscriptSegment, 'WatchResult.transcript parsed into segments');
+  assert(watched.scenes.length === 2 && watched.scenes.every((s) => s instanceof sdk.VideoScene), 'WatchResult.scenes are VideoScene');
+  assert(watched.scenes[1].on_screen_text === '', 'WatchResult scene without text on screen');
+  assert(watched.frames_analyzed === 9, 'WatchResult.frames_analyzed');
+  assert(watched.transcript_error === undefined && watched.usage === undefined, 'WatchResult has no transcript_error / usage by default');
+
+  const silent = sdk.WatchResult.fromJSON({
+    video_info: { title: 'Silent clip' },
+    transcript: [],
+    transcript_error: { error: 'transcript_not_available', message: 'No transcript found for this video.' },
+    scenes: [{ start: 0, end: 3, description: 'A beach.', on_screen_text: '' }],
+    frames_analyzed: 4,
+  });
+  assert(Array.isArray(silent.transcript) && silent.transcript.length === 0, 'WatchResult without speech has an empty transcript');
+  assert(silent.transcript_error.error === 'transcript_not_available', 'WatchResult.transcript_error says why');
+  assert(silent.scenes.length === 1, 'WatchResult without speech keeps the scenes');
+
+  const scenesOnly = sdk.WatchResult.fromJSON({ video_info: { title: 'T' }, scenes: [], frames_analyzed: 4 });
+  assert(scenesOnly.transcript === undefined, 'WatchResult.transcript is left out with include_transcript: false');
+  const asText = sdk.WatchResult.fromJSON({ video_info: { title: 'T' }, transcript: 'Good evening.', scenes: [] });
+  assert(asText.transcript === 'Good evening.', 'WatchResult.transcript as one string');
+  const noScenes = sdk.WatchResult.fromJSON({ video_info: { title: 'T' } });
+  assert(Array.isArray(noScenes.scenes) && noScenes.scenes.length === 0, 'WatchResult.scenes defaults to an empty list');
+}
+
 // --- UsageData (credits model) ---
 {
   const ud = sdk.UsageData.fromJSON({
@@ -569,7 +618,7 @@ try {
 // --- Method existence on prototype ---
 {
   const methods = [
-    'getTranscript', 'getYouTubeTranscript', 'transcribeVideo',
+    'getTranscript', 'getYouTubeTranscript', 'transcribeVideo', 'watchVideo',
     'getFiles', 'getFile', 'uploadFile', 'deleteFile', 'getFileUrl',
     'retryFileProcessing', 'cancelFileUpload',
     'getNamespaces', 'createNamespace', 'updateNamespace', 'deleteNamespace', 'updateFileNamespaces',
@@ -590,7 +639,7 @@ try {
     );
   }
   const instance = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
-  for (const op of ['transcribe', 'extractVideo', 'tweetStatement', 'tiktokProfile', 'tiktokSearch', 'tiktokLiveSearch']) {
+  for (const op of ['transcribe', 'watch', 'extractVideo', 'tweetStatement', 'tiktokProfile', 'tiktokSearch', 'tiktokLiveSearch']) {
     assert(typeof instance[op] === 'function', `client.${op} is callable (blocking)`);
     assert(typeof instance[op].submit === 'function', `client.${op}.submit exists (non-blocking)`);
     assert(typeof instance[op].resume === 'function', `client.${op}.resume exists`);
@@ -644,6 +693,22 @@ try {
 
   const event = sdk.constructWebhookEvent(body, header, secret, opts);
   assert(event.type === 'transcribe.completed' && event.data.task_id === 'job-1', 'constructWebhookEvent parses event');
+
+  // A watch event parses like the others; its result is the raw watch result.
+  const watchBody = JSON.stringify({
+    id: 'evt_2',
+    type: 'watch.completed',
+    created_at: '2026-01-01T00:00:00Z',
+    api_version: '1.0.0',
+    data: {
+      task_id: 'job-2', task_status: 'completed', job_type: 'watch', check_status_url: '/v1/watch/job-2',
+      result: { video_info: { title: 'Evening news' }, scenes: [{ start: 0, end: 4, description: 'A presenter.', on_screen_text: 'BREAKING NEWS' }], frames_analyzed: 9 },
+    },
+  });
+  const watchEvent = sdk.constructWebhookEvent(watchBody, `t=${t},v1=${sign(watchBody)}`, secret, opts);
+  assert(watchEvent.type === 'watch.completed' && watchEvent.data.job_type === 'watch', 'constructWebhookEvent parses a watch.completed event');
+  assert(watchEvent.data.result.scenes[0].on_screen_text === 'BREAKING NEWS', 'watch.completed event carries the raw result');
+  assert(sdk.WatchResult.fromJSON(watchEvent.data.result).scenes[0] instanceof sdk.VideoScene, 'a watch event result parses with WatchResult.fromJSON');
   try {
     sdk.constructWebhookEvent(body, header, 'wrong-secret', opts);
     fail('constructWebhookEvent throws on bad signature');
@@ -761,7 +826,7 @@ async function runClientMethodTests() {
           : undefined,
       };
     }
-    if (url === '/tweet/statement' || url === '/extract/video' || url === '/transcribe') {
+    if (url === '/tweet/statement' || url === '/extract/video' || url === '/transcribe' || url === '/watch') {
       throw new Error(`SDK must never call the synchronous endpoint ${url}`);
     }
     if (method === 'POST' && url === '/tweet/statement/async') {
@@ -987,9 +1052,10 @@ function makeFakeApi(client) {
   const usageBlock = { charges: [{ service_type: 'transcription_hour', quantity: 0.5, credits: 5 }], total_credits: 5 };
   const pollCounts = {};
 
-  const syncRoutes = ['/transcribe', '/extract/video', '/tweet/statement'];
+  const syncRoutes = ['/transcribe', '/watch', '/extract/video', '/tweet/statement'];
   const submitRoutes = {
     '/transcribe/async': 'transcribe',
+    '/watch/async': 'watch',
     '/extract/video/async': 'extract_video',
     '/tweet/statement/async': 'tweet_statement',
     '/tiktok/profile': 'tiktok_profile',
@@ -1042,7 +1108,9 @@ function makeFakeApi(client) {
           usage: withUsage ? usageBlock : undefined,
         };
       }
-      return { status: 'success', data: snapshot, usage: withUsage ? usageBlock : undefined };
+      // A plan state may carry its own `usage` block; it is served beside `data`, like the API does.
+      const { usage: ownUsage, ...data } = snapshot;
+      return { status: 'success', data, usage: withUsage ? ownUsage || usageBlock : undefined };
     }
     throw new Error(`Unexpected request: ${method} ${url}`);
   };
@@ -1283,6 +1351,141 @@ async function runOperationTests() {
   assert(frSearch.country === 'fr', 'tiktokSearch result.country');
 }
 
+async function runWatchTests() {
+  const client = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
+  const api = makeFakeApi(client);
+  const url = 'https://www.tiktok.com/@nasa/video/7300000000000000000';
+  const hook = 'https://example.com/hooks/vidnavigator';
+  const scenes = [
+    { start: 0, end: 4, description: 'A presenter stands in front of a world map and points at Europe.', on_screen_text: 'BREAKING NEWS' },
+    { start: 4, end: 12.5, description: 'Aerial view of a harbour at dusk.', on_screen_text: '' },
+  ];
+  const watched = {
+    video_info: { title: 'Evening news', duration: 12.5, url },
+    transcript: [{ text: 'Good evening.', start: 0.4, end: 1.6 }],
+    scenes,
+    frames_analyzed: 9,
+  };
+  // The credit amounts are placeholders: the tests read the quantities.
+  const usage = {
+    charges: [
+      { service_type: 'standard_request', quantity: 1, credits: 1 },
+      { service_type: 'frame_analysis', quantity: 9, credits: 1 },
+    ],
+    total_credits: 2,
+  };
+  const submits = () => api.calls.filter((c) => c.url === '/watch/async');
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  // ── watch: blocking one-liner ──
+  api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: watched, usage }]);
+  const res = await client.watch(url, { ...FAST, include_usage: true });
+  assert(submits().length === 1 && submits()[0].method === 'POST', 'watch submits POST /watch/async');
+  assert(same(submits()[0].data, { video_url: url }), 'watch(url) sends video_url only (detail is left to the API default)', JSON.stringify(submits()[0].data));
+  assert(api.last().method === 'GET' && api.last().url === '/watch/watch-1', 'watch polls GET /watch/{task_id}');
+  assert(api.last().params.include_usage === 'true', 'watch sends include_usage on the poll');
+  assert(api.pollsOf('watch-1') === 2, 'watch polls until completed');
+  assert(res instanceof sdk.WatchResult, 'watch result is a WatchResult');
+  assert(res.video_info instanceof sdk.VideoInfo && res.video_info.title === 'Evening news', 'watch result.video_info is VideoInfo');
+  assert(res.transcript[0] instanceof sdk.TranscriptSegment && res.transcript[0].text === 'Good evening.', 'watch result.transcript parsed');
+  assert(res.transcript_error === undefined, 'watch result has no transcript_error when there is a transcript');
+  assert(res.scenes.length === 2 && res.scenes.every((s) => s instanceof sdk.VideoScene), 'watch result.scenes are VideoScene');
+  assert(res.scenes.map((s) => `${s.start}-${s.end}`).join(',') === '0-4,4-12.5', 'watch scenes keep start / end');
+  assert(res.scenes[0].on_screen_text === 'BREAKING NEWS' && res.scenes[1].on_screen_text === '', 'watch scenes on_screen_text');
+  assert(res.frames_analyzed === 9, 'watch result.frames_analyzed');
+  assert(res.usage instanceof sdk.UsageBlock && res.usage.total_credits === 2, 'watch result.usage');
+  assert(res.usage.charge_for('frame_analysis').quantity === 9, 'watch usage has the frame_analysis charge');
+
+  // ── every option is passed through; .submit returns a handle ──
+  api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: { video_info: { title: 'T' }, scenes, frames_analyzed: 4 } }]);
+  const before = api.calls.length;
+  const job = await client.watch.submit({
+    video_url: url, detail: 'high', include_transcript: false, transcript_text: true, webhook_url: hook,
+  });
+  assert(api.calls.length === before + 1, 'watch.submit makes exactly one request');
+  assert(
+    same(api.last().data, { video_url: url, detail: 'high', include_transcript: false, transcript_text: true, webhook_url: hook }),
+    'watch.submit passes detail / include_transcript / transcript_text / webhook_url through',
+    JSON.stringify(api.last().data)
+  );
+  assert(job instanceof sdk.Job && job.job_type === 'watch' && job.task_id === 'watch-2', 'watch.submit returns a Job (job_type watch)');
+  assert(job.check_status_url === '/v1/watch/watch-2', 'watch Job.check_status_url');
+  assert(job.webhook_url === hook, 'watch Job.webhook_url echoes the submit response');
+  const snapshot = await job.refresh();
+  assert(snapshot instanceof sdk.AsyncJob && snapshot.task_status === 'processing' && snapshot.result === null, 'watch Job.refresh() returns the task, without a result while processing');
+  assert(api.last().params === undefined, 'watch polls send no include_usage unless requested');
+  const scenesOnly = await job.result(FAST);
+  assert(scenesOnly.transcript === undefined, 'watch with include_transcript: false has no transcript');
+  assert(scenesOnly.scenes.length === 2 && scenesOnly.frames_analyzed === 4, 'watch with include_transcript: false returns the scenes');
+  assert(scenesOnly.usage === undefined, 'watch result has no usage unless requested');
+  const done = await job.wait(FAST);
+  assert(done.task_status === 'completed' && done.result instanceof sdk.WatchResult, 'watch Job.wait() returns the completed task with a WatchResult');
+
+  // An empty webhook_url (opt out of the account default) reaches the API.
+  api.plan([{ task_status: 'completed', result: watched }]);
+  await client.watch.submit({ video_url: url, webhook_url: '' });
+  assert(api.last().data.webhook_url === '', 'watch passes an empty webhook_url through');
+
+  // ── resume by task_id ──
+  api.addTask('saved-watch', [{ task_status: 'completed', result: watched, usage }]);
+  const beforeResume = api.calls.length;
+  const resumed = client.watch.resume('saved-watch', { include_usage: true });
+  assert(api.calls.length === beforeResume, 'watch.resume() makes no request');
+  assert(resumed instanceof sdk.Job && resumed.job_type === 'watch' && resumed.task_id === 'saved-watch', 'watch.resume() returns a Job for the task_id');
+  const resumedResult = await resumed.result(FAST);
+  assert(resumedResult instanceof sdk.WatchResult && resumedResult.usage.charge_for('frame_analysis').quantity === 9, 'resumed watch Job.result() with usage');
+
+  // ── a video without a transcript is not an error ──
+  api.plan([{
+    task_status: 'completed',
+    result: {
+      video_info: { title: 'Silent clip' },
+      transcript: [],
+      transcript_error: { error: 'transcript_not_available', message: 'No transcript found for this video.' },
+      scenes,
+      frames_analyzed: 4,
+    },
+  }]);
+  const silent = await client.watch(url, FAST);
+  assert(Array.isArray(silent.transcript) && silent.transcript.length === 0, 'watch without speech: transcript is empty');
+  assert(silent.transcript_error.error === 'transcript_not_available', 'watch without speech: transcript_error says why');
+  assert(silent.scenes.length === 2, 'watch without speech: the scenes are returned');
+
+  // ── transcript_text: one string ──
+  api.plan([{ task_status: 'completed', result: { ...watched, transcript: 'Good evening.' } }]);
+  const asText = await client.watch({ video_url: url, transcript_text: true }, FAST);
+  assert(asText.transcript === 'Good evening.', 'watch transcript_text returns one string');
+
+  // ── watchVideo: the blocking method, include_usage in the payload ──
+  api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: watched, usage }]);
+  const viaMethod = await client.watchVideo({ video_url: url, detail: 'low', include_usage: true }, FAST);
+  assert(same(submits().pop().data, { video_url: url, detail: 'low' }), 'watchVideo submits to /watch/async without include_usage', JSON.stringify(submits().pop().data));
+  assert(api.last().params.include_usage === 'true', 'watchVideo include_usage is read from the poll');
+  assert(viaMethod instanceof sdk.WatchResult && viaMethod.usage instanceof sdk.UsageBlock, 'watchVideo returns a WatchResult with usage');
+
+  api.plan([{ task_status: 'completed', result: watched }]);
+  const plain = await client.watchVideo({ video_url: url }, FAST);
+  assert(plain.scenes.length === 2 && plain.usage === undefined, 'watchVideo without include_usage has no usage');
+
+  // ── failures carry the API's error code, class and the task_id ──
+  const failures = [
+    [{ error: 'frames_not_available', message: 'No picture to read', http_status: 404 }, sdk.NotFoundError],
+    [{ error: 'video_too_long', message: 'Too long', http_status: 400 }, sdk.BadRequestError],
+    [{ error: 'limit_exceeded', message: 'Out of credits mid-job', http_status: 402 }, sdk.InsufficientCreditsError],
+  ];
+  for (const [error, Cls] of failures) {
+    api.plan([{ task_status: 'processing' }, { task_status: 'failed', result: null, error }]);
+    const e = await client.watch(url, FAST).catch((err) => err);
+    assert(e instanceof Cls, `failed watch job (${error.http_status} ${error.error}) throws ${Cls.name}`, e && `${e.name}: ${e.message}`);
+    assert(e.error_code === error.error && e.status_code === error.http_status, `failed watch job ${error.error} carries error / http_status`);
+    assert(typeof e.task_id === 'string' && e.task_id.startsWith('watch-'), `failed watch job ${error.error} error carries task_id`);
+  }
+
+  // ── the synchronous endpoint is never called ──
+  assert(!api.calls.some((c) => c.url === '/watch'), 'watch never calls the synchronous POST /watch');
+  assert(submits().every((c) => c.data.include_usage === undefined), 'watch never sends include_usage on submit');
+}
+
 async function runPollingTests() {
   const client = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
   const api = makeFakeApi(client);
@@ -1430,6 +1633,9 @@ async function runErrorMappingTests() {
     ['extractVideo submit 402', () => client.extractVideo({ video_url: 'https://x.com/v', schema: {} }), 402, limit402, sdk.InsufficientCreditsError],
     ['tweetStatement submit 402', () => client.tweetStatement('1'), 402, limit402, sdk.InsufficientCreditsError],
     ['tiktokProfile submit 402', () => client.tiktokProfile('https://www.tiktok.com/@a'), 402, limit402, sdk.InsufficientCreditsError],
+    ['watch submit 402', () => client.watch('https://x.com/v'), 402, limit402, sdk.InsufficientCreditsError],
+    ['watch.submit 429', () => client.watch.submit('https://x.com/v'), 429, jobs429, sdk.TooManyActiveJobsError],
+    ['watch submit 400 (unknown detail)', () => client.watch({ video_url: 'https://x.com/v', detail: 'extreme' }), 400, { status: 'error', error: 'invalid_parameter', message: 'detail must be one of: low, auto, high' }, sdk.BadRequestError],
     ['transcribe submit 429', () => client.transcribe('https://x.com/v'), 429, jobs429, sdk.TooManyActiveJobsError],
     ['extractVideo.submit 429', () => client.extractVideo.submit({ video_url: 'https://x.com/v', schema: {} }), 429, jobs429, sdk.TooManyActiveJobsError],
     ['tweetStatement.submit 429', () => client.tweetStatement.submit('1'), 429, jobs429, sdk.TooManyActiveJobsError],
@@ -1547,6 +1753,7 @@ async function runLiveRoomTests() {
 runClientMethodTests()
   .then(runLiveRoomTests)
   .then(runOperationTests)
+  .then(runWatchTests)
   .then(runPollingTests)
   .then(runErrorMappingTests)
   .then(() => process.exit(summary()))
