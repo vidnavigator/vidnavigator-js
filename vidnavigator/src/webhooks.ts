@@ -8,6 +8,8 @@ export type WebhookEventType =
   | 'transcribe.failed'
   | 'watch.completed'
   | 'watch.failed'
+  | 'analyze_video.completed'
+  | 'analyze_video.failed'
   | 'extract_video.completed'
   | 'extract_video.failed'
   | 'tweet_statement.completed'
@@ -40,8 +42,8 @@ export interface WebhookEvent {
     job_type?: string;
     check_status_url?: string;
     /**
-     * Raw (unparsed) result of the completed job. For transcription, watch, extraction and tweet jobs
-     * it is the same data the job's `result()` parses. For TikTok tasks it is a summary only,
+     * Raw (unparsed) result of the completed job. For transcription, watch, analysis, extraction and tweet
+     * jobs it is the same data the job's `result()` parses. For TikTok tasks it is a summary only,
      * {@link TikTokWebhookResult} (a scrape can hold thousands of videos); fetch the videos with
      * `vn.tiktokProfile.resume(task_id).result()`. Omitted when `result_truncated` is true.
      */

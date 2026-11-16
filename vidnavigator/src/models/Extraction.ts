@@ -1,5 +1,6 @@
 import { FileInfoJSON } from './FileInfo';
 import { VideoInfoJSON } from './VideoInfo';
+import { ScenesError, WatchTranscriptError } from './Watch';
 
 export type ExtractionFieldType =
   | 'String'
@@ -32,6 +33,10 @@ export interface ExtractionResponseJSON {
   data: Record<string, unknown>;
   video_info?: VideoInfoJSON;
   file_info?: FileInfoJSON;
+  /** With `include_scenes`: number of frames that were analyzed to produce the scenes. */
+  frames_analyzed?: number;
+  scenes_error?: ScenesError;
+  transcript_error?: WatchTranscriptError;
   usage?: ExtractionTokenUsageJSON;
 }
 

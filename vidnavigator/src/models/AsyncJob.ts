@@ -1,8 +1,9 @@
 import { UsageBlock } from './Usage';
 import { VideoInfo, VideoInfoJSON } from './VideoInfo';
+import { ScenesError, WatchTranscriptError } from './Watch';
 
-/** Async job kinds returned by the `/transcribe/async`, `/watch/async`, `/extract/video/async` and `/tweet/statement/async` endpoints. */
-export type AsyncJobType = 'transcribe' | 'watch' | 'extract_video' | 'tweet_statement';
+/** Async job kinds returned by the `/transcribe/async`, `/watch/async`, `/analyze/video/async`, `/extract/video/async` and `/tweet/statement/async` endpoints. */
+export type AsyncJobType = 'transcribe' | 'watch' | 'analyze_video' | 'extract_video' | 'tweet_statement';
 
 /** `processing` = accepted and being worked on. `completed` and `failed` are terminal. */
 export type AsyncTaskStatus = 'processing' | 'completed' | 'failed';
@@ -86,6 +87,10 @@ export interface AsyncJobJSON {
   result?: any;
   /** `extract_video` jobs, once completed: the `video_info` the synchronous endpoint returns. */
   video_info?: VideoInfoJSON;
+  /** `extract_video` jobs, once completed with `include_scenes`: the `frames_analyzed` the synchronous endpoint returns. */
+  frames_analyzed?: number;
+  scenes_error?: ScenesError;
+  transcript_error?: WatchTranscriptError;
   error?: AsyncJobError | null;
 }
 
@@ -110,6 +115,12 @@ export class AsyncJob<TResult> {
   result: TResult | null;
   /** `extract_video` jobs, once completed: metadata of the video the data was extracted from. */
   video_info?: VideoInfo;
+  /** `extract_video` jobs, once completed with `include_scenes`: number of frames that were analyzed to produce the scenes. */
+  frames_analyzed?: number;
+  /** `extract_video` jobs with `include_scenes`: why the picture could not be read. The fields were then extracted from the transcript alone. */
+  scenes_error?: ScenesError;
+  /** `extract_video` jobs with `include_scenes`: why there is no transcript. The fields were then extracted from the scenes alone. */
+  transcript_error?: WatchTranscriptError;
   error: AsyncJobError | null;
   /** Per-call usage, populated only when polled with `include_usage: true` and `task_status === 'completed'`. */
   usage?: UsageBlock;
@@ -127,6 +138,9 @@ export class AsyncJob<TResult> {
     this.webhook = data.webhook;
     this.result = data.result !== undefined && data.result !== null ? parseResult(data.result) : null;
     this.video_info = data.video_info ? VideoInfo.fromJSON(data.video_info) : undefined;
+    this.frames_analyzed = data.frames_analyzed;
+    this.scenes_error = data.scenes_error;
+    this.transcript_error = data.transcript_error;
     this.error = data.error ?? null;
   }
 

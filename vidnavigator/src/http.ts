@@ -15,6 +15,7 @@ import {
   SystemOverloadError,
   InsufficientCreditsError,
   TooManyActiveJobsError,
+  ScenesNotAvailableError,
 } from './errors';
 
 export function parseApiErrorPayload(data: any): {
@@ -50,6 +51,19 @@ export function buildApiError(status: number, data: any, fallbackMessage?: strin
       return new AccessDeniedError(message, status, errorCode, errorMessage, details);
     case 404:
       return new NotFoundError(message, status, errorCode, errorMessage, details);
+    case 409:
+      if (errorCode === 'scenes_not_available') {
+        return new ScenesNotAvailableError(
+          message,
+          status,
+          errorCode,
+          errorMessage,
+          details,
+          data?.scenes_status,
+          data?.scenes_error
+        );
+      }
+      return new VidNavigatorError(message, status, errorCode, errorMessage, details);
     case 413:
       return new StorageQuotaExceededError(message, status, errorCode, errorMessage, details);
     case 429:

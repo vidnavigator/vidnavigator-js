@@ -50,6 +50,11 @@ import {
   TweetStatement,
   WatchResult,
   WatchResultJSON,
+  WatchTranscriptError,
+  VideoScene,
+  VideoSceneJSON,
+  ScenesError,
+  FileScenesStatus,
   AsyncJob,
   AsyncJobJSON,
   AsyncJobAccepted,
@@ -67,7 +72,7 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '2.4.0';
+export const SDK_VERSION = '2.5.0';
 
 /**
  * A LIVE room usually answers in 1-5 s, up to ~30 s when the API has to open a TikTok page, and two
@@ -140,6 +145,20 @@ export type WatchInput = {
 /** Payload of {@link VidNavigatorClient.watchVideo}: a {@link WatchInput} with `include_usage`. */
 export type WatchVideoPayload = WatchInput & { include_usage?: boolean };
 
+/** Input for {@link VidNavigatorClient.analyze}. A plain string is treated as `video_url`. */
+export type AnalyzeVideoInput = {
+  video_url: string;
+  /** Optional question about the video. */
+  query?: string;
+  /**
+   * Default false. `true` also reads what the video shows: the analysis is made from the
+   * transcript and the scenes together, and the result has `scenes` and `frames_analyzed`.
+   */
+  include_scenes?: boolean;
+  /** Return the transcript as a single string instead of segments. */
+  transcript_text?: boolean;
+} & WebhookOption;
+
 /** Input for {@link VidNavigatorClient.extractVideo}: a JSON `schema`, or a JSON/YAML `schemaFilePath`. */
 export type ExtractVideoInput =
   | ({
@@ -148,6 +167,11 @@ export type ExtractVideoInput =
       what_to_extract?: string;
       /** Speech-to-text the audio when no platform transcript exists. Default true. */
       transcribe?: boolean;
+      /**
+       * Default false. `true` also reads what the video shows: the fields are extracted from the
+       * transcript and the scenes together, and the result has `frames_analyzed`.
+       */
+      include_scenes?: boolean;
     } & WebhookOption)
   | ({
       video_url: string;
@@ -155,6 +179,7 @@ export type ExtractVideoInput =
       schemaFilePath: string;
       what_to_extract?: string;
       transcribe?: boolean;
+      include_scenes?: boolean;
     } & WebhookOption);
 
 /** Input for {@link VidNavigatorClient.tweetStatement}. A plain string is treated as `tweet_id`. */
@@ -186,6 +211,9 @@ export type TranscribeAsyncJob = AsyncJob<TranscribeVideoResult>;
 /** Snapshot of a watch task. `result` is a {@link WatchResult}. */
 export type WatchAsyncJob = AsyncJob<WatchResult>;
 
+/** Snapshot of a video analysis task. `result` has the same shape as {@link VidNavigatorClient.analyzeVideo}'s return value. */
+export type AnalyzeVideoAsyncJob = AsyncJob<AnalyzeVideoResult>;
+
 /** Snapshot of an extraction task. `result` is the extracted object, shaped like your schema. */
 export type ExtractVideoAsyncJob = AsyncJob<Record<string, unknown>>;
 
@@ -208,6 +236,7 @@ export interface TranscribeOperation extends JobOperation<string | TranscribeInp
   submit(input: string | TranscribeInput, options?: SubmitOptions): Promise<Job<TranscribeAsyncJob, TranscribeVideoResult>>;
 }
 export type WatchJob = Job<WatchAsyncJob, WatchResult>;
+export type AnalyzeVideoJob = Job<AnalyzeVideoAsyncJob, AnalyzeVideoResult>;
 export type ExtractVideoJob = Job<ExtractVideoAsyncJob, ExtractDataResult>;
 export type TweetStatementJob = Job<TweetStatementAsyncJob, TweetStatement>;
 /** `result()` resolves to the completed task with **all** pages of `videos` collected. */
@@ -238,10 +267,33 @@ export type UploadFileAcceptedResult = {
 
 export type UploadFileResult = UploadFileSuccessResult | UploadFileAcceptedResult;
 
+/** Answer of {@link VidNavigatorClient.analyzeFileScenes}. */
+export type AnalyzeFileScenesResult = {
+  file_id: string;
+  /** `processing`: the analysis was started, or is already running. `completed`: the scenes are already there. */
+  scenes_status: Extract<FileScenesStatus, 'processing' | 'completed'>;
+  message: string;
+};
+
+/** Answer of {@link VidNavigatorClient.getFile}. */
+export type GetFileResult = {
+  file_info: FileInfo;
+  /** Present once the file has a transcript. */
+  transcript?: TranscriptOutput;
+  /** What the file shows, in chronological order. Present once `file_info.scenes_status` is `completed`. */
+  scenes?: VideoScene[];
+};
+
 export interface ExtractDataResult {
   data: Record<string, unknown>;
   video_info?: VideoInfo;
   file_info?: FileInfo;
+  /** With `include_scenes: true`: number of frames that were analyzed to produce the scenes. */
+  frames_analyzed?: number;
+  /** With `include_scenes: true`, when the picture could not be read: the fields were extracted from the transcript alone. */
+  scenes_error?: ScenesError;
+  /** With `include_scenes: true`, when there is no transcript: the fields were extracted from the scenes alone. */
+  transcript_error?: WatchTranscriptError;
   usage?: UsageBlock;
 }
 
@@ -296,6 +348,11 @@ export type SearchFilesResult = {
 export type AnalyzeVideoPayload = {
   video_url: string;
   query?: string;
+  /**
+   * Default false. `true` also reads what the video shows: the analysis is made from the
+   * transcript and the scenes together, and the result has `scenes` and `frames_analyzed`.
+   */
+  include_scenes?: boolean;
   transcript_text?: boolean;
   include_usage?: boolean;
 };
@@ -303,6 +360,13 @@ export type AnalyzeVideoPayload = {
 export type AnalyzeFilePayload = {
   file_id: string;
   query?: string;
+  /**
+   * Default false. `true` analyzes the file from its transcript and its scenes together. The
+   * scenes are the ones kept with the file: ask for them at the upload (`include_scenes`) or with
+   * {@link VidNavigatorClient.analyzeFileScenes}. A file that has none is refused with
+   * `ScenesNotAvailableError`.
+   */
+  include_scenes?: boolean;
   transcript_text?: boolean;
   include_usage?: boolean;
 };
@@ -311,6 +375,17 @@ export type AnalyzeVideoResult = {
   video_info: VideoInfo;
   transcript: TranscriptOutput;
   transcript_analysis: AnalysisResult;
+  /**
+   * With `include_scenes: true`: what the video shows, in chronological order. Empty when the
+   * picture could not be read (see `scenes_error`).
+   */
+  scenes?: VideoScene[];
+  /** With `include_scenes: true`: number of frames that were analyzed to produce the scenes. */
+  frames_analyzed?: number;
+  /** With `include_scenes: true`, when the picture could not be read: the analysis was made from the transcript alone. */
+  scenes_error?: ScenesError;
+  /** With `include_scenes: true`, when there is no transcript: the analysis was made from the scenes alone. */
+  transcript_error?: WatchTranscriptError;
   usage?: UsageBlock;
 };
 
@@ -318,6 +393,14 @@ export type AnalyzeFileResult = {
   file_info: FileInfo;
   transcript: TranscriptOutput;
   transcript_analysis: AnalysisResult;
+  /** With `include_scenes: true`: what the file shows, in chronological order. */
+  scenes?: VideoScene[];
+  /** With `include_scenes: true`: number of frames that were analyzed to produce the scenes. */
+  frames_analyzed?: number;
+  /** Why the scenes could not be read, when the answer carries it. A file that has no scenes at all is refused with `ScenesNotAvailableError` instead. */
+  scenes_error?: ScenesError;
+  /** With `include_scenes: true`, when the file has no speech: the analysis was made from the scenes alone. */
+  transcript_error?: WatchTranscriptError;
   usage?: UsageBlock;
 };
 
@@ -326,6 +409,11 @@ export type ExtractVideoDataPayload = {
   schema: ExtractionSchema;
   what_to_extract?: string;
   transcribe?: boolean;
+  /**
+   * Default false. `true` also reads what the video shows: the fields are extracted from the
+   * transcript and the scenes together, and the result has `frames_analyzed`.
+   */
+  include_scenes?: boolean;
   include_usage?: boolean;
 } & WebhookOption;
 
@@ -335,6 +423,7 @@ export type ExtractVideoDataMultipartPayload = {
   schemaFilePath: string;
   what_to_extract?: string;
   transcribe?: boolean;
+  include_scenes?: boolean;
   include_usage?: boolean;
 } & WebhookOption;
 
@@ -344,6 +433,13 @@ export type ExtractFileDataPayload = {
   file_id: string;
   schema: ExtractionSchema;
   what_to_extract?: string;
+  /**
+   * Default false. `true` extracts from the transcript of the file and its scenes together. The
+   * scenes are the ones kept with the file: ask for them at the upload (`include_scenes`) or with
+   * {@link VidNavigatorClient.analyzeFileScenes}. A file that has none is refused with
+   * `ScenesNotAvailableError`.
+   */
+  include_scenes?: boolean;
   include_usage?: boolean;
 };
 
@@ -352,6 +448,7 @@ export type ExtractFileDataMultipartPayload = {
   /** Path to a JSON or YAML schema file. The API accepts either a raw schema or a full extraction request object. */
   schemaFilePath: string;
   what_to_extract?: string;
+  include_scenes?: boolean;
   include_usage?: boolean;
 };
 //endregion
@@ -375,6 +472,50 @@ function parseTranscribeData(
     transcript: transcriptFromJSON(single.transcript)!,
     usage,
   };
+}
+
+/** What `include_scenes` adds beside the scenes themselves. */
+interface SceneNotes {
+  frames_analyzed?: number;
+  scenes_error?: ScenesError;
+  transcript_error?: WatchTranscriptError;
+}
+
+/** The `data` block of an analysis: the same for a video, its background job and an uploaded file. */
+interface AnalysisDataJSON extends SceneNotes {
+  transcript: TranscriptSegmentJSON[] | string;
+  transcript_analysis: AnalysisResultJSON;
+  scenes?: VideoSceneJSON[];
+}
+
+// The scene fields are set only when the response carries them, so a result asked without
+// `include_scenes` keeps the shape it always had.
+function pickSceneNotes(raw: SceneNotes): SceneNotes {
+  const notes: SceneNotes = {};
+  if (raw.frames_analyzed != null) notes.frames_analyzed = raw.frames_analyzed;
+  if (raw.scenes_error) notes.scenes_error = raw.scenes_error;
+  if (raw.transcript_error) notes.transcript_error = raw.transcript_error;
+  return notes;
+}
+
+function parseScenes(raw: VideoSceneJSON[] | undefined): { scenes?: VideoScene[] } {
+  return raw ? { scenes: raw.map((scene) => VideoScene.fromJSON(scene)) } : {};
+}
+
+function parseAnalysisData(raw: AnalysisDataJSON) {
+  return {
+    transcript: transcriptFromJSON(raw.transcript)!,
+    transcript_analysis: AnalysisResult.fromJSON(raw.transcript_analysis),
+    ...parseScenes(raw.scenes),
+    ...pickSceneNotes(raw),
+  };
+}
+
+function parseAnalyzeVideoData(
+  raw: AnalysisDataJSON & { video_info: VideoInfoJSON },
+  usage?: UsageBlock
+): AnalyzeVideoResult {
+  return { video_info: VideoInfo.fromJSON(raw.video_info), ...parseAnalysisData(raw), usage };
 }
 
 function buildAsyncJobParams(options?: SubmitOptions): Record<string, string> | undefined {
@@ -479,8 +620,18 @@ export class VidNavigatorClient {
   readonly watch: JobOperation<string | WatchInput, WatchAsyncJob, WatchResult>;
 
   /**
+   * Analysis of an online video as a background job, built on `POST /analyze/video/async`: the
+   * same analysis and the same result as {@link VidNavigatorClient.analyzeVideo}, without holding
+   * a connection open while it runs. Use it with `include_scenes: true` on a video longer than
+   * about 10 minutes. Same shapes as {@link VidNavigatorClient.transcribe}.
+   */
+  readonly analyze: JobOperation<string | AnalyzeVideoInput, AnalyzeVideoAsyncJob, AnalyzeVideoResult>;
+
+  /**
    * Structured-data extraction from a video of any length, built on `POST /extract/video/async`.
-   * The schema is validated when you submit. Same shapes as {@link VidNavigatorClient.transcribe}.
+   * The schema is validated when you submit. With `include_scenes: true` the fields are extracted
+   * from the transcript and from what the video shows. Same shapes as
+   * {@link VidNavigatorClient.transcribe}.
    */
   readonly extractVideo: JobOperation<ExtractVideoInput, ExtractVideoAsyncJob, ExtractDataResult>;
 
@@ -547,6 +698,17 @@ export class VidNavigatorClient {
       },
     });
 
+    this.analyze = this.defineOperation({
+      jobType: 'analyze_video',
+      submit: (input: string | AnalyzeVideoInput) =>
+        this.submitAsyncJob('/analyze/video/async', typeof input === 'string' ? { video_url: input } : input),
+      fetchTask: (task_id, options) =>
+        this.getAsyncJob(`/analyze/video/${encodeURIComponent(task_id)}`, options, (raw) =>
+          parseAnalyzeVideoData(raw)
+        ),
+      toResult: async (task) => ({ ...requireResult(task), usage: task.usage }),
+    });
+
     this.extractVideo = this.defineOperation({
       jobType: 'extract_video',
       submit: (input: ExtractVideoInput) => this.submitExtractVideo(input),
@@ -556,7 +718,12 @@ export class VidNavigatorClient {
           options,
           (raw) => raw as Record<string, unknown>
         ),
-      toResult: async (task) => ({ data: requireResult(task), video_info: task.video_info, usage: task.usage }),
+      toResult: async (task) => ({
+        data: requireResult(task),
+        video_info: task.video_info,
+        ...pickSceneNotes(task),
+        usage: task.usage,
+      }),
     });
 
     this.tweetStatement = this.defineOperation({
@@ -659,6 +826,7 @@ export class VidNavigatorClient {
       form.append('schema', fs.createReadStream(input.schemaFilePath));
       appendOptionalFormField(form, 'what_to_extract', input.what_to_extract);
       appendOptionalFormField(form, 'transcribe', input.transcribe);
+      appendOptionalFormField(form, 'include_scenes', input.include_scenes);
       appendOptionalFormField(form, 'webhook_url', input.webhook_url);
       return this.submitAsyncJob('/extract/video/async', form, form.getHeaders());
     }
@@ -913,27 +1081,39 @@ export class VidNavigatorClient {
     };
   }
 
-  async getFile(
-    file_id: string,
-    query?: { transcript_text?: boolean }
-  ): Promise<{ file_info: FileInfo; transcript?: TranscriptOutput }> {
+  /**
+   * A file's metadata, its transcript once it has one, and its scenes once they are analyzed.
+   * `file_info.scenes_status` says where the scene analysis stands; when it is `completed`, the
+   * result has `scenes`, as {@link VidNavigatorClient.watch} returns them for an online video.
+   */
+  async getFile(file_id: string, query?: { transcript_text?: boolean }): Promise<GetFileResult> {
     const response = await this.request<
       ApiSuccessResponse<{
         file_info: FileInfoJSON;
         transcript?: TranscriptSegmentJSON[] | string;
+        scenes?: VideoSceneJSON[];
       }>
     >('GET', `/file/${file_id}`, undefined, query);
 
     return {
       file_info: FileInfo.fromJSON(response.data.file_info),
       transcript: transcriptFromJSON(response.data.transcript),
+      ...parseScenes(response.data.scenes),
     };
   }
 
+  /**
+   * Upload an audio or video file. With `include_scenes: true` the picture of a video file is
+   * analyzed as well, next to its transcription: follow `file_info.scenes_status` with
+   * {@link VidNavigatorClient.getFile}, which returns the scenes once it is `completed`. An audio
+   * file has no picture: its `scenes_status` is `failed`, with `frames_not_available`.
+   */
   async uploadFile(options: {
     filePath: string;
     wait_for_completion?: boolean;
     namespace_ids?: string[];
+    /** Default false. `true` also analyzes the scenes of the file (video files only). */
+    include_scenes?: boolean;
   }): Promise<UploadFileResult> {
     const form = new FormData();
     form.append('file', fs.createReadStream(options.filePath));
@@ -943,6 +1123,7 @@ export class VidNavigatorClient {
     if (options.namespace_ids?.length) {
       form.append('namespace_ids', JSON.stringify(options.namespace_ids));
     }
+    appendOptionalFormField(form, 'include_scenes', options.include_scenes);
 
     try {
       const response = await this.client.post<{
@@ -1012,6 +1193,26 @@ export class VidNavigatorClient {
     return response.data;
   }
 
+  /**
+   * Start the scene analysis of a file already uploaded: what its picture shows, scene by scene,
+   * with the text readable on screen. The scenes of a file are analyzed once and kept with it.
+   *
+   * The answer has `scenes_status` `processing` when the analysis was started or is already
+   * running, and `completed` when the scenes are already there (nothing new is started). Follow
+   * `file_info.scenes_status` with {@link VidNavigatorClient.getFile}, which returns the scenes
+   * once it is `completed`; `analyzeFile` and `extractFileData` read them with `include_scenes: true`.
+   *
+   * An audio file has no picture: the call throws `BadRequestError` with `error_code`
+   * `frames_not_available`.
+   */
+  async analyzeFileScenes(file_id: string): Promise<AnalyzeFileScenesResult> {
+    const response = await this.request<ApiSuccessResponse<AnalyzeFileScenesResult>>(
+      'POST',
+      `/file/${file_id}/scenes`
+    );
+    return response.data;
+  }
+
   async cancelFileUpload(
     file_id: string
   ): Promise<{ file_id: string; file_name: string; message: string }> {
@@ -1068,36 +1269,45 @@ export class VidNavigatorClient {
   //endregion
 
   //region --- Analysis ---
+  /**
+   * Analyze an online video: a summary, the people, places and key subjects, and the answer to
+   * an optional `query`. With `include_scenes: true` the analysis is made from the transcript and
+   * from what the video shows, and the result also has `scenes` and `frames_analyzed`, as
+   * {@link VidNavigatorClient.watch} returns them. When the picture cannot be read, the analysis
+   * is made from the transcript alone and `scenes_error` says why; a video without a transcript
+   * is analyzed from its scenes, and `transcript_error` says why the transcript is missing.
+   *
+   * This call waits on one HTTP request. With `include_scenes` on a video longer than about
+   * 10 minutes, use {@link VidNavigatorClient.analyze}, which runs the same analysis as a
+   * background job.
+   */
   async analyzeVideo(payload: AnalyzeVideoPayload): Promise<AnalyzeVideoResult> {
-    const response = await this.request<
-      ApiSuccessResponse<{
-        video_info: VideoInfoJSON;
-        transcript: TranscriptSegmentJSON[] | string;
-        transcript_analysis: AnalysisResultJSON;
-      }>
-    >('POST', '/analyze/video', payload);
+    const response = await this.request<ApiSuccessResponse<AnalysisDataJSON & { video_info: VideoInfoJSON }>>(
+      'POST',
+      '/analyze/video',
+      payload
+    );
 
-    return {
-      video_info: VideoInfo.fromJSON(response.data.video_info),
-      transcript: transcriptFromJSON(response.data.transcript)!,
-      transcript_analysis: AnalysisResult.fromJSON(response.data.transcript_analysis),
-      usage: response.usage ? UsageBlock.fromJSON(response.usage) : undefined,
-    };
+    return parseAnalyzeVideoData(response.data, response.usage ? UsageBlock.fromJSON(response.usage) : undefined);
   }
 
+  /**
+   * Analyze an uploaded file. With `include_scenes: true` the analysis is made from the transcript
+   * of the file and its scenes together, and the result also has `scenes` and `frames_analyzed`.
+   * The scenes are the ones kept with the file: ask for them at the upload (`include_scenes`) or
+   * with {@link VidNavigatorClient.analyzeFileScenes}. A file that has none is refused with
+   * `ScenesNotAvailableError` (HTTP 409), whose `scenes_status` says where their analysis stands.
+   */
   async analyzeFile(payload: AnalyzeFilePayload): Promise<AnalyzeFileResult> {
-    const response = await this.request<
-      ApiSuccessResponse<{
-        file_info: FileInfoJSON;
-        transcript: TranscriptSegmentJSON[] | string;
-        transcript_analysis: AnalysisResultJSON;
-      }>
-    >('POST', '/analyze/file', payload);
+    const response = await this.request<ApiSuccessResponse<AnalysisDataJSON & { file_info: FileInfoJSON }>>(
+      'POST',
+      '/analyze/file',
+      payload
+    );
 
     return {
       file_info: FileInfo.fromJSON(response.data.file_info),
-      transcript: transcriptFromJSON(response.data.transcript)!,
-      transcript_analysis: AnalysisResult.fromJSON(response.data.transcript_analysis),
+      ...parseAnalysisData(response.data),
       usage: response.usage ? UsageBlock.fromJSON(response.usage) : undefined,
     };
   }
@@ -1119,6 +1329,8 @@ export class VidNavigatorClient {
    * Structured-data extraction from an online video. Blocking convenience wrapper around
    * {@link VidNavigatorClient.extractVideo}: submits to `POST /extract/video/async` and polls, so
    * media of any length works. The result carries the extracted `data` and the video's `video_info`.
+   * With `include_scenes: true` the fields are extracted from the transcript and from what the video
+   * shows, and the result also has `frames_analyzed`.
    */
   async extractVideoData(
     payload: ExtractVideoDataPayload | ExtractVideoDataMultipartPayload,
@@ -1128,38 +1340,40 @@ export class VidNavigatorClient {
     return this.extractVideo(input as ExtractVideoInput, { ...options, include_usage });
   }
 
+  /**
+   * Structured-data extraction from an uploaded file. With `include_scenes: true` the fields are
+   * extracted from the transcript of the file and its scenes together, and the result has
+   * `frames_analyzed`. The scenes are the ones kept with the file: ask for them at the upload
+   * (`include_scenes`) or with {@link VidNavigatorClient.analyzeFileScenes}. A file that has none
+   * is refused with `ScenesNotAvailableError` (HTTP 409).
+   */
   async extractFileData(
     payload: ExtractFileDataPayload | ExtractFileDataMultipartPayload
   ): Promise<ExtractDataResult> {
+    type ExtractFileBody = {
+      status: 'success';
+      data: Record<string, unknown>;
+      file_info?: FileInfoJSON;
+      usage?: UsageBlockJSON;
+    } & SceneNotes;
+    let body: ExtractFileBody;
+
     if ('schemaFilePath' in payload) {
       const form = new FormData();
       form.append('file_id', payload.file_id);
       form.append('schema', fs.createReadStream(payload.schemaFilePath));
       appendOptionalFormField(form, 'what_to_extract', payload.what_to_extract);
+      appendOptionalFormField(form, 'include_scenes', payload.include_scenes);
       appendOptionalFormField(form, 'include_usage', payload.include_usage);
-
-      const body = await this.request<{
-        status: 'success';
-        data: Record<string, unknown>;
-        file_info?: FileInfoJSON;
-        usage?: UsageBlockJSON;
-      }>('POST', '/extract/file', form, undefined, form.getHeaders());
-      return {
-        data: body.data,
-        file_info: body.file_info ? FileInfo.fromJSON(body.file_info) : undefined,
-        usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
-      };
+      body = await this.request<ExtractFileBody>('POST', '/extract/file', form, undefined, form.getHeaders());
+    } else {
+      body = await this.request<ExtractFileBody>('POST', '/extract/file', payload);
     }
 
-    const body = await this.request<{
-      status: 'success';
-      data: Record<string, unknown>;
-      file_info?: FileInfoJSON;
-      usage?: UsageBlockJSON;
-    }>('POST', '/extract/file', payload);
     return {
       data: body.data,
       file_info: body.file_info ? FileInfo.fromJSON(body.file_info) : undefined,
+      ...pickSceneNotes(body),
       usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
     };
   }

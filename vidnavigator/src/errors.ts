@@ -1,6 +1,7 @@
 /**
  * Custom exception classes for VidNavigator SDK.
  */
+import { FileScenesStatus, ScenesError } from './models';
 
 /**
  * Base class for all VidNavigator SDK errors.
@@ -178,6 +179,34 @@ export class TooManyActiveJobsError extends RateLimitExceededError {
     super(message, status_code, error_code, error_message, details);
     this.name = 'TooManyActiveJobsError';
     Object.setPrototypeOf(this, TooManyActiveJobsError.prototype);
+  }
+}
+
+/**
+ * Raised when `include_scenes` was asked on an uploaded file that has no scenes to read
+ * (HTTP 409, `scenes_not_available`). `scenes_status` says where their analysis stands: `none`
+ * (never asked for: start it with `analyzeFileScenes(file_id)`), `processing` (call again once
+ * `getFile()` reports `completed`) or `failed` (see `scenes_error`).
+ */
+export class ScenesNotAvailableError extends VidNavigatorError {
+  public readonly scenes_status?: Exclude<FileScenesStatus, 'completed'>;
+  /** Present when `scenes_status` is `failed`, e.g. `frames_not_available` for an audio file. */
+  public readonly scenes_error?: ScenesError;
+
+  constructor(
+    message: string,
+    status_code?: number,
+    error_code?: string,
+    error_message?: string,
+    details?: any,
+    scenes_status?: Exclude<FileScenesStatus, 'completed'>,
+    scenes_error?: ScenesError
+  ) {
+    super(message, status_code, error_code, error_message, details);
+    this.name = 'ScenesNotAvailableError';
+    this.scenes_status = scenes_status;
+    this.scenes_error = scenes_error;
+    Object.setPrototypeOf(this, ScenesNotAvailableError.prototype);
   }
 }
 
