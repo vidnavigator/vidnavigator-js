@@ -9,7 +9,7 @@ export interface VideoSceneJSON {
   on_screen_text?: string;
 }
 
-/** What a video shows between `start` and `end`. */
+/** What a video, or an uploaded file, shows between `start` and `end`. */
 export class VideoScene {
   /** Start of the scene, in seconds from the beginning of the video. */
   start: number;
@@ -32,8 +32,14 @@ export class VideoScene {
   }
 }
 
-/** Why a watched video came back without a transcript (e.g. `transcript_not_available`). */
+/** Why a video or a file came back without a transcript (e.g. `transcript_not_available`). */
 export interface WatchTranscriptError {
+  error?: string;
+  message?: string;
+}
+
+/** Why the scenes of a video or a file could not be had (e.g. `frames_not_available`). */
+export interface ScenesError {
   error?: string;
   message?: string;
 }
