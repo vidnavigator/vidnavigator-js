@@ -2,25 +2,34 @@ import { FileInfoJSON } from './FileInfo';
 import { VideoInfoJSON } from './VideoInfo';
 import { ScenesError, WatchTranscriptError } from './Watch';
 
-export type ExtractionFieldType =
-  | 'String'
-  | 'Number'
-  | 'Boolean'
-  | 'Integer'
-  | 'Object'
-  | 'Array'
-  | 'Enum';
+/** JSON Schema types a property of an extraction schema can have. */
+export type ExtractionFieldType = 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object';
 
+/**
+ * One property of an extraction schema, in standard JSON Schema. Give it a `type` and a
+ * `description` (what to put in it); `enum` restricts it to a list of values. Other JSON Schema
+ * keywords are accepted (`$ref`, `format`, `minimum`, ...).
+ */
 export interface ExtractionField {
-  type: ExtractionFieldType;
-  description: string;
+  type?: ExtractionFieldType | Array<ExtractionFieldType | 'null'>;
+  description?: string;
   properties?: Record<string, ExtractionField>;
   items?: ExtractionField;
-  enum?: string[];
+  enum?: Array<string | number | boolean | null>;
+  [keyword: string]: unknown;
 }
 
-/** Custom schema: field name -> field definition */
-export type ExtractionSchema = Record<string, ExtractionField>;
+/**
+ * The fields to extract, as a standard JSON Schema whose root is an object, for example what
+ * `zod-to-json-schema` or Pydantic's `model_json_schema()` produce. At most 10 fields per level
+ * and 3 levels of nesting.
+ */
+export interface ExtractionSchema {
+  type: 'object';
+  properties: Record<string, ExtractionField>;
+  required?: string[];
+  [keyword: string]: unknown;
+}
 
 export interface ExtractionTokenUsageJSON {
   prompt_tokens?: number;
@@ -37,6 +46,8 @@ export interface ExtractionResponseJSON {
   frames_analyzed?: number;
   scenes_error?: ScenesError;
   transcript_error?: WatchTranscriptError;
+  /** When the request had no schema: the schema written from `what_to_extract`, to pass as `schema` next time. */
+  schema?: ExtractionSchema;
   usage?: ExtractionTokenUsageJSON;
 }
 

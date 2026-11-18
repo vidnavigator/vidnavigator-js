@@ -132,8 +132,11 @@ async function run() {
       client.extractFileData({
         file_id: uploadedFileId,
         schema: {
-          summary_line: { type: 'String', description: 'One sentence summary of the file content' },
-          language: { type: 'String', description: 'Primary spoken language (ISO code)' },
+          type: 'object',
+          properties: {
+            summary_line: { type: 'string', description: 'One sentence summary of the file content' },
+            language: { type: 'string', description: 'Primary spoken language (ISO code)' },
+          },
         },
         what_to_extract: 'Extract a one-line summary and the primary language.',
         include_usage: true,

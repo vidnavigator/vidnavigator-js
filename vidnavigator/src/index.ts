@@ -72,7 +72,7 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '2.5.0';
+export const SDK_VERSION = '2.6.0';
 
 /**
  * A LIVE room usually answers in 1-5 s, up to ~30 s when the API has to open a TikTok page, and two
@@ -159,11 +159,17 @@ export type AnalyzeVideoInput = {
   transcript_text?: boolean;
 } & WebhookOption;
 
-/** Input for {@link VidNavigatorClient.extractVideo}: a JSON `schema`, or a JSON/YAML `schemaFilePath`. */
+/**
+ * Input for {@link VidNavigatorClient.extractVideo}: a JSON Schema `schema`, or a JSON/YAML
+ * `schemaFilePath`, or neither with `what_to_extract`: the schema is then written from that text
+ * and comes back as `schema` on the result.
+ */
 export type ExtractVideoInput =
   | ({
       video_url: string;
-      schema: ExtractionSchema;
+      /** The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given. */
+      schema?: ExtractionSchema;
+      /** What to extract, in plain words. Guides the extraction, or alone, writes the schema. */
       what_to_extract?: string;
       /** Speech-to-text the audio when no platform transcript exists. Default true. */
       transcribe?: boolean;
@@ -286,6 +292,8 @@ export type GetFileResult = {
 
 export interface ExtractDataResult {
   data: Record<string, unknown>;
+  /** When the request had no schema: the schema written from `what_to_extract`, to pass as `schema` next time. */
+  schema?: ExtractionSchema;
   video_info?: VideoInfo;
   file_info?: FileInfo;
   /** With `include_scenes: true`: number of frames that were analyzed to produce the scenes. */
@@ -406,7 +414,8 @@ export type AnalyzeFileResult = {
 
 export type ExtractVideoDataPayload = {
   video_url: string;
-  schema: ExtractionSchema;
+  /** A standard JSON Schema. Optional when `what_to_extract` is given. */
+  schema?: ExtractionSchema;
   what_to_extract?: string;
   transcribe?: boolean;
   /**
@@ -431,7 +440,8 @@ export type TweetStatementPayload = { tweet_id: string } & WebhookOption;
 
 export type ExtractFileDataPayload = {
   file_id: string;
-  schema: ExtractionSchema;
+  /** A standard JSON Schema. Optional when `what_to_extract` is given. */
+  schema?: ExtractionSchema;
   what_to_extract?: string;
   /**
    * Default false. `true` extracts from the transcript of the file and its scenes together. The
@@ -472,6 +482,19 @@ function parseTranscribeData(
     transcript: transcriptFromJSON(single.transcript)!,
     usage,
   };
+}
+
+/**
+ * An extraction needs a schema (`schema` or `schemaFilePath`) or, without one, `what_to_extract`,
+ * from which the API writes the schema. Checked before anything is sent.
+ */
+function checkSchemaInput(input: { schema?: unknown; schemaFilePath?: string; what_to_extract?: string }): void {
+  if (input.schema !== undefined && input.schemaFilePath !== undefined) {
+    throw new Error('Pass at most one of schema or schemaFilePath.');
+  }
+  if (input.schema === undefined && input.schemaFilePath === undefined && !input.what_to_extract?.trim()) {
+    throw new Error('Pass schema, schemaFilePath or what_to_extract.');
+  }
 }
 
 /** What `include_scenes` adds beside the scenes themselves. */
@@ -722,6 +745,7 @@ export class VidNavigatorClient {
         data: requireResult(task),
         video_info: task.video_info,
         ...pickSceneNotes(task),
+        ...(task.schema ? { schema: task.schema } : {}),
         usage: task.usage,
       }),
     });
@@ -820,6 +844,7 @@ export class VidNavigatorClient {
   }
 
   private submitExtractVideo(input: ExtractVideoInput): Promise<JobInfo> {
+    checkSchemaInput(input);
     if ('schemaFilePath' in input) {
       const form = new FormData();
       form.append('video_url', input.video_url);
@@ -1350,10 +1375,12 @@ export class VidNavigatorClient {
   async extractFileData(
     payload: ExtractFileDataPayload | ExtractFileDataMultipartPayload
   ): Promise<ExtractDataResult> {
+    checkSchemaInput(payload);
     type ExtractFileBody = {
       status: 'success';
       data: Record<string, unknown>;
       file_info?: FileInfoJSON;
+      schema?: ExtractionSchema;
       usage?: UsageBlockJSON;
     } & SceneNotes;
     let body: ExtractFileBody;
@@ -1374,6 +1401,7 @@ export class VidNavigatorClient {
       data: body.data,
       file_info: body.file_info ? FileInfo.fromJSON(body.file_info) : undefined,
       ...pickSceneNotes(body),
+      ...(body.schema ? { schema: body.schema } : {}),
       usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
     };
   }

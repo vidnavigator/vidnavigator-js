@@ -172,16 +172,19 @@ const analyzeAsyncProcessing = {
 };
 
 const recipeSchema = {
-  dish: { type: 'String', description: 'Name of the dish' },
-  ingredients: {
-    type: 'Array',
-    description: 'Every ingredient with its quantity',
-    items: {
-      type: 'Object',
-      description: 'One ingredient',
-      properties: {
-        name: { type: 'String', description: 'Name of the ingredient' },
-        quantity: { type: 'String', description: 'Quantity, as shown or said' },
+  type: 'object',
+  properties: {
+    dish: { type: 'string', description: 'Name of the dish' },
+    ingredients: {
+      type: 'array',
+      description: 'Every ingredient with its quantity',
+      items: {
+        type: 'object',
+        description: 'One ingredient',
+        properties: {
+          name: { type: 'string', description: 'Name of the ingredient' },
+          quantity: { type: 'string', description: 'Quantity, as shown or said' },
+        },
       },
     },
   },
@@ -233,7 +236,7 @@ const extractAsyncFailed = {
     request: {
       video_url: 'https://www.youtube.com/watch?v=P-4LwAuTw7k',
       include_scenes: true,
-      schema: { narration: { type: 'Array', description: 'Every sentence of the narration', items: { type: 'String', description: 'One sentence' } } },
+      schema: { type: 'object', properties: { narration: { type: 'array', description: 'Every sentence of the narration', items: { type: 'string' } } } },
     },
     created_at: '2026-11-16T13:13:44.387000',
     started_at: '2026-11-16T13:13:44.391000',
