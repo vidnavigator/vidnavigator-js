@@ -188,7 +188,7 @@ async function run() {
     let taskId;
     const input = {
       video_url: TEST_YOUTUBE_URL,
-      schema: { topic: { type: 'String', description: 'Main topic in a few words' } },
+      schema: { type: 'object', properties: { topic: { type: 'string', description: 'Main topic in a few words' } } },
       transcribe: false,
     };
     try {
@@ -322,7 +322,8 @@ async function run() {
     const extraction = await client.extractVideoData({
       video_url: TEST_YOUTUBE_URL,
       schema: {
-        topic: { type: 'String', description: 'Main topic in a few words' },
+        type: 'object',
+        properties: { topic: { type: 'string', description: 'Main topic in a few words' } },
       },
       include_usage: true,
     });
@@ -340,7 +341,7 @@ async function run() {
   try {
     const light = await client.extractVideoData({
       video_url: TEST_YOUTUBE_URL,
-      schema: { phrase: { type: 'String', description: 'One-word summary' } },
+      schema: { type: 'object', properties: { phrase: { type: 'string', description: 'One-word summary' } } },
       include_usage: false,
     });
     assert(light.usage === undefined, 'extractVideoData no usage');
@@ -352,7 +353,7 @@ async function run() {
     const { data, usage } = await client.extractVideo(
       {
         video_url: TEST_YOUTUBE_URL,
-        schema: { topic: { type: 'String', description: 'Main topic in a few words' } },
+        schema: { type: 'object', properties: { topic: { type: 'string', description: 'Main topic in a few words' } } },
         transcribe: false,
       },
       { include_usage: true, timeoutMs: 180000 }
@@ -362,7 +363,7 @@ async function run() {
 
     const job = await client.extractVideo.submit({
       video_url: TEST_YOUTUBE_URL,
-      schema: { topic: { type: 'String', description: 'Main topic in a few words' } },
+      schema: { type: 'object', properties: { topic: { type: 'string', description: 'Main topic in a few words' } } },
       transcribe: false,
       webhook_url: '',
     });

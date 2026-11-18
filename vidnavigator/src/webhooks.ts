@@ -52,6 +52,8 @@ export interface WebhookEvent {
     result_truncated?: boolean;
     /** `extract_video.completed` only: raw `video_info` of the video. Sent even when `result_truncated` is true. */
     video_info?: Record<string, unknown>;
+    /** `extract_video.completed` only, when the request had no schema: the schema written from `what_to_extract`. */
+    schema?: Record<string, unknown>;
     error?: AsyncJobError | null;
   };
 }

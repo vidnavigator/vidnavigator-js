@@ -988,7 +988,7 @@ async function runClientMethodTests() {
   const callsBefore = calls.length;
   const videoExtraction = await client.extractVideoData({
     video_url: 'https://example.com/video',
-    schema: { topic: { type: 'String', description: 'Topic' } },
+    schema: { type: 'object', properties: { topic: { type: 'string', description: 'Topic' } } },
     transcribe: false,
     include_usage: true,
   });
@@ -1009,7 +1009,7 @@ async function runClientMethodTests() {
   assert(calls[calls.length - 1].params.include_usage === 'true', 'extractVideoData sends include_usage on the poll');
 
   const schemaPath = path.join(__dirname, 'tmp-extraction-schema.json');
-  fs.writeFileSync(schemaPath, JSON.stringify({ topic: { type: 'String', description: 'Topic' } }));
+  fs.writeFileSync(schemaPath, JSON.stringify({ type: 'object', properties: { topic: { type: 'string', description: 'Topic' } } }));
   try {
     const before = calls.length;
     const multipartExtraction = await client.extractVideoData({
@@ -1031,7 +1031,7 @@ async function runClientMethodTests() {
 
   const fileExtraction = await client.extractFileData({
     file_id: 'file-1',
-    schema: { summary: { type: 'String', description: 'Summary' } },
+    schema: { type: 'object', properties: { summary: { type: 'string', description: 'Summary' } } },
   });
   assert(fileExtraction.file_info instanceof sdk.FileInfo, 'extractFileData parses file_info');
 
@@ -1312,20 +1312,39 @@ async function runOperationTests() {
   // ── extractVideo (JSON) ──
   api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: { topic: 'Never Gonna Give You Up' }, video_info: { title: 'Rick Astley', duration: 212 } }]);
   const ex = await client.extractVideo(
-    { video_url: 'https://youtu.be/x', schema: { topic: { type: 'String', description: 'Topic' } }, transcribe: false, webhook_url: '' },
+    { video_url: 'https://youtu.be/x', schema: { type: 'object', properties: { topic: { type: 'string', description: 'Topic' } } }, transcribe: false, webhook_url: '' },
     { ...FAST, include_usage: true }
   );
   const exSubmit = api.calls.filter((c) => c.url === '/extract/video/async').pop();
-  assert(exSubmit.data.schema.topic.type === 'String', 'extractVideo sends schema');
+  assert(exSubmit.data.schema.properties.topic.type === 'string', 'extractVideo sends schema');
   assert(exSubmit.data.transcribe === false, 'extractVideo sends transcribe');
   assert(exSubmit.data.webhook_url === '', 'extractVideo passes empty webhook_url (opt-out) through');
   assert(ex.data.topic === 'Never Gonna Give You Up', 'extractVideo result.data is the extracted object');
   assert(ex.usage instanceof sdk.UsageBlock, 'extractVideo result.usage');
   assert(ex.video_info instanceof sdk.VideoInfo && ex.video_info.duration === 212, 'extractVideo result.video_info parsed as VideoInfo');
+  assert(ex.schema === undefined, 'extractVideo result has no schema when one was sent');
+
+  // ── extractVideo with what_to_extract alone: the schema written comes back ──
+  const written = { type: 'object', required: ['brand'], properties: { brand: { type: 'string', description: 'Brand shown' } } };
+  api.plan([{ task_status: 'completed', result: { brand: 'Nike' }, schema: written }]);
+  const fromText = await client.extractVideo({ video_url: 'https://youtu.be/x', what_to_extract: 'the brand shown' }, FAST);
+  const textSubmit = api.calls.filter((c) => c.url === '/extract/video/async').pop();
+  assert(textSubmit.data.schema === undefined, 'extractVideo with what_to_extract alone sends no schema');
+  assert(textSubmit.data.what_to_extract === 'the brand shown', 'extractVideo sends what_to_extract');
+  assert(fromText.data.brand === 'Nike', 'extractVideo with what_to_extract alone returns the data');
+  assert(JSON.stringify(fromText.schema) === JSON.stringify(written), 'extractVideo returns the schema written');
+  for (const bad of [
+    { video_url: 'https://youtu.be/x' },
+    { video_url: 'https://youtu.be/x', what_to_extract: '   ' },
+    { video_url: 'https://youtu.be/x', schema: written, schemaFilePath: 'x.json' },
+  ]) {
+    const refused = await client.extractVideo(bad, FAST).catch((err) => err);
+    assert(refused instanceof Error && /schema/.test(refused.message), `extractVideo refuses ${JSON.stringify(Object.keys(bad))} before sending`);
+  }
 
   // ── extractVideo (multipart schema file) ──
   const schemaPath = path.join(__dirname, 'tmp-async-extraction-schema.yaml');
-  fs.writeFileSync(schemaPath, 'topic:\n  type: String\n  description: Topic\n');
+  fs.writeFileSync(schemaPath, 'type: object\nproperties:\n  topic:\n    type: string\n    description: Topic\n');
   try {
     api.plan([{ task_status: 'completed', result: { topic: 'x' } }]);
     const exJob = await client.extractVideo.submit({

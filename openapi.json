@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "VidNavigator Developer API",
-    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nCheck the documentation for the rate limits for each endpoint.\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe endpoints that transcribe a video or read its picture (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`, `/watch`, `/analyze/video` with `include_scenes=true`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n| `POST /watch` | `POST /watch/async` | `GET /watch/{task_id}` |\n| `POST /analyze/video` | `POST /analyze/video/async` | `GET /analyze/video/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints \u2014 they have no duration cap. See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/guides/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/reference/errors",
+    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nCheck the documentation for the rate limits for each endpoint.\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe endpoints that transcribe a video or read its picture (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`, `/watch`, `/analyze/video` with `include_scenes=true`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n| `POST /watch` | `POST /watch/async` | `GET /watch/{task_id}` |\n| `POST /analyze/video` | `POST /analyze/video/async` | `GET /analyze/video/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints \u2014 they have no duration cap. See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/api-reference/errors",
     "version": "1.0.0",
     "contact": {
       "name": "VidNavigator Support",
@@ -349,7 +349,7 @@
                   "webhook_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Where to POST the result when the task finishes. Overrides the account-level default configured in Studio \u2192 API; pass an empty string to opt this task out of that default. Must be a publicly reachable https URL. The event is a notification, not the payload: a scrape can hold thousands of videos, so it carries `stats` and tells you to read the result from `check_status_url`. See https://docs.vidnavigator.com/guides/webhooks",
+                    "description": "Where to POST the result when the task finishes. Overrides the account-level default configured in Studio \u2192 API; pass an empty string to opt this task out of that default. Must be a publicly reachable https URL. The event is a notification, not the payload: a scrape can hold thousands of videos, so it carries `stats` and tells you to read the result from `check_status_url`. See https://docs.vidnavigator.com/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
                   }
                 }
@@ -811,7 +811,7 @@
                   "webhook_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Where to POST the result when the task finishes. Overrides the account-level default configured in Studio \u2192 API; pass an empty string to opt this task out of that default. Must be a publicly reachable https URL. The event is a notification, not the payload: a search can hold hundreds of videos, so it carries `stats` and tells you to read the result from `check_status_url`. See https://docs.vidnavigator.com/guides/webhooks",
+                    "description": "Where to POST the result when the task finishes. Overrides the account-level default configured in Studio \u2192 API; pass an empty string to opt this task out of that default. Must be a publicly reachable https URL. The event is a notification, not the payload: a search can hold hundreds of videos, so it carries `stats` and tells you to read the result from `check_status_url`. See https://docs.vidnavigator.com/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
                   }
                 }
@@ -1136,7 +1136,7 @@
                   "webhook_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Where to POST the result when the task finishes. Overrides the account-level default configured in Studio \u2192 API; pass an empty string to opt this task out of that default. Must be a publicly reachable https URL. The event is a notification, not the payload: it carries `stats` and tells you to read the rooms from `check_status_url`. See https://docs.vidnavigator.com/guides/webhooks",
+                    "description": "Where to POST the result when the task finishes. Overrides the account-level default configured in Studio \u2192 API; pass an empty string to opt this task out of that default. Must be a publicly reachable https URL. The event is a notification, not the payload: it carries `stats` and tells you to read the rooms from `check_status_url`. See https://docs.vidnavigator.com/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
                   }
                 }
@@ -1948,7 +1948,7 @@
     "/extract/video": {
       "post": {
         "summary": "Extract structured data from online video",
-        "description": "Extract structured data from an online video's transcript using a custom schema.\n\nProvide a `video_url` and a `schema` describing the fields to extract. Optionally include `what_to_extract` to guide the extraction.\n\n**Auto-transcription:** For non-YouTube videos without an existing transcript (e.g. Instagram, TikTok, Facebook), the API automatically transcribes the video audio when `transcribe` is `true` (the default). YouTube videos rely on platform captions and cannot be auto-transcribed. Set `transcribe=false` to disable this behavior.\n\n**Schema format:** Each field must have `type` and `description`. Supported types: `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`. Max 10 root fields, max 3 nesting levels.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/video/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs\n\n**Scenes:** set `include_scenes=true` to also read what the video shows: the fields are then extracted from the transcript and the scenes together, and a value shown or written on screen counts as much as one that is said. The response then carries `frames_analyzed`. When the picture cannot be read, the fields are extracted from the transcript alone and `scenes_error` says why. A video without a transcript is extracted from its scenes, and `transcript_error` says why the transcript is missing.",
+        "description": "Extract structured data from an online video's transcript using a custom schema.\n\nProvide a `video_url`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both.\n\n**Auto-transcription:** For non-YouTube videos without an existing transcript (e.g. Instagram, TikTok, Facebook), the API automatically transcribes the video audio when `transcribe` is `true` (the default). YouTube videos rely on platform captions and cannot be auto-transcribed. Set `transcribe=false` to disable this behavior.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/video/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs\n\n**Scenes:** set `include_scenes=true` to also read what the video shows: the fields are then extracted from the transcript and the scenes together, and a value shown or written on screen counts as much as one that is said. The response then carries `frames_analyzed`. When the picture cannot be read, the fields are extracted from the transcript alone and `scenes_error` says why. A video without a transcript is extracted from its scenes, and `transcript_error` says why the transcript is missing.",
         "operationId": "extractVideoData",
         "tags": [
           "Extraction"
@@ -1960,8 +1960,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "video_url",
-                  "schema"
+                  "video_url"
                 ],
                 "properties": {
                   "video_url": {
@@ -1971,12 +1970,17 @@
                     "example": "https://youtube.com/watch?v=dQw4w9WgXcQ"
                   },
                   "schema": {
-                    "$ref": "#/components/schemas/ExtractionSchema"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract the main topics and any product names mentioned"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "transcribe": {
                     "type": "boolean",
@@ -2000,8 +2004,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "video_url",
-                  "schema"
+                  "video_url"
                 ],
                 "properties": {
                   "video_url": {
@@ -2011,12 +2014,17 @@
                     "example": "https://youtube.com/watch?v=dQw4w9WgXcQ"
                   },
                   "schema": {
-                    "$ref": "#/components/schemas/ExtractionSchema"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract the main topics and any product names mentioned"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "transcribe": {
                     "type": "boolean",
@@ -2040,8 +2048,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "video_url",
-                  "schema"
+                  "video_url"
                 ],
                 "properties": {
                   "video_url": {
@@ -2051,12 +2058,17 @@
                     "example": "https://youtube.com/watch?v=dQw4w9WgXcQ"
                   },
                   "schema": {
-                    "$ref": "#/components/schemas/ExtractionSchema"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract the main topics and any product names mentioned"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "transcribe": {
                     "type": "boolean",
@@ -2080,8 +2092,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "video_url",
-                  "schema"
+                  "video_url"
                 ],
                 "properties": {
                   "video_url": {
@@ -2091,12 +2102,17 @@
                     "example": "https://youtube.com/watch?v=dQw4w9WgXcQ"
                   },
                   "schema": {
-                    "$ref": "#/components/schemas/ExtractionSchema"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract the main topics and any product names mentioned"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "transcribe": {
                     "type": "boolean",
@@ -2120,8 +2136,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "video_url",
-                  "schema"
+                  "video_url"
                 ],
                 "properties": {
                   "video_url": {
@@ -2133,12 +2148,12 @@
                   "schema": {
                     "type": "string",
                     "format": "binary",
-                    "description": "JSON or YAML schema file. The file may contain either the schema object directly or a full extraction request object with a nested `schema` property."
+                    "description": "JSON or YAML schema file. The file may contain either the schema object directly or a full extraction request object with a nested `schema` property. The schema is a standard JSON Schema. Optional when `what_to_extract` is given."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract the main topics and any product names mentioned"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "transcribe": {
                     "type": "boolean",
@@ -2262,7 +2277,9 @@
                       "enum": [
                         "internal_server_error",
                         "extraction_failed",
-                        "transcription_failed"
+                        "transcription_failed",
+                        "plan_compilation_failed",
+                        "schema_generation_failed"
                       ]
                     },
                     "message": {
@@ -2282,7 +2299,7 @@
     "/extract/file": {
       "post": {
         "summary": "Extract structured data from uploaded file",
-        "description": "Extract structured data from an uploaded file's transcript using a custom schema.\n\nProvide a `file_id` and a `schema` describing the fields to extract. The file must be processed and have a transcript available. Optionally include `what_to_extract` to guide the extraction.\n\n**Schema format:** Each field must have `type` and `description`. Supported types: `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`. Max 10 root fields, max 3 nesting levels.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `file_id` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file. If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `file_id` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Scenes:** set `include_scenes=true` to extract from the transcript of the file and its scenes together: a value shown or written on screen counts as much as one that is said. The response then carries `frames_analyzed`. The scenes are the ones kept with the file: they are analyzed beforehand, at the upload with `include_scenes` or with `POST /file/{file_id}/scenes`. A file that has none is answered `409` (`scenes_not_available`). A file without speech is extracted from its scenes, with `transcript_error`.",
+        "description": "Extract structured data from an uploaded file's transcript using a custom schema.\n\nProvide a `file_id`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both. The file must be processed and have a transcript available.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `file_id` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file. If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `file_id` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Scenes:** set `include_scenes=true` to extract from the transcript of the file and its scenes together: a value shown or written on screen counts as much as one that is said. The response then carries `frames_analyzed`. The scenes are the ones kept with the file: they are analyzed beforehand, at the upload with `include_scenes` or with `POST /file/{file_id}/scenes`. A file that has none is answered `409` (`scenes_not_available`). A file without speech is extracted from its scenes, with `transcript_error`.",
         "operationId": "extractFileData",
         "tags": [
           "Extraction"
@@ -2294,8 +2311,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "file_id",
-                  "schema"
+                  "file_id"
                 ],
                 "properties": {
                   "file_id": {
@@ -2303,12 +2319,17 @@
                     "description": "ID of the uploaded file to extract data from"
                   },
                   "schema": {
-                    "$ref": "#/components/schemas/ExtractionSchema"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract action items and deadlines from this meeting"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2327,8 +2348,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "file_id",
-                  "schema"
+                  "file_id"
                 ],
                 "properties": {
                   "file_id": {
@@ -2336,12 +2356,17 @@
                     "description": "ID of the uploaded file to extract data from"
                   },
                   "schema": {
-                    "$ref": "#/components/schemas/ExtractionSchema"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract action items and deadlines from this meeting"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2360,8 +2385,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "file_id",
-                  "schema"
+                  "file_id"
                 ],
                 "properties": {
                   "file_id": {
@@ -2369,12 +2393,17 @@
                     "description": "ID of the uploaded file to extract data from"
                   },
                   "schema": {
-                    "$ref": "#/components/schemas/ExtractionSchema"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract action items and deadlines from this meeting"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2393,8 +2422,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "file_id",
-                  "schema"
+                  "file_id"
                 ],
                 "properties": {
                   "file_id": {
@@ -2402,12 +2430,17 @@
                     "description": "ID of the uploaded file to extract data from"
                   },
                   "schema": {
-                    "$ref": "#/components/schemas/ExtractionSchema"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract action items and deadlines from this meeting"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2426,8 +2459,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "file_id",
-                  "schema"
+                  "file_id"
                 ],
                 "properties": {
                   "file_id": {
@@ -2437,12 +2469,12 @@
                   "schema": {
                     "type": "string",
                     "format": "binary",
-                    "description": "JSON or YAML schema file. The file may contain either the schema object directly or a full extraction request object with a nested `schema` property."
+                    "description": "JSON or YAML schema file. The file may contain either the schema object directly or a full extraction request object with a nested `schema` property. The schema is a standard JSON Schema. Optional when `what_to_extract` is given."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript",
-                    "example": "Extract action items and deadlines from this meeting"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -4135,7 +4167,7 @@
                   "webhook_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/guides/webhooks",
+                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
                   }
                 }
@@ -4352,7 +4384,7 @@
                   "webhook_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/guides/webhooks",
+                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
                   }
                 }
@@ -4530,7 +4562,7 @@
     "/extract/video/async": {
       "post": {
         "summary": "Extract structured data from a video asynchronously (long videos)",
-        "description": "Queue a structured-data extraction and return a `task_id` immediately.\n\n**Use this instead of `POST /extract/video` whenever `transcribe` is left on and the video may run past ~10 minutes.** The extraction itself is fast; the speech-to-text step in front of it is what makes a synchronous request time out. This endpoint has no duration cap.\n\nAccepts the same body as `POST /extract/video` \u2014 JSON, YAML and `multipart/form-data` all work here too \u2014 plus `webhook_url`. The schema is validated at submit time, so an invalid schema is rejected on the `POST`, before any transcription.\n\n`include_usage` is not accepted here: pass it on `GET /extract/video/{task_id}` once `task_status=completed`.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time check:** the submit endpoint returns `402` instead of a `task_id` when the account has almost no credits left. A job can still fail later with `402` when the media needs more than the remaining balance. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
+        "description": "Queue a structured-data extraction and return a `task_id` immediately.\n\n**Use this instead of `POST /extract/video` whenever `transcribe` is left on and the video may run past ~10 minutes.** The extraction itself is fast; the speech-to-text step in front of it is what makes a synchronous request time out. This endpoint has no duration cap.\n\nAccepts the same body as `POST /extract/video` \u2014 JSON, YAML and `multipart/form-data` all work here too \u2014 plus `webhook_url`. A schema is validated at submit time, so an invalid schema is rejected on the `POST`, before any transcription. Without a schema, `what_to_extract` is required and the schema written from it comes with the result.\n\n`include_usage` is not accepted here: pass it on `GET /extract/video/{task_id}` once `task_status=completed`.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time check:** the submit endpoint returns `402` instead of a `task_id` when the account has almost no credits left. A job can still fail later with `402` when the media needs more than the remaining balance. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
         "operationId": "extractVideoDataAsync",
         "tags": [
           "Extraction"
@@ -4542,8 +4574,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "video_url",
-                  "schema"
+                  "video_url"
                 ],
                 "properties": {
                   "video_url": {
@@ -4553,11 +4584,17 @@
                     "example": "https://www.tiktok.com/@user/video/1234567890"
                   },
                   "schema": {
-                    "$ref": "#/components/schemas/ExtractionSchema"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
                   },
                   "what_to_extract": {
                     "type": "string",
-                    "description": "Optional guidance for what to extract from the transcript"
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
                   },
                   "transcribe": {
                     "type": "boolean",
@@ -4572,7 +4609,7 @@
                   "webhook_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/guides/webhooks",
+                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
                   }
                 }
@@ -4800,7 +4837,7 @@
                   "webhook_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/guides/webhooks",
+                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
                   }
                 }
@@ -5236,7 +5273,7 @@
                   "webhook_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/guides/webhooks",
+                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
                   }
                 }
@@ -6311,70 +6348,59 @@
       },
       "ExtractionSchema": {
         "type": "object",
-        "description": "Custom extraction schema defining the fields to extract. Max 10 root-level fields, max 3 nesting levels. Each field must have `type` and `description`.",
-        "additionalProperties": {
-          "type": "object",
-          "required": [
-            "type",
-            "description"
-          ],
-          "properties": {
-            "type": {
-              "type": "string",
-              "enum": [
-                "String",
-                "Number",
-                "Boolean",
-                "Integer",
-                "Object",
-                "Array",
-                "Enum"
-              ],
-              "description": "The data type of the field"
-            },
-            "description": {
-              "type": "string",
-              "description": "Description of what this field should contain"
-            },
-            "properties": {
-              "type": "object",
-              "description": "Sub-fields for Object type"
-            },
-            "items": {
-              "type": "object",
-              "description": "Item schema for Array type"
-            },
-            "enum": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Allowed values for Enum type. The extracted value is always one of these. `values` is accepted as a legacy alias."
-            }
-          }
-        },
-        "example": {
-          "main_topics": {
-            "type": "Array",
-            "description": "List of main topics discussed",
-            "items": {
-              "type": "String",
-              "description": "A topic"
-            }
-          },
-          "sentiment": {
-            "type": "Enum",
-            "description": "Overall sentiment of the video",
+        "description": "The fields to extract, as a standard JSON Schema whose root is an object, as produced by Pydantic (`model_json_schema()`), Zod or a structured-output definition. Each property has a `type` (`string`, `number`, `integer`, `boolean`, `array` with `items`, `object` with `properties`) and, best, a `description` saying what to put in it; `enum` restricts a field to a list of values. Local references (`$ref` to `#/$defs/...` or `#/definitions/...`) are followed; a nullable type counts as its type, `const` as an enum of one value, and `format`, `pattern`, `minimum`, `maximum` and the like guide the extraction. `required` and `additionalProperties` change nothing: a field the video does not give is `null`. Not supported: `anyOf`/`oneOf` between several types, recursive schemas. At most 10 fields per level and 3 levels of nesting.",
+        "required": [
+          "type",
+          "properties"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
             "enum": [
-              "positive",
-              "negative",
-              "neutral"
+              "object"
             ]
           },
-          "key_takeaway": {
-            "type": "String",
-            "description": "The single most important takeaway"
+          "properties": {
+            "type": "object",
+            "description": "The fields to extract, each a JSON Schema."
           }
+        },
+        "additionalProperties": true,
+        "example": {
+          "type": "object",
+          "properties": {
+            "products": {
+              "type": "array",
+              "description": "Products shown or named in the video",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Price in the currency shown"
+                  }
+                }
+              }
+            },
+            "sentiment": {
+              "type": "string",
+              "enum": [
+                "positive",
+                "negative",
+                "neutral"
+              ]
+            }
+          },
+          "required": [
+            "products",
+            "sentiment"
+          ]
         }
       },
       "ExtractionResponse": {
@@ -6444,6 +6470,14 @@
               }
             ],
             "description": "Per-call usage, only present when include_usage=true: the charges (charges, total_credits, credits_remaining_after, waived) and the token counts (prompt_tokens, completion_tokens, total_tokens) in one object."
+          },
+          "schema": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionSchema"
+              }
+            ],
+            "description": "Present only when the request had no `schema`: the schema written from `what_to_extract`, as a JSON Schema. Pass it as `schema` in later requests to get the same fields."
           }
         }
       },
@@ -7596,6 +7630,14 @@
           },
           "error": {
             "$ref": "#/components/schemas/AsyncJobError"
+          },
+          "schema": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionSchema"
+              }
+            ],
+            "description": "Present only when `task_status=completed` and the request had no `schema`. The same `schema` (a JSON Schema) a successful synchronous `POST /extract/video` returns beside `data`."
           }
         }
       },
@@ -8697,7 +8739,7 @@
     },
     {
       "name": "Webhooks",
-      "description": "Callbacks for async jobs. Configure an account-level default endpoint and signing secret in Studio \u2192 API, or pass `webhook_url` per request. The `WebhookEvent` schema documents the payload and signature. Full contract: https://docs.vidnavigator.com/guides/webhooks A default endpoint that fails 20 deliveries in a row over more than 72 hours is disabled automatically and the owner notified; polling is unaffected."
+      "description": "Callbacks for async jobs. Configure an account-level default endpoint and signing secret in Studio \u2192 API, or pass `webhook_url` per request. The `WebhookEvent` schema documents the payload and signature. Full contract: https://docs.vidnavigator.com/webhooks A default endpoint that fails 20 deliveries in a row over more than 72 hours is disabled automatically and the owner notified; polling is unaffected."
     }
   ]
 }

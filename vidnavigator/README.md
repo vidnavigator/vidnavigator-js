@@ -258,8 +258,11 @@ results.forEach((r, i) => console.log(urls[i], r.status === 'fulfilled' ? r.valu
 const job = await vn.extractVideo.submit({
   video_url: 'https://www.facebook.com/watch/?v=1234567890',
   schema: {
-    speakers: { type: 'Array',  description: 'Names of everyone who speaks', items: { type: 'String', description: 'A speaker name' } },
-    verdict:  { type: 'String', description: 'The final conclusion of the video' },
+    type: 'object',
+    properties: {
+      speakers: { type: 'array',  description: 'Names of everyone who speaks', items: { type: 'string' } },
+      verdict:  { type: 'string', description: 'The final conclusion of the video' },
+    },
   },
 });
 
@@ -492,12 +495,15 @@ for (const video of videos) {
   const { data } = await vn.extractVideoData({
     video_url: video.url,
     schema: {
-      hook: { type: 'String', description: 'The opening hook or premise' },
-      products: { type: 'Array', description: 'Products or brands mentioned', items: { type: 'String', description: 'A product or brand' } },
-      sentiment: {
-        type: 'Enum',
-        description: 'Overall sentiment',
-        enum: ['positive', 'negative', 'neutral', 'mixed'],
+      type: 'object',
+      properties: {
+        hook: { type: 'string', description: 'The opening hook or premise' },
+        products: { type: 'array', description: 'Products or brands mentioned', items: { type: 'string' } },
+        sentiment: {
+          type: 'string',
+          description: 'Overall sentiment',
+          enum: ['positive', 'negative', 'neutral', 'mixed'],
+        },
       },
     },
     what_to_extract: 'Extract creator messaging and product mentions.',
@@ -766,17 +772,19 @@ const later = await vn.analyze.resume(job.task_id).result();
 
 ### 9. Extract structured data
 
-Define a schema and get back clean, structured data extracted from any video or file transcript. Powered by LLMs with per-call usage tracking (see [Per-call usage](#per-call-usage)).
+Define a schema, as a standard JSON Schema, and get back clean, structured data extracted from any video or file transcript. Or skip the schema and say what you want in plain words with `what_to_extract`. Per-call usage tracking included (see [Per-call usage](#per-call-usage)).
 
 ```ts
 const { data, usage } = await vn.extractVideoData({
   video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
   schema: {
-    topic:    { type: 'String',  description: 'Main topic of the video' },
-    language: { type: 'String',  description: 'Primary spoken language (ISO 639-1)' },
-    tone:     { type: 'Enum',    description: 'Overall tone',
-                enum: ['positive', 'negative', 'neutral', 'mixed'] },
-    key_quotes: { type: 'Array', description: 'Top 3 memorable quotes', items: { type: 'String', description: 'A quote' } },
+    type: 'object',
+    properties: {
+      topic:      { type: 'string', description: 'Main topic of the video' },
+      language:   { type: 'string', description: 'Primary spoken language (ISO 639-1)' },
+      tone:       { type: 'string', description: 'Overall tone', enum: ['positive', 'negative', 'neutral', 'mixed'] },
+      key_quotes: { type: 'array',  description: 'Top 3 memorable quotes', items: { type: 'string' } },
+    },
   },
   what_to_extract: 'Determine the topic, language, tone, and notable quotes.',
   include_usage: true,
@@ -801,10 +809,12 @@ Also works on uploaded files:
 const { data } = await vn.extractFileData({
   file_id: 'your-file-id',
   schema: {
-    action_items: { type: 'Array',  description: 'List of action items from the meeting', items: { type: 'String', description: 'An action item' } },
-    next_meeting: { type: 'String', description: 'When is the next meeting scheduled?' },
-    sentiment:    { type: 'Enum',   description: 'Overall meeting mood',
-                    enum: ['productive', 'tense', 'casual', 'urgent'] },
+    type: 'object',
+    properties: {
+      action_items: { type: 'array',  description: 'List of action items from the meeting', items: { type: 'string' } },
+      next_meeting: { type: 'string', description: 'When is the next meeting scheduled?' },
+      sentiment:    { type: 'string', description: 'Overall meeting mood', enum: ['productive', 'tense', 'casual', 'urgent'] },
+    },
   },
 });
 ```
@@ -825,8 +835,11 @@ Pass `include_scenes: true` to extract from what the video shows as well as what
 const { data, frames_analyzed } = await vn.extractVideoData({
   video_url: 'https://www.tiktok.com/@user/video/1234567890',
   schema: {
-    dish:        { type: 'String', description: 'Name of the dish' },
-    ingredients: { type: 'Array',  description: 'Every ingredient with its quantity', items: { type: 'String', description: 'An ingredient and its quantity' } },
+    type: 'object',
+    properties: {
+      dish:        { type: 'string', description: 'Name of the dish' },
+      ingredients: { type: 'array',  description: 'Every ingredient with its quantity', items: { type: 'string' } },
+    },
   },
   include_scenes: true,
 });
@@ -836,11 +849,21 @@ console.log(data, frames_analyzed); // quantities that are only written on scree
 
 When the picture cannot be read, the fields are extracted from the transcript alone and the result has a `scenes_error`; a video without a transcript is extracted from its scenes, with a `transcript_error`. The same option works on an uploaded file, `vn.extractFileData({ file_id, schema, include_scenes: true })`, once the file has its scenes (see [Scenes of an uploaded file](#8b-scenes-of-an-uploaded-file)).
 
-**Supported schema types:** `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`
+**Schema format:** a standard JSON Schema whose root is an object, `{ type: 'object', properties: { ... } }`. Property types: `string`, `number`, `integer`, `boolean`, `array` (with `items`, the schema of one element) and `object` (with its own `properties`); `enum` restricts a property to a list of values. Give each property a `description`: it tells what to put in it. At most 10 fields per level and 3 levels of nesting. A Zod schema converted with `zod-to-json-schema` works as it is. `required` and `additionalProperties` change nothing: a field the video does not give comes back as `null`. An invalid schema is rejected with a `BadRequestError` before anything runs.
 
-**Schema rules:** every field needs `type` and `description`. `Array` fields also need `items` (the schema of one element). `Object` fields list their sub-fields in `properties` (up to 10), and `Enum` fields list the allowed values in `enum`. At most 10 top-level fields and 3 levels of nesting. An invalid schema is rejected with a `BadRequestError` before anything runs.
+**Without a schema:** pass `what_to_extract` alone. The schema is written for you and comes back as `schema` on the result; pass it as `schema` next time to get the same fields.
 
-> `extractVideoData()` runs as a background job, so videos of any length work. For many extractions at once, use `vn.extractVideo.submit()` (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)). The result has `data` (the extracted fields), `video_info` (the video's metadata), `frames_analyzed` with `include_scenes`, and `usage` when requested.
+```ts
+const { data, schema } = await vn.extractVideoData({
+  video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
+  what_to_extract: 'The mood of the song and every topic it touches on',
+});
+
+console.log(data);   // { mood: "upbeat", topics: ["love", "commitment"] }
+console.log(schema); // { type: "object", properties: { mood: {...}, topics: {...} }, ... }
+```
+
+> `extractVideoData()` runs as a background job, so videos of any length work. For many extractions at once, use `vn.extractVideo.submit()` (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)). The result has `data` (the extracted fields), `video_info` (the video's metadata), `frames_analyzed` with `include_scenes`, `schema` when it was written from `what_to_extract`, and `usage` when requested.
 
 ### 10. Semantic search
 
@@ -1172,6 +1195,11 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
+
+## What's new in 2.6.0
+
+- **Extraction takes a standard JSON Schema**, the only schema format the API accepts now: `{ type: 'object', properties: { ... } }`, with lowercase types. A Zod schema converted with `zod-to-json-schema` can be passed as it is. The former format (`{ field: { type: 'String', ... } }`) is refused with `invalid_schema`. The `ExtractionSchema` and `ExtractionField` types describe the new format.
+- **Extraction without a schema:** `extractVideoData`, `vn.extractVideo` and `extractFileData` take `what_to_extract` alone; the schema written for it comes back as `schema` on the result (and on the `extract_video.completed` webhook event).
 
 ## What's new in 2.5.0
 
