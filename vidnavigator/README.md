@@ -748,7 +748,7 @@ console.log(`${scenes?.length} scenes from ${frames_analyzed} frames`);
 
 - When the picture cannot be read, the analysis is made from the transcript alone: `scenes` is empty and `scenes_error` says why. A video without a transcript is analyzed from its scenes, and `transcript_error` says why the transcript is missing.
 - With scenes, the segments an answer refers to (`best_segment_index`, `relevant_segments`) are counted among the transcript segments and the scenes together, in chronological order. Use `transcript_analysis.timestamp` to locate the moment.
-- With `include_usage: true`, the frames are the `frame_analysis` charge of the `usage` block: 1 credit per 1,000 frames analyzed, with at least 334 frames per hour of video; for an uploaded file the frames are charged once, when its scenes are analyzed.
+- With `include_usage: true`, the frames are the `frame_analysis` charge of the `usage` block: 1 credit per 2,000 frames analyzed, with at least 667 frames per hour of video; for an uploaded file the frames are charged once, when its scenes are analyzed.
 
 `analyzeVideo()` waits on a single HTTP request. With `include_scenes` on a video longer than about 10 minutes, use `vn.analyze()`: it runs the same analysis as a [background job](#3-background-jobs-one-call-or-many-at-once) and returns the same result.
 
