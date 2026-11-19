@@ -1,5 +1,5 @@
 /**
- * File lifecycle tests — upload, poll, get, analyze, extract, URL, delete.
+ * File lifecycle tests — upload, poll, get, extract, URL, delete.
  * Uses media/video-test.mp4.
  * Requires VIDNAVIGATOR_API_KEY in .env.
  * Run: node tests/files.test.js
@@ -111,19 +111,6 @@ async function run() {
     assert(file_id === uploadedFileId, 'getFileUrl echoed id');
     assert(typeof file_url === 'string' && file_url.startsWith('http'), 'getFileUrl returns URL');
   } catch (e) { fail('getFileUrl', e.message); }
-
-  // ── analyzeFile ──
-  console.log('--- analyzeFile ---');
-  try {
-    const { file_info, transcript, transcript_analysis } = await withTimeout(
-      client.analyzeFile({ file_id: uploadedFileId, query: 'What is discussed?' }),
-      120000, 'analyzeFile'
-    );
-    assert(file_info instanceof sdk.FileInfo, 'analyzeFile FileInfo');
-    assert(transcript_analysis instanceof sdk.AnalysisResult, 'analyzeFile AnalysisResult');
-    assert(typeof transcript_analysis.summary === 'string', 'analyzeFile summary');
-    console.log('  summary:', (transcript_analysis.summary || '').slice(0, 120) + '...');
-  } catch (e) { fail('analyzeFile', e.message); }
 
   // ── extractFileData ──
   console.log('--- extractFileData ---');

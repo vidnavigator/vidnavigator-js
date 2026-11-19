@@ -41,8 +41,8 @@ Tests live in `tests/` and are plain Node.js scripts (no test framework required
 | Command | Scope | Network? | Duration |
 |---|---|---|---|
 | `npm run test:unit` | Models, errors, exports, mocked client calls (background jobs: blocking + `submit()` + `resume()`, poll cadence, timeouts, failures, error mapping), webhook signatures. Fails if the SDK ever calls a synchronous speech-to-text endpoint | No | ~1s |
-| `npm run test:integration` | Every live API endpoint (health, usage, transcripts, transcribe jobs, analyze, namespaces, extraction jobs, search, errors) | Yes | ~90-120s |
-| `npm run test:files` | Full file lifecycle: upload `tests/media/video-test.mp4`, poll, get, analyze, extract, delete | Yes | ~3-5 min |
+| `npm run test:integration` | Every live API endpoint (health, usage, transcripts, transcribe jobs, namespaces, extraction jobs, search, errors) | Yes | ~90-120s |
+| `npm run test:files` | Full file lifecycle: upload `tests/media/video-test.mp4`, poll, get, extract, delete | Yes | ~3-5 min |
 | `npm test` | Unit + integration | Yes | ~90-120s |
 | `npm run test:all` | Unit + integration + files | Yes | ~5 min |
 

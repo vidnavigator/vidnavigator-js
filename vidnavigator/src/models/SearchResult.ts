@@ -1,6 +1,11 @@
-import { NamedEntity } from './AnalysisResult';
 import { FileInfo, FileInfoJSON } from './FileInfo';
 import { VideoInfo, VideoInfoJSON } from './VideoInfo';
+
+/** A person or a place a search result mentions, with the context it appears in. */
+export interface NamedEntity {
+  name?: string;
+  context?: string;
+}
 
 export interface SearchKeySubject {
   name?: string;
