@@ -1196,6 +1196,16 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
 
+## What's new in 2.7.0
+
+- **Where each value comes from:** extraction results carry `evidence`: for each field of `data` that has a value, the moments of the video it was taken from (`FieldEvidence`: `start` and `end` in seconds, and `in`: `'speech'`, `'picture'` with `include_scenes`, or `'post'` for the post's own text, without times). On `extractVideoData`, `vn.extractVideo`, `extractFileData`, the async job and the `extract_video.completed` webhook event.
+- **YouTube speech-to-text:** `transcribe` takes YouTube videos, and a YouTube video without captions is transcribed by `watch` and by extraction (`transcribe: true`).
+
+```ts
+const { data, evidence } = await vn.extractVideoData({ video_url, schema });
+for (const moment of evidence?.people ?? []) console.log(moment.in, moment.start, moment.end);
+```
+
 ## What's new in 2.6.0
 
 - **Extraction takes a standard JSON Schema**, the only schema format the API accepts now: `{ type: 'object', properties: { ... } }`, with lowercase types. A Zod schema converted with `zod-to-json-schema` can be passed as it is. The former format (`{ field: { type: 'String', ... } }`) is refused with `invalid_schema`. The `ExtractionSchema` and `ExtractionField` types describe the new format.

@@ -21,6 +21,7 @@ import {
   NamespaceJSON,
   NamespaceRef,
   NamespaceRefJSON,
+  ExtractionEvidence,
   ExtractionSchema,
   UsageBlock,
   UsageBlockJSON,
@@ -72,7 +73,7 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '2.6.0';
+export const SDK_VERSION = '2.7.0';
 
 /**
  * A LIVE room usually answers in 1-5 s, up to ~30 s when the API has to open a TikTok page, and two
@@ -294,6 +295,8 @@ export interface ExtractDataResult {
   data: Record<string, unknown>;
   /** When the request had no schema: the schema written from `what_to_extract`, to pass as `schema` next time. */
   schema?: ExtractionSchema;
+  /** For each field of `data` that has a value, the moments of the video it comes from. */
+  evidence?: ExtractionEvidence;
   video_info?: VideoInfo;
   file_info?: FileInfo;
   /** With `include_scenes: true`: number of frames that were analyzed to produce the scenes. */
@@ -746,6 +749,7 @@ export class VidNavigatorClient {
         video_info: task.video_info,
         ...pickSceneNotes(task),
         ...(task.schema ? { schema: task.schema } : {}),
+        ...(task.evidence ? { evidence: task.evidence } : {}),
         usage: task.usage,
       }),
     });
@@ -1381,6 +1385,7 @@ export class VidNavigatorClient {
       data: Record<string, unknown>;
       file_info?: FileInfoJSON;
       schema?: ExtractionSchema;
+      evidence?: ExtractionEvidence;
       usage?: UsageBlockJSON;
     } & SceneNotes;
     let body: ExtractFileBody;
@@ -1402,6 +1407,7 @@ export class VidNavigatorClient {
       file_info: body.file_info ? FileInfo.fromJSON(body.file_info) : undefined,
       ...pickSceneNotes(body),
       ...(body.schema ? { schema: body.schema } : {}),
+      ...(body.evidence ? { evidence: body.evidence } : {}),
       usage: body.usage ? UsageBlock.fromJSON(body.usage) : undefined,
     };
   }
