@@ -1,4 +1,4 @@
-import type { ExtractionSchema } from './Extraction';
+import type { ExtractionEvidence, ExtractionSchema } from './Extraction';
 import { UsageBlock } from './Usage';
 import { VideoInfo, VideoInfoJSON } from './VideoInfo';
 import { ScenesError, WatchTranscriptError } from './Watch';
@@ -94,6 +94,8 @@ export interface AsyncJobJSON {
   transcript_error?: WatchTranscriptError;
   /** `extract_video` jobs, once completed, when the request had no schema: the schema written from `what_to_extract`. */
   schema?: ExtractionSchema;
+  /** `extract_video` jobs, once completed: the moments each value of `result` comes from. */
+  evidence?: ExtractionEvidence;
   error?: AsyncJobError | null;
 }
 
@@ -126,6 +128,8 @@ export class AsyncJob<TResult> {
   transcript_error?: WatchTranscriptError;
   /** `extract_video` jobs, once completed, when the request had no schema: the schema written from `what_to_extract`, to pass as `schema` next time. */
   schema?: ExtractionSchema;
+  /** `extract_video` jobs, once completed: the moments each value of `result` comes from. */
+  evidence?: ExtractionEvidence;
   error: AsyncJobError | null;
   /** Per-call usage, populated only when polled with `include_usage: true` and `task_status === 'completed'`. */
   usage?: UsageBlock;
@@ -147,6 +151,7 @@ export class AsyncJob<TResult> {
     this.scenes_error = data.scenes_error;
     this.transcript_error = data.transcript_error;
     this.schema = data.schema;
+    this.evidence = data.evidence;
     this.error = data.error ?? null;
   }
 

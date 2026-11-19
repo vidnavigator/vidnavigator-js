@@ -142,7 +142,7 @@
     "/transcribe": {
       "post": {
         "summary": "Transcribe online videos",
-        "description": "Transcribe online videos (e.g., Instagram, TikTok, Snapchat) using speech-to-text models when a transcript is not available.\n\n**Instagram Carousel Posts:**\n- For posts with multiple videos, the URL can include `?img_index=N` to select a specific video\n- Example: `https://www.instagram.com/p/ABC123/?img_index=2` transcribes the second video\n- Without `img_index`, the first video is transcribed\n- Set `all_videos=true` to transcribe ALL videos in a carousel post\n- Snapchat highlights with several videos work the same way: `img_index=N` is the Nth video\n\n**Options:**\n- `transcript_text=true`: Returns transcript as a single text string instead of segments\n- `all_videos=true`: For carousel posts, returns all videos with their transcripts\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /transcribe/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
+        "description": "Transcribe online videos (YouTube, Instagram, TikTok, Snapchat and the other supported platforms) with speech-to-text, whether or not they have captions. For a YouTube video that has captions, `POST /transcript` returns them without speech-to-text.\n\n**Instagram Carousel Posts:**\n- For posts with multiple videos, the URL can include `?img_index=N` to select a specific video\n- Example: `https://www.instagram.com/p/ABC123/?img_index=2` transcribes the second video\n- Without `img_index`, the first video is transcribed\n- Set `all_videos=true` to transcribe ALL videos in a carousel post\n- Snapchat highlights with several videos work the same way: `img_index=N` is the Nth video\n\n**Options:**\n- `transcript_text=true`: Returns transcript as a single text string instead of segments\n- `all_videos=true`: For carousel posts, returns all videos with their transcripts\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /transcribe/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
         "operationId": "transcribeVideo",
         "tags": [
           "Transcripts"
@@ -266,7 +266,6 @@
                         "missing_parameter",
                         "invalid_parameter",
                         "no_videos_found",
-                        "unsupported_platform",
                         "video_too_long"
                       ]
                     },
@@ -1674,7 +1673,7 @@
     "/analyze/video": {
       "post": {
         "summary": "Analyze online video",
-        "description": "Analyze an online video and return comprehensive analysis results with intelligent caching.\n\n**Behavior:**\n- If no query provided: Returns summary analysis (cached if available)\n- If query provided: Returns both summary (from cache if available) and fresh question analysis\n\n**Caching:**\n- Summary analyses are cached and reused\n- Question/query analyses are not cached (always fresh)\n- Transcripts are cached for optimization\n\nSet `include_usage=true` to receive the `usage` block, with the request's token counts.\n\nOptional: set `transcript_text=true` to return the transcript as a single text string instead of an array of segments.\n\n**Scenes:** set `include_scenes=true` to also read what the video shows. The analysis is then made from the transcript and the scenes together, and `data` also holds `scenes` and `frames_analyzed`, as on `POST /watch`. When the picture cannot be read, the analysis is made from the transcript alone and `scenes_error` says why. A video without a transcript is analyzed from its scenes, and `transcript_error` says why the transcript is missing. The segments an answer refers to are then counted among the transcript segments and the scenes together, in chronological order, a scene before a segment that starts at the same second: use `timestamp` to locate the moment.\n\n**Long videos:** this endpoint is synchronous. With `include_scenes` on a video longer than ~10 minutes, use `POST /analyze/video/async`.",
+        "description": "Analyze an online video and return comprehensive analysis results with intelligent caching.\n\n**Behavior:**\n- If no query provided: Returns summary analysis (cached if available)\n- If query provided: Returns both summary (from cache if available) and fresh question analysis\n\n**Caching:**\n- Summary analyses are cached and reused\n- Question/query analyses are not cached (always fresh)\n- Transcripts are cached for optimization\n\nSet `include_usage=true` to receive the `usage` block, with the request's token counts.\n\nOptional: set `transcript_text=true` to return the transcript as a single text string instead of an array of segments.\n\n**Scenes:** set `include_scenes=true` to also read what the video shows. The analysis is then made from the transcript and the scenes together. With a `query`, the picture is also looked at a second time with the question in mind, and what it shows for it is read with the scenes; the `scenes` returned stay the same for every question. `data` also holds `scenes` and `frames_analyzed`, as on `POST /watch`. When the picture cannot be read, the analysis is made from the transcript alone and `scenes_error` says why. A video without a transcript is analyzed from its scenes, and `transcript_error` says why the transcript is missing. The segments an answer refers to are then counted among the transcript segments and the scenes together, in chronological order, a scene before a segment that starts at the same second: use `timestamp` to locate the moment.\n\n**Long videos:** this endpoint is synchronous. With `include_scenes` on a video longer than ~10 minutes, use `POST /analyze/video/async`.",
         "operationId": "analyzeVideo",
         "tags": [
           "Analysis"
@@ -1948,7 +1947,7 @@
     "/extract/video": {
       "post": {
         "summary": "Extract structured data from online video",
-        "description": "Extract structured data from an online video's transcript using a custom schema.\n\nProvide a `video_url`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both.\n\n**Auto-transcription:** For non-YouTube videos without an existing transcript (e.g. Instagram, TikTok, Facebook), the API automatically transcribes the video audio when `transcribe` is `true` (the default). YouTube videos rely on platform captions and cannot be auto-transcribed. Set `transcribe=false` to disable this behavior.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/video/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs\n\n**Scenes:** set `include_scenes=true` to also read what the video shows: the fields are then extracted from the transcript and the scenes together, and a value shown or written on screen counts as much as one that is said. The response then carries `frames_analyzed`. When the picture cannot be read, the fields are extracted from the transcript alone and `scenes_error` says why. A video without a transcript is extracted from its scenes, and `transcript_error` says why the transcript is missing.",
+        "description": "Extract structured data from an online video's transcript using a custom schema.\n\nProvide a `video_url`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both.\n\n**Auto-transcription:** For videos without an existing transcript (a YouTube video without captions, Instagram, TikTok, Facebook...), the API automatically transcribes the video audio when `transcribe` is `true` (the default). Set `transcribe=false` to disable this behavior.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Evidence:** beside `data`, `evidence` says where each value comes from: for every field that has a value, the moments of the video it was taken from (`start` and `end`, in seconds), and whether it was said (`speech`), shown or written on screen (`picture`, with `include_scenes`) or read in the post's own text (`post`: its title, description...). Use it to check a value, or to jump to the moment in a player.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/video/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs\n\n**Scenes:** set `include_scenes=true` to also read what the video shows: the fields are then extracted from the transcript and the scenes together, and a value shown or written on screen counts as much as one that is said. With scenes, the picture is also looked at a second time with your fields in mind, so that a name on a lower third, a price on a label or a logo in a corner is read even when the scene descriptions leave it out. The response then carries `frames_analyzed`. When the picture cannot be read, the fields are extracted from the transcript alone and `scenes_error` says why. A video without a transcript is extracted from its scenes, and `transcript_error` says why the transcript is missing.",
         "operationId": "extractVideoData",
         "tags": [
           "Extraction"
@@ -1985,7 +1984,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2029,7 +2028,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2073,7 +2072,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2117,7 +2116,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2158,7 +2157,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -5015,7 +5014,7 @@
     "/watch": {
       "post": {
         "summary": "Watch a video",
-        "description": "Read what a video **shows**, along with what it says. The response holds the video's transcript and a list of `scenes`: for each one, when it starts and ends, a description of the picture, and the text readable on screen.\n\nWorks with every platform `POST /transcript` and `POST /transcribe` support. The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise.\n\n**Options:**\n- `detail`: how closely the picture is followed (`low`, `auto`, `high`). The number of frames depends on the video at every level: few on a fixed shot, many on a fast-cut clip\n- `include_transcript=false`: the scenes only\n- `transcript_text=true`: the transcript as a single text string instead of segments\n\nA video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned.\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous. For media longer than ~10 minutes use `POST /watch/async` instead, which returns a `task_id` and can call your webhook when it finishes. See https://docs.vidnavigator.com/guides/async-jobs\n\nVideos longer than 2 hours are not accepted (`video_too_long`), except on YouTube.",
+        "description": "Read what a video **shows**, along with what it says. The response holds the video's transcript and a list of `scenes`: for each one, when it starts and ends, a description of the picture, and the text readable on screen.\n\nWorks with every platform `POST /transcript` and `POST /transcribe` support. The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise. On YouTube the video is watched with its sound, so a person or a brand that is introduced on screen or by voice is named in the scenes.\n\n**Options:**\n- `detail`: how closely the picture is followed (`low`, `auto`, `high`). The number of frames depends on the video at every level: few on a fixed shot, many on a fast-cut clip\n- `include_transcript=false`: the scenes only\n- `transcript_text=true`: the transcript as a single text string instead of segments\n\nA video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned.\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous. For media longer than ~10 minutes use `POST /watch/async` instead, which returns a `task_id` and can call your webhook when it finishes. See https://docs.vidnavigator.com/guides/async-jobs\n\nVideos longer than 2 hours are not accepted (`video_too_long`), except on YouTube.",
         "operationId": "watchVideo",
         "tags": [
           "Watch"
@@ -5044,7 +5043,7 @@
                       "high"
                     ],
                     "default": "auto",
-                    "description": "How closely the picture is followed. At every level a frame is taken where the picture changes, and at least one every 10 seconds; the level sets how small a change counts. `low` keeps the larger changes, `auto` is the balanced default, `high` follows faster cuts and looks at a still picture twice as often. A higher level analyzes more frames on a video whose picture changes often. On YouTube, a video longer than about 15 minutes is read at one frame every 10 seconds whatever the level, and its frames are smaller than on the other platforms: small print may not be readable."
+                    "description": "How closely the picture is followed. At every level a frame is taken where the picture changes, and at least one every 10 seconds; the level sets how small a change counts. `low` keeps the larger changes, `auto` is the balanced default, `high` follows faster cuts and looks at a still picture twice as often. A higher level analyzes more frames on a video whose picture changes often. On YouTube the level sets the length of a scene: about 20 seconds (`low`), 10 (`auto`) or 5 (`high`), shorter where the picture changes faster."
                   },
                   "include_transcript": {
                     "type": "boolean",
@@ -5258,7 +5257,7 @@
                       "high"
                     ],
                     "default": "auto",
-                    "description": "How closely the picture is followed. At every level a frame is taken where the picture changes, and at least one every 10 seconds; the level sets how small a change counts. `low` keeps the larger changes, `auto` is the balanced default, `high` follows faster cuts and looks at a still picture twice as often. A higher level analyzes more frames on a video whose picture changes often. On YouTube, a video longer than about 15 minutes is read at one frame every 10 seconds whatever the level, and its frames are smaller than on the other platforms: small print may not be readable."
+                    "description": "How closely the picture is followed. At every level a frame is taken where the picture changes, and at least one every 10 seconds; the level sets how small a change counts. `low` keeps the larger changes, `auto` is the balanced default, `high` follows faster cuts and looks at a still picture twice as often. A higher level analyzes more frames on a video whose picture changes often. On YouTube the level sets the length of a scene: about 20 seconds (`low`), 10 (`auto`) or 5 (`high`), shorter where the picture changes faster."
                   },
                   "include_transcript": {
                     "type": "boolean",
@@ -6478,6 +6477,13 @@
               }
             ],
             "description": "Present only when the request had no `schema`: the schema written from `what_to_extract`, as a JSON Schema. Pass it as `schema` in later requests to get the same fields."
+          },
+          "evidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionEvidence"
+              }
+            ]
           }
         }
       },
@@ -7638,6 +7644,14 @@
               }
             ],
             "description": "Present only when `task_status=completed` and the request had no `schema`. The same `schema` (a JSON Schema) a successful synchronous `POST /extract/video` returns beside `data`."
+          },
+          "evidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionEvidence"
+              }
+            ],
+            "description": "Present when `task_status=completed`: where each value of `result` comes from, as `evidence` on `POST /extract/video`."
           }
         }
       },
@@ -8321,6 +8335,61 @@
             "$ref": "#/components/schemas/AsyncJobError"
           }
         }
+      },
+      "FieldEvidence": {
+        "type": "object",
+        "description": "A moment a value was taken from.",
+        "properties": {
+          "start": {
+            "type": "number",
+            "description": "Second of the video the moment starts at. Absent for `post`."
+          },
+          "end": {
+            "type": "number",
+            "description": "Second of the video the moment ends at. Absent for `post`."
+          },
+          "in": {
+            "type": "string",
+            "enum": [
+              "speech",
+              "picture",
+              "post"
+            ],
+            "description": "`speech`: said in the video. `picture`: shown or written on screen. `post`: the post's own text (title, channel, description)."
+          }
+        },
+        "required": [
+          "in"
+        ]
+      },
+      "ExtractionEvidence": {
+        "type": "object",
+        "description": "For each top-level field of `data` that has a value, the moments it comes from, at most 5, the most telling first. A field left empty is absent.",
+        "additionalProperties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/FieldEvidence"
+          }
+        },
+        "example": {
+          "people": [
+            {
+              "start": 0.0,
+              "end": 14.0,
+              "in": "picture"
+            },
+            {
+              "in": "post"
+            }
+          ],
+          "summary": [
+            {
+              "start": 12.5,
+              "end": 31.0,
+              "in": "speech"
+            }
+          ]
+        }
       }
     },
     "responses": {
@@ -8379,7 +8448,7 @@
         }
       },
       "BadRequest": {
-        "description": "Bad request - invalid parameters. On /transcribe the `error` field may be `missing_parameter`, `unsupported_platform`, `unsupported_url`, `invalid_url`, `request_body_required`, `video_too_long`, or `no_videos_found` (the post carries no video).",
+        "description": "Bad request - invalid parameters. On /transcribe the `error` field may be `missing_parameter`, `unsupported_url`, `invalid_url`, `request_body_required`, `video_too_long`, or `no_videos_found` (the post carries no video).",
         "content": {
           "application/json": {
             "schema": {

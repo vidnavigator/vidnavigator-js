@@ -28,7 +28,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 
 | Platform | Transcript | Transcribe (speech-to-text) | Watch (scenes) | Carousel |
 |----------|:----------:|:---------------------------:|:--------------:|:--------:|
-| YouTube | Yes | - | Yes | - |
+| YouTube | Yes | Yes | Yes | - |
 | Instagram Reels | - | Yes | Yes | Yes |
 | Instagram Posts | - | Yes | Yes | Yes (`all_videos`) |
 | TikTok | Yes | Yes | Yes | - |
@@ -175,7 +175,7 @@ if (Array.isArray(watched.transcript)) {
 console.log(watched.frames_analyzed); // number of frames that were analyzed
 ```
 
-The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise. A video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned. The same goes for a YouTube video without captions.
+The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise. A YouTube video without captions is transcribed from its audio, like the others. A video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned.
 
 ```ts
 const watched = await vn.watch(url);
@@ -1195,6 +1195,16 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
+
+## What's new in 2.7.0
+
+- **Where each value comes from:** extraction results carry `evidence`: for each field of `data` that has a value, the moments of the video it was taken from (`FieldEvidence`: `start` and `end` in seconds, and `in`: `'speech'`, `'picture'` with `include_scenes`, or `'post'` for the post's own text, without times). On `extractVideoData`, `vn.extractVideo`, `extractFileData`, the async job and the `extract_video.completed` webhook event.
+- **YouTube speech-to-text:** `transcribe` takes YouTube videos, and a YouTube video without captions is transcribed by `watch` and by extraction (`transcribe: true`).
+
+```ts
+const { data, evidence } = await vn.extractVideoData({ video_url, schema });
+for (const moment of evidence?.people ?? []) console.log(moment.in, moment.start, moment.end);
+```
 
 ## What's new in 2.6.0
 

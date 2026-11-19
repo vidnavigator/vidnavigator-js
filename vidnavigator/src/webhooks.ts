@@ -54,6 +54,8 @@ export interface WebhookEvent {
     video_info?: Record<string, unknown>;
     /** `extract_video.completed` only, when the request had no schema: the schema written from `what_to_extract`. */
     schema?: Record<string, unknown>;
+    /** `extract_video.completed` only: the moments each value of `result` comes from. */
+    evidence?: Record<string, Array<{ start?: number; end?: number; in: 'speech' | 'picture' | 'post' }>>;
     error?: AsyncJobError | null;
   };
 }

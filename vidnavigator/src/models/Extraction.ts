@@ -37,6 +37,20 @@ export interface ExtractionTokenUsageJSON {
   total_tokens?: number;
 }
 
+/**
+ * A moment an extracted value was taken from. `in` is `'speech'` (said in the video), `'picture'`
+ * (shown or written on screen) or `'post'` (the post's own text: title, channel, description;
+ * no `start`/`end` then).
+ */
+export interface FieldEvidence {
+  start?: number;
+  end?: number;
+  in: 'speech' | 'picture' | 'post';
+}
+
+/** For each field of `data` that has a value, the moments of the video it comes from (at most 5). */
+export type ExtractionEvidence = Record<string, FieldEvidence[]>;
+
 export interface ExtractionResponseJSON {
   status: 'success';
   data: Record<string, unknown>;
@@ -48,6 +62,8 @@ export interface ExtractionResponseJSON {
   transcript_error?: WatchTranscriptError;
   /** When the request had no schema: the schema written from `what_to_extract`, to pass as `schema` next time. */
   schema?: ExtractionSchema;
+  /** Where each value of `data` comes from. */
+  evidence?: ExtractionEvidence;
   usage?: ExtractionTokenUsageJSON;
 }
 
