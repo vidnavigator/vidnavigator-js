@@ -3546,7 +3546,7 @@
                         },
                         "scenes_error": {
                           "type": "object",
-                          "description": "Present only when `include_scenes=true` and a video's picture could not be read. The request succeeds all the same: that video is summarized from its transcript alone.",
+                          "description": "Present only when `include_scenes=true` and a video's picture could not be read (the first such error when both videos fail). The request succeeds all the same: that video is then used through its transcript alone, when it has one.",
                           "properties": {
                             "error": {
                               "type": "string",

@@ -83,7 +83,7 @@ export class TweetStatement {
   frames_analyzed?: number;
   /**
    * With `include_scenes: true`, when a video's picture could not be read (e.g. `frames_not_available`).
-   * The analysis still succeeds: that video is summarized from its transcript alone.
+   * The analysis still succeeds: that video is used through its transcript alone, when it has one.
    */
   scenes_error?: ScenesError;
   /** Per-call usage, populated when requested with include_usage. */
