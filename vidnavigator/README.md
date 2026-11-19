@@ -28,7 +28,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 
 | Platform | Transcript | Transcribe (speech-to-text) | Watch (scenes) | Carousel |
 |----------|:----------:|:---------------------------:|:--------------:|:--------:|
-| YouTube | Yes | - | Yes | - |
+| YouTube | Yes | Yes | Yes | - |
 | Instagram Reels | - | Yes | Yes | Yes |
 | Instagram Posts | - | Yes | Yes | Yes (`all_videos`) |
 | TikTok | Yes | Yes | Yes | - |
@@ -175,7 +175,7 @@ if (Array.isArray(watched.transcript)) {
 console.log(watched.frames_analyzed); // number of frames that were analyzed
 ```
 
-The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise. A video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned. The same goes for a YouTube video without captions.
+The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise. A YouTube video without captions is transcribed from its audio, like the others. A video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned.
 
 ```ts
 const watched = await vn.watch(url);

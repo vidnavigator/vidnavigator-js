@@ -142,7 +142,7 @@
     "/transcribe": {
       "post": {
         "summary": "Transcribe online videos",
-        "description": "Transcribe online videos (e.g., Instagram, TikTok, Snapchat) using speech-to-text models when a transcript is not available.\n\n**Instagram Carousel Posts:**\n- For posts with multiple videos, the URL can include `?img_index=N` to select a specific video\n- Example: `https://www.instagram.com/p/ABC123/?img_index=2` transcribes the second video\n- Without `img_index`, the first video is transcribed\n- Set `all_videos=true` to transcribe ALL videos in a carousel post\n- Snapchat highlights with several videos work the same way: `img_index=N` is the Nth video\n\n**Options:**\n- `transcript_text=true`: Returns transcript as a single text string instead of segments\n- `all_videos=true`: For carousel posts, returns all videos with their transcripts\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /transcribe/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
+        "description": "Transcribe online videos (YouTube, Instagram, TikTok, Snapchat and the other supported platforms) with speech-to-text, whether or not they have captions. For a YouTube video that has captions, `POST /transcript` returns them without speech-to-text.\n\n**Instagram Carousel Posts:**\n- For posts with multiple videos, the URL can include `?img_index=N` to select a specific video\n- Example: `https://www.instagram.com/p/ABC123/?img_index=2` transcribes the second video\n- Without `img_index`, the first video is transcribed\n- Set `all_videos=true` to transcribe ALL videos in a carousel post\n- Snapchat highlights with several videos work the same way: `img_index=N` is the Nth video\n\n**Options:**\n- `transcript_text=true`: Returns transcript as a single text string instead of segments\n- `all_videos=true`: For carousel posts, returns all videos with their transcripts\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /transcribe/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs",
         "operationId": "transcribeVideo",
         "tags": [
           "Transcripts"
@@ -266,7 +266,6 @@
                         "missing_parameter",
                         "invalid_parameter",
                         "no_videos_found",
-                        "unsupported_platform",
                         "video_too_long"
                       ]
                     },
@@ -1948,7 +1947,7 @@
     "/extract/video": {
       "post": {
         "summary": "Extract structured data from online video",
-        "description": "Extract structured data from an online video's transcript using a custom schema.\n\nProvide a `video_url`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both.\n\n**Auto-transcription:** For non-YouTube videos without an existing transcript (e.g. Instagram, TikTok, Facebook), the API automatically transcribes the video audio when `transcribe` is `true` (the default). YouTube videos rely on platform captions and cannot be auto-transcribed. Set `transcribe=false` to disable this behavior.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/video/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs\n\n**Scenes:** set `include_scenes=true` to also read what the video shows: the fields are then extracted from the transcript and the scenes together, and a value shown or written on screen counts as much as one that is said. The response then carries `frames_analyzed`. When the picture cannot be read, the fields are extracted from the transcript alone and `scenes_error` says why. A video without a transcript is extracted from its scenes, and `transcript_error` says why the transcript is missing.",
+        "description": "Extract structured data from an online video's transcript using a custom schema.\n\nProvide a `video_url`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both.\n\n**Auto-transcription:** For videos without an existing transcript (a YouTube video without captions, Instagram, TikTok, Facebook...), the API automatically transcribes the video audio when `transcribe` is `true` (the default). Set `transcribe=false` to disable this behavior.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/video/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs\n\n**Scenes:** set `include_scenes=true` to also read what the video shows: the fields are then extracted from the transcript and the scenes together, and a value shown or written on screen counts as much as one that is said. The response then carries `frames_analyzed`. When the picture cannot be read, the fields are extracted from the transcript alone and `scenes_error` says why. A video without a transcript is extracted from its scenes, and `transcript_error` says why the transcript is missing.",
         "operationId": "extractVideoData",
         "tags": [
           "Extraction"
@@ -1985,7 +1984,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2029,7 +2028,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2073,7 +2072,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2117,7 +2116,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -2158,7 +2157,7 @@
                   "transcribe": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to non-YouTube videos only (Instagram, TikTok, Facebook, X, etc.)."
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
                   },
                   "include_scenes": {
                     "type": "boolean",
@@ -8379,7 +8378,7 @@
         }
       },
       "BadRequest": {
-        "description": "Bad request - invalid parameters. On /transcribe the `error` field may be `missing_parameter`, `unsupported_platform`, `unsupported_url`, `invalid_url`, `request_body_required`, `video_too_long`, or `no_videos_found` (the post carries no video).",
+        "description": "Bad request - invalid parameters. On /transcribe the `error` field may be `missing_parameter`, `unsupported_url`, `invalid_url`, `request_body_required`, `video_too_long`, or `no_videos_found` (the post carries no video).",
         "content": {
           "application/json": {
             "schema": {
