@@ -293,18 +293,6 @@ async function run() {
     console.log('--- watch skipped (TEST_WATCH_URL not set) ---');
   }
 
-  // ── Analyze video ──
-  console.log('--- analyzeVideo ---');
-  try {
-    const { video_info, transcript, transcript_analysis } = await client.analyzeVideo({
-      video_url: TEST_YOUTUBE_URL,
-      query: 'What is this video about?',
-    });
-    assert(video_info instanceof sdk.VideoInfo, 'analyzeVideo VideoInfo');
-    assert(transcript_analysis instanceof sdk.AnalysisResult, 'analyzeVideo AnalysisResult');
-    assert(typeof transcript_analysis.summary === 'string', 'analyzeVideo summary');
-  } catch (e) { fail('analyzeVideo', e.message); }
-
   // ── Namespaces ──
   console.log('--- getNamespaces ---');
   try {

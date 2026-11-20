@@ -1,6 +1,6 @@
 # VidNavigator SDK for JavaScript
 
-The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](https://vidnavigator.com). Transcribe, analyze, search, and extract structured data from video and audio — YouTube, Instagram, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, Snapchat, and your own uploaded files.
+The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](https://vidnavigator.com). Transcribe, watch, search, and extract structured data from video and audio — YouTube, Instagram, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, Snapchat, and your own uploaded files.
 
 [![npm version](https://img.shields.io/npm/v/vidnavigator.svg)](https://www.npmjs.com/package/vidnavigator)
 [![License](https://img.shields.io/npm/l/vidnavigator.svg)](https://github.com/vidnavigator/vidnavigator-js/blob/main/LICENSE)
@@ -12,14 +12,13 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 - **Multi-platform transcription** — YouTube, Instagram Reels & carousel posts, TikTok, X/Twitter, Vimeo, Facebook, Dailymotion, Loom, Snapchat, and more.
 - **Any video length** — transcription, extraction, and tweet analysis run as background jobs, so there is no duration limit. Get the result with one `await`, or submit many jobs and collect them as they finish.
 - **Watch a video** — what it shows, scene by scene, with the text readable on screen, next to its transcript, in one result.
-- **Scenes in analysis and extraction** — with `include_scenes`, an analysis or an extraction reads what the video shows as well as what it says, for online videos and for uploaded files.
+- **Scenes in extraction and tweet analysis** — with `include_scenes`, an extraction reads what the video shows as well as what it says, for online videos and for uploaded files, and a tweet analysis reads what the post's videos show.
 - **Async TikTok profile scraping, keyword search and LIVE search** — collect public TikTok videos, or LIVE rooms with their stream URLs, in the background, then read results via cursor pagination or a signed `download_url`, optionally notified by webhook.
 - **TikTok LIVE room** — check one room or streamer right away, with its latest comments, pinned comment and top viewers.
 - **Instagram carousel support** — select a specific video by index, or transcribe every video in a carousel post with one call.
-- **AI-powered analysis** — get summaries, people mentioned, places, key subjects, and direct answers to questions about any video or audio.
-- **Structured data extraction** — define a JSON schema and receive typed, structured fields extracted from any transcript (powered by LLMs).
+- **Structured data extraction** — say in plain words what to extract (`what_to_extract`), or define a JSON Schema, and receive typed fields from what a video or a file says and shows, with the moments each value comes from (`evidence`).
 - **AI search and reranking** — YouTube search and file search with AI ranking/reranking and rich result metadata.
-- **File management with namespaces** — upload audio/video files, organize them into namespaces, and scope searches and analysis by folder.
+- **File management with namespaces** — upload audio/video files, organize them into namespaces, and scope searches by folder.
 - **Full TypeScript support** — rich types, autocompletion, and compile-time safety out of the box.
 - **Comprehensive error handling** — dedicated error classes for every API error code (`AuthenticationError`, `RateLimitExceededError`, `GeoRestrictedError`, and more).
 - **Lightweight** — only two runtime dependencies: `axios` and `form-data`.
@@ -40,7 +39,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 | Snapchat | Yes, when Snapchat has a transcript | Yes | Yes | Yes (highlights: `img_index`, `all_videos`) |
 | Uploaded files | Yes | Yes | Yes (`include_scenes` at upload, or `analyzeFileScenes()`) | - |
 
-> **Transcript** = fast caption/subtitle extraction. **Transcribe** = speech-to-text via AI models (works when captions are unavailable). **Watch** = what the video shows, scene by scene, next to its transcript, via `vn.watch()`. The same scenes can feed an analysis or an extraction with `include_scenes: true`.
+> **Transcript** = fast caption/subtitle extraction. **Transcribe** = speech-to-text via AI models (works when captions are unavailable). **Watch** = what the video shows, scene by scene, next to its transcript, via `vn.watch()`. The same scenes can feed an extraction with `include_scenes: true`.
 
 ## Installation
 
@@ -91,6 +90,10 @@ const vn = new VidNavigatorClient({
 ```
 
 `axiosConfig.timeout` limits each HTTP request. How long the SDK waits for a background job to finish is set per call with `timeoutMs` (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)).
+
+### Upgrading to 3.0
+
+3.0 removes the analysis methods, together with the API endpoints they called. Ask the same questions with an extraction: say in plain words what you want (`what_to_extract`), give a JSON Schema, or both. [What's new in 3.0.0](#whats-new-in-300) shows how each call moves.
 
 ### Upgrading from 1.x
 
@@ -215,7 +218,7 @@ Errors worth handling: `NotFoundError` with `error_code` `'frames_not_available'
 
 ### 3. Background jobs: one call, or many at once
 
-Transcription, watch, structured extraction, tweet analysis, and TikTok scraping run as background jobs on VidNavigator. The SDK always uses the async API endpoints, so **video length is never a problem**. You never deal with the request-response limits of long transcriptions. Video analysis has both: `analyzeVideo()` is a direct call, and `vn.analyze` runs the same analysis as a background job, for long videos with `include_scenes`.
+Transcription, watch, structured extraction, tweet analysis, and TikTok scraping run as background jobs on VidNavigator. The SDK always uses the async API endpoints, so **video length is never a problem**. You never deal with the request-response limits of long transcriptions.
 
 Each of these operations comes in two shapes:
 
@@ -223,7 +226,6 @@ Each of these operations comes in two shapes:
 |---|---|---|
 | Transcription | `await vn.transcribe(url)` | `await vn.transcribe.submit(url)` |
 | Watch (scenes and transcript) | `await vn.watch(url)` | `await vn.watch.submit(url)` |
-| Video analysis | `await vn.analyze(url)` | `await vn.analyze.submit(url)` |
 | Structured extraction | `await vn.extractVideo({ video_url, schema })` | `await vn.extractVideo.submit({ ... })` |
 | Tweet claim analysis | `await vn.tweetStatement(tweetId)` | `await vn.tweetStatement.submit(tweetId)` |
 | TikTok profile scrape | `await vn.tiktokProfile(profileUrl)` | `await vn.tiktokProfile.submit(profileUrl)` |
@@ -376,7 +378,7 @@ function pending(): string[] {
 
 ### 4. Webhooks
 
-You can also have VidNavigator call your server when a job finishes. Pass `webhook_url` to any of the operations above (transcription, watch, video analysis, extraction, tweet analysis, TikTok profile and search), or set an account-wide default in **Studio → API**. A per-job `webhook_url` overrides the default, and `webhook_url: ''` turns the default off for that one job. The URL must be a public `https` endpoint; private and loopback hosts are rejected with a `BadRequestError`.
+You can also have VidNavigator call your server when a job finishes. Pass `webhook_url` to any of the operations above (transcription, watch, extraction, tweet analysis, TikTok profile and search), or set an account-wide default in **Studio → API**. A per-job `webhook_url` overrides the default, and `webhook_url: ''` turns the default off for that one job. The URL must be a public `https` endpoint; private and loopback hosts are rejected with a `BadRequestError`.
 
 Webhooks are optional. Waiting with `result()` or the one-liners works exactly the same whether or not a webhook is set, and it remains the source of truth.
 
@@ -425,7 +427,7 @@ app.post('/hooks/vidnavigator', express.raw({ type: 'application/json' }), async
 });
 ```
 
-- `event.data.result` holds the raw result for transcription, watch, video analysis, extraction, and tweet events, unless it was over 256 KB (`result_truncated: true`). For TikTok events it is only a summary, `{ stats, download_url_available }`, since a scrape can hold thousands of videos. In every case, `resume(task_id).result()` gets the full parsed result.
+- `event.data.result` holds the raw result for transcription, watch, extraction, and tweet events, unless it was over 256 KB (`result_truncated: true`). For TikTok events it is only a summary, `{ stats, download_url_available }`, since a scrape can hold thousands of videos. In every case, `resume(task_id).result()` gets the full parsed result.
 - `verifyWebhookSignature(rawBody, signatureHeader, secret)` returns `true` or `false` instead of throwing.
 - Deliveries older than 5 minutes are rejected by default. Change this with `{ toleranceSeconds }`; `0` turns the check off.
 - Failed deliveries (5xx, 429, network errors) are retried 5 times over about 13 minutes. Other 4xx responses are not retried.
@@ -615,9 +617,9 @@ if ('carousel_info' in all) {
 }
 ```
 
-### 8. Upload and analyze a local file
+### 8. Upload a local file
 
-Upload audio or video files for transcription, analysis, and search. Supported formats: mp4, webm, mov, avi, wmv, flv, mkv, m4a, mp3, mpeg, mpga, wav.
+Upload audio or video files for transcription, extraction, and search. Supported formats: mp4, webm, mov, avi, wmv, flv, mkv, m4a, mp3, mpeg, mpga, wav.
 
 ```ts
 const upload = await vn.uploadFile({
@@ -630,23 +632,18 @@ console.log(upload.file_id);       // "64a1b2c3d4e5f6789..."
 console.log(upload.file_name);     // "meeting-recording.mp4"
 console.log(upload.file_info?.namespace_ids); // ["ns_meetings"]
 
-// Analyze with a question
-const { transcript_analysis } = await vn.analyzeFile({
+// Ask about it in plain words (see Extract structured data below)
+const { data } = await vn.extractFileData({
   file_id: upload.file_id,
-  query: 'What action items were discussed?',
+  what_to_extract: 'A short summary, the people who speak with their role, and every action item',
 });
 
-console.log(transcript_analysis.summary);
-// "The meeting covered Q3 targets, hiring plans, and a product launch timeline..."
-
-console.log(transcript_analysis.people);
-// [{ name: "Sarah", context: "VP of Engineering, presented hiring plan" }, ...]
-
-console.log(transcript_analysis.key_subjects);
-// [{ name: "Q3 targets", description: "Revenue goals for...", importance: "high" }, ...]
-
-console.log(transcript_analysis.query_answer?.answer);
-// "Three action items were discussed: 1) Finalize the hiring..."
+console.log(data);
+// {
+//   summary: "The meeting covered Q3 targets, hiring plans, and a product launch timeline...",
+//   people: [{ name: "Sarah", role: "VP of Engineering" }, ...],
+//   action_items: ["Finalize the hiring plan", ...]
+// }
 ```
 
 Without `wait_for_completion`, the upload returns right away (`status: 'accepted'`) while the file is processed. Check on it with `getFile()`, then work with it:
@@ -697,12 +694,12 @@ const { scenes_status } = await vn.analyzeFileScenes(file_id);
 // 'processing': started, or already running. 'completed': the scenes are already there.
 ```
 
-`analyzeFile()` and `extractFileData()` then read the scenes with `include_scenes: true`. The analysis is made from the transcript of the file and its scenes together, and the result also has `scenes` and `frames_analyzed`:
+`extractFileData()` then reads the scenes with `include_scenes: true`. The fields are extracted from the transcript of the file and its scenes together, and the result also has `frames_analyzed`:
 
 ```ts
-const { transcript_analysis, scenes, frames_analyzed } = await vn.analyzeFile({
+const { data, frames_analyzed } = await vn.extractFileData({
   file_id,
-  query: 'What are the ingredients and their quantities?',
+  what_to_extract: 'Every ingredient with its quantity',
   include_scenes: true,
 });
 ```
@@ -713,7 +710,7 @@ A file that has no scenes to read is refused with `ScenesNotAvailableError` (HTT
 import { ScenesNotAvailableError } from 'vidnavigator';
 
 try {
-  await vn.analyzeFile({ file_id, include_scenes: true });
+  await vn.extractFileData({ file_id, what_to_extract: 'Every ingredient with its quantity', include_scenes: true });
 } catch (err) {
   if (err instanceof ScenesNotAvailableError && err.scenes_status === 'none') {
     await vn.analyzeFileScenes(file_id); // then wait for scenes_status 'completed' and call again
@@ -723,56 +720,11 @@ try {
 }
 ```
 
-An audio file has no picture. `analyzeFileScenes()` throws `BadRequestError` with `error_code` `'frames_not_available'` for it, and an audio file uploaded with `include_scenes` gets `scenes_status` `'failed'` with the same code in `file_info.scenes_error`. A file without speech is analyzed from its scenes alone, and the result has a `transcript_error`.
-
-### Analyze an online video
-
-```ts
-const { video_info, transcript_analysis } = await vn.analyzeVideo({
-  video_url: 'https://www.youtube.com/watch?v=4czjS9h4Fpg',
-  query: 'Where did the rover land?',
-  include_usage: true,
-});
-
-console.log(transcript_analysis.summary);
-console.log(transcript_analysis.query_answer?.answer);             // direct answer to your question
-console.log(transcript_analysis.query_answer?.relevant_segments);  // supporting transcript excerpts
-```
-
-Pass `include_scenes: true` to make the analysis from what the video **shows** as well as what it says. The result then also has `scenes` and `frames_analyzed`, as [`vn.watch()`](#2b-watch-a-video-scenes-next-to-the-transcript) returns them:
-
-```ts
-const { transcript_analysis, scenes, frames_analyzed } = await vn.analyzeVideo({
-  video_url: 'https://www.tiktok.com/@user/video/1234567890',
-  query: 'What are the ingredients and their quantities?',
-  include_scenes: true,
-});
-
-console.log(transcript_analysis.query_answer?.answer); // also read from the text written on screen
-console.log(`${scenes?.length} scenes from ${frames_analyzed} frames`);
-```
-
-- When the picture cannot be read, the analysis is made from the transcript alone: `scenes` is empty and `scenes_error` says why. A video without a transcript is analyzed from its scenes, and `transcript_error` says why the transcript is missing.
-- With scenes, the segments an answer refers to (`best_segment_index`, `relevant_segments`) are counted among the transcript segments and the scenes together, in chronological order. Use `transcript_analysis.timestamp` to locate the moment.
-- With `include_usage: true`, the frames are the `frame_analysis` charge of the `usage` block: 1 credit per 2,000 frames analyzed, with at least 667 frames per hour of video; for an uploaded file the frames are charged once, when its scenes are analyzed.
-
-`analyzeVideo()` waits on a single HTTP request. With `include_scenes` on a video longer than about 10 minutes, use `vn.analyze()`: it runs the same analysis as a [background job](#3-background-jobs-one-call-or-many-at-once) and returns the same result.
-
-```ts
-const result = await vn.analyze(
-  { video_url: 'https://www.youtube.com/watch?v=4czjS9h4Fpg', query: 'Where did the rover land?', include_scenes: true },
-  { include_usage: true }
-);
-console.log(result.transcript_analysis.query_answer?.answer, result.scenes?.length);
-
-// Or start it and come back later, as for any background job
-const job = await vn.analyze.submit({ video_url: url, include_scenes: true });
-const later = await vn.analyze.resume(job.task_id).result();
-```
+An audio file has no picture. `analyzeFileScenes()` throws `BadRequestError` with `error_code` `'frames_not_available'` for it, and an audio file uploaded with `include_scenes` gets `scenes_status` `'failed'` with the same code in `file_info.scenes_error`. A file without speech is extracted from its scenes alone, and the result has a `transcript_error`.
 
 ### 9. Extract structured data
 
-Define a schema, as a standard JSON Schema, and get back clean, structured data extracted from any video or file transcript. Or skip the schema and say what you want in plain words with `what_to_extract`. Per-call usage tracking included (see [Per-call usage](#per-call-usage)).
+Define a schema, as a standard JSON Schema, and get back clean, structured data extracted from what any video or file says and, with `include_scenes`, what it shows. Or skip the schema and say what you want in plain words with `what_to_extract`: a summary, the people and places mentioned, the answer to a question, anything you would have asked of an analysis. Per-call usage tracking included (see [Per-call usage](#per-call-usage)).
 
 ```ts
 const { data, usage } = await vn.extractVideoData({
@@ -847,7 +799,7 @@ const { data, frames_analyzed } = await vn.extractVideoData({
 console.log(data, frames_analyzed); // quantities that are only written on screen are found too
 ```
 
-When the picture cannot be read, the fields are extracted from the transcript alone and the result has a `scenes_error`; a video without a transcript is extracted from its scenes, with a `transcript_error`. The same option works on an uploaded file, `vn.extractFileData({ file_id, schema, include_scenes: true })`, once the file has its scenes (see [Scenes of an uploaded file](#8b-scenes-of-an-uploaded-file)).
+When the picture cannot be read, the fields are extracted from the transcript alone and the result has a `scenes_error`; a video without a transcript is extracted from its scenes, with a `transcript_error`. The same option works on an uploaded file, `vn.extractFileData({ file_id, schema, include_scenes: true })`, once the file has its scenes (see [Scenes of an uploaded file](#8b-scenes-of-an-uploaded-file)). With `include_usage: true`, the frames are the `frame_analysis` charge of the `usage` block: 1 credit per 2,000 frames analyzed, with at least 667 frames per hour of video; for an uploaded file the frames are charged once, when its scenes are analyzed.
 
 **Schema format:** a standard JSON Schema whose root is an object, `{ type: 'object', properties: { ... } }`. Property types: `string`, `number`, `integer`, `boolean`, `array` (with `items`, the schema of one element) and `object` (with its own `properties`); `enum` restricts a property to a list of values. Give each property a `description`: it tells what to put in it. At most 10 fields per level and 3 levels of nesting. A Zod schema converted with `zod-to-json-schema` works as it is. `required` and `additionalProperties` change nothing: a field the video does not give comes back as `null`. An invalid schema is rejected with a `BadRequestError` before anything runs.
 
@@ -864,6 +816,20 @@ console.log(schema); // { type: "object", properties: { mood: {...}, topics: {..
 ```
 
 > `extractVideoData()` runs as a background job, so videos of any length work. For many extractions at once, use `vn.extractVideo.submit()` (see [Background jobs](#3-background-jobs-one-call-or-many-at-once)). The result has `data` (the extracted fields), `video_info` (the video's metadata), `frames_analyzed` with `include_scenes`, `schema` when it was written from `what_to_extract`, and `usage` when requested.
+
+### 9b. Claims in an X post
+
+`vn.tweetStatement()` reads an X/Twitter post, the post it quotes and their media, and returns its core claim, topics, entities and classification (`claim_type`, `intent`, `tone`, `emotion`, `authority`). Pass `include_scenes: true` to also read what the post's video and the quoted post's video show, with the text readable on screen:
+
+```ts
+const statement = await vn.tweetStatement({ tweet_id: '1585841080431321088', include_scenes: true });
+
+console.log(statement.final_statement);
+console.log(statement.frames_analyzed); // frames read to follow the videos' picture
+if (statement.scenes_error) console.log(statement.scenes_error.error); // a video's picture could not be read
+```
+
+When a video's picture cannot be read, the analysis still succeeds: that video is summarized from its transcript alone, and `scenes_error` says why.
 
 ### 10. Semantic search
 
@@ -911,7 +877,7 @@ for (const r of fileResults.results) {
 }
 ```
 
-> **Deprecated:** `searchVideos()` still works but is deprecated — it now forwards to `searchYouTube()` (the `/search/video` endpoint moved to `/youtube/search`) and emits a deprecation warning. Use `searchYouTube()` instead.
+> **Deprecated:** `searchVideos()` still works but is deprecated — it forwards to `searchYouTube()` and emits a deprecation warning. Use `searchYouTube()` instead.
 
 ### 11. Organize files with namespaces
 
@@ -947,7 +913,7 @@ console.log(`Channels indexed: ${usage.channelsIndexed.used} / ${usage.channelsI
 
 ### Per-call usage
 
-Pass `include_usage: true` to most endpoints (`getTranscript`, `transcribeVideo`, `watchVideo`, `analyzeVideo`, `analyzeFile`, `extractVideoData`, `extractFileData`, `searchYouTube`, `searchFiles`) to receive a `usage` block describing exactly what the request cost. For background jobs (`vn.transcribe`, `vn.watch`, `vn.analyze`, ...), pass it in the options: `vn.transcribe(url, { include_usage: true })`, `vn.transcribe.submit(url, { include_usage: true })`, or `vn.transcribe.resume(taskId, { include_usage: true })`. The result's `usage` is filled in once the job completes. A failed job has all its charges reverted, so it has no usage.
+Pass `include_usage: true` to most endpoints (`getTranscript`, `transcribeVideo`, `watchVideo`, `extractVideoData`, `extractFileData`, `searchYouTube`, `searchFiles`) to receive a `usage` block describing exactly what the request cost. For background jobs (`vn.transcribe`, `vn.watch`, `vn.extractVideo`, ...), pass it in the options: `vn.transcribe(url, { include_usage: true })`, `vn.transcribe.submit(url, { include_usage: true })`, or `vn.transcribe.resume(taskId, { include_usage: true })`. The result's `usage` is filled in once the job completes. A failed job has all its charges reverted, so it has no usage.
 
 The `usage` field is a `UsageBlock`:
 
@@ -973,7 +939,7 @@ if (usage) {
 }
 ```
 
-`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `frame_analysis`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*`, `/analyze/*`, and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived via a cache-hit sponsorship, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
+`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `frame_analysis`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*` and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived via a cache-hit sponsorship, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
 
 ---
 
@@ -1003,7 +969,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 
 | Member | Description |
 |--------|-------------|
-| `vn.transcribe`, `vn.watch`, `vn.analyze`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokProfile`, `vn.tiktokSearch`, `vn.tiktokLiveSearch` | Call directly to submit and wait for the result. Options: `include_usage`, `timeoutMs`, `intervalMs`, `fastStart`, `signal`, `onPoll` |
+| `vn.transcribe`, `vn.watch`, `vn.extractVideo`, `vn.tweetStatement`, `vn.tiktokProfile`, `vn.tiktokSearch`, `vn.tiktokLiveSearch` | Call directly to submit and wait for the result. Options: `include_usage`, `timeoutMs`, `intervalMs`, `fastStart`, `signal`, `onPoll` |
 | `.submit(input, { include_usage? })` | Start the job and return a `Job` immediately |
 | `.resume(task_id, { include_usage? })` | Get a `Job` for a job you already started (no request is made) |
 | `job.task_id`, `job.job_type`, `job.check_status_url`, `job.webhook_url` | Job details from the submit response |
@@ -1012,7 +978,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 | `job.result(options?)` | Wait until finished and return the result. Throws on failure or timeout; every error carries `task_id` |
 | `job.wait(options?)` | Wait until finished and return the final task, without throwing on failure |
 
-Results: `transcribe` → same shape as `transcribeVideo()`; `watch` → `WatchResult` (`video_info`, `transcript`, `scenes`, `frames_analyzed`, `usage?`); `analyze` → same shape as `analyzeVideo()`; `extractVideo` → `{ data, video_info, frames_analyzed?, usage? }`; `tweetStatement` → `TweetStatement`; `tiktokProfile` / `tiktokSearch` / `tiktokLiveSearch` → the completed task with every page of `videos` / `results`.
+Results: `transcribe` → same shape as `transcribeVideo()`; `watch` → `WatchResult` (`video_info`, `transcript`, `scenes`, `frames_analyzed`, `usage?`); `extractVideo` → `{ data, video_info, frames_analyzed?, schema?, evidence?, usage? }`; `tweetStatement` → `TweetStatement`; `tiktokProfile` / `tiktokSearch` / `tiktokLiveSearch` → the completed task with every page of `videos` / `results`.
 
 ### Webhooks
 
@@ -1022,7 +988,7 @@ Results: `transcribe` → same shape as `transcribeVideo()`; `watch` → `WatchR
 | `verifyWebhookSignature(rawBody, signatureHeader, secret, options?)` | Same check, returning `true` / `false` |
 | `WEBHOOK_HEADERS` | Header names: `signature`, `delivery`, `event`, `taskId` |
 
-`options`: `toleranceSeconds` (default `300`, `0` turns the check off). Event types: `transcribe.*`, `watch.*`, `analyze_video.*`, `extract_video.*`, `tweet_statement.*`, `tiktok_profile.*`, `tiktok_search.*`, `tiktok_live_search.*`, each with `.completed` or `.failed`.
+`options`: `toleranceSeconds` (default `300`, `0` turns the check off). Event types: `transcribe.*`, `watch.*`, `extract_video.*`, `tweet_statement.*`, `tiktok_profile.*`, `tiktok_search.*`, `tiktok_live_search.*`, each with `.completed` or `.failed`.
 
 ### TikTok
 
@@ -1066,36 +1032,26 @@ Completed profile tasks include `videos`; completed search tasks include `result
 | `deleteNamespace(id)` | Delete a namespace |
 | `updateFileNamespaces(file_id, { namespace_ids })` | Assign a file to namespaces. Returns updated `namespace_ids` and `namespaces` |
 
-### Analysis
-
-| Method | Description |
-|--------|-------------|
-| `analyzeVideo(payload)` | Analyze an online video with an optional natural language query. Options: `video_url`, `query`, `include_scenes`, `transcript_text`, `include_usage` |
-| `analyze(urlOrInput, options?)` | The same analysis as a background job, for long videos with `include_scenes`. Input: `video_url`, `query`, `include_scenes`, `transcript_text`, `webhook_url`. Returns the same result as `analyzeVideo()`. See [Background jobs](#background-jobs) |
-| `analyzeFile(payload)` | Analyze an uploaded file with an optional natural language query. Options: `file_id`, `query`, `include_scenes`, `transcript_text`, `include_usage` |
-| `tweetStatement(tweetIdOrInput, options?)` | Structured claim analysis of an X/Twitter tweet, including attached media of any length. Input: `tweet_id`, `webhook_url`. Returns a `TweetStatement` |
-| `getTweetStatement(payload, options?)` | Same as `tweetStatement()`, with the original payload shape |
-
-Returns `transcript_analysis` containing:
-- `summary` — content overview
-- `people` — people mentioned (name + context)
-- `places` — locations referenced
-- `key_subjects` — important topics (name, description, importance)
-- `query_answer` — direct answer to your query (when provided) with `answer`, `best_segment_index`, and `relevant_segments`
-
-With `include_scenes: true`, the result of `analyzeVideo`, `analyze` and `analyzeFile` also has `scenes` (a list of `VideoScene`) and `frames_analyzed`, plus `scenes_error` or `transcript_error` (`{ error, message }`) when the picture or the transcript could not be had. `analyzeFile` on a file that has no scenes throws `ScenesNotAvailableError`.
-
 ### Extraction
 
 | Method | Description |
 |--------|-------------|
-| `extractVideo(input, options?)` | Structured data from an online video of any length. Input: `video_url`, `schema` or `schemaFilePath`, `what_to_extract`, `transcribe`, `include_scenes`, `webhook_url`. Returns `{ data, video_info, frames_analyzed?, usage? }` |
+| `extractVideo(input, options?)` | Structured data from an online video of any length. Input: `video_url`, `schema` or `schemaFilePath`, `what_to_extract`, `transcribe`, `include_scenes`, `webhook_url`. Returns `{ data, video_info, frames_analyzed?, schema?, evidence?, usage? }` |
 | `extractVideoData(payload, options?)` | Same as `extractVideo()`, with the original payload shape (`include_usage` in the payload) |
-| `extractFileData(payload)` | Extract structured data from an uploaded file transcript, and from its scenes with `include_scenes`. Returns `{ data, file_info, frames_analyzed?, usage? }` |
+| `extractFileData(payload)` | Extract structured data from an uploaded file transcript, and from its scenes with `include_scenes`. Returns `{ data, file_info, frames_analyzed?, schema?, evidence?, usage? }`. A file that has no scenes throws `ScenesNotAvailableError` with `include_scenes` |
 
-**Options:** `schema` (required for JSON requests), `schemaFilePath` (JSON/YAML schema file via multipart form-data), `what_to_extract` (optional guidance), `include_scenes` (also extract from what the video or the file shows; the result then has `frames_analyzed`, plus `scenes_error` or `transcript_error` when one of the two could not be had), `include_usage` (attach a per-call `UsageBlock`; read LLM tokens via `usage.analysis_tokens`)
+**Options:** `schema` (a standard JSON Schema; optional when `what_to_extract` is given), `schemaFilePath` (JSON/YAML schema file via multipart form-data), `what_to_extract` (what to extract, in plain words: guides the extraction, or alone, writes the schema), `include_scenes` (also extract from what the video or the file shows; the result then has `frames_analyzed`, plus `scenes_error` or `transcript_error` when one of the two could not be had), `include_usage` (attach a per-call `UsageBlock`; read LLM tokens via `usage.analysis_tokens`)
 
-**Schema field types:** `String`, `Number`, `Boolean`, `Integer`, `Object`, `Array`, `Enum`
+**Schema property types:** `string`, `number`, `integer`, `boolean`, `array`, `object`, and `enum` to restrict a property to a list of values
+
+### X posts
+
+| Method | Description |
+|--------|-------------|
+| `tweetStatement(tweetIdOrInput, options?)` | Structured claim analysis of an X/Twitter tweet, including attached media of any length. Input: `tweet_id`, `include_scenes` (also read what the post's video and the quoted post's video show), `webhook_url`. Returns a `TweetStatement`. See [Background jobs](#background-jobs) |
+| `getTweetStatement(payload, options?)` | Same as `tweetStatement()`, with the original payload shape |
+
+With `include_scenes: true`, the `TweetStatement` also has `frames_analyzed`, and `scenes_error` (`{ error, message }`) when a video's picture could not be read: that video is then summarized from its transcript alone.
 
 ### Search
 
@@ -1169,7 +1125,6 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `VideoInfo` | Video metadata: title, channel, duration, views, likes, published date, keywords, carousel info |
 | `FileInfo` | Uploaded file: name, size, type, duration, status, `namespace_ids`, `namespaces`, and where its scene analysis stands: `scenes_status`, `frames_analyzed`, `scenes_error` |
 | `TranscriptSegment` | Timed segment: `text`, `start`, `end` (seconds) |
-| `AnalysisResult` | AI analysis: summary, people, places, key subjects, query answer |
 | `Namespace` | Full namespace: id, name, created/updated timestamps |
 | `NamespaceRef` | Lightweight `{ id, name }` reference embedded in file and search responses |
 | `VideoSearchResult` | Extends `VideoInfo` with `relevance_score`, `transcript_summary`, search metadata |
@@ -1181,9 +1136,9 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `CarouselInfo` | Carousel summary: total items, video/image count, transcribed count, total duration |
 | `CarouselVideoResult` | Per-video result in a carousel: index, status, video info, transcript |
 | `Job` | Handle returned by `.submit()` / `.resume()`: `task_id`, `status()`, `refresh()`, `result()`, `wait()` |
-| `AsyncJob<T>` | Task snapshot of a transcription, watch, video analysis, extraction, or tweet job (from `job.refresh()` / `job.wait()`): `task_status`, `result`, `error`, `webhook`, `request`, timestamps |
+| `AsyncJob<T>` | Task snapshot of a transcription, watch, extraction, or tweet job (from `job.refresh()` / `job.wait()`): `task_status`, `result`, `error`, `webhook`, `request`, timestamps |
 | `WatchResult` | A watched video, from `watch()`: `video_info`, `transcript` (left out with `include_transcript: false`), `transcript_error`, `scenes`, `frames_analyzed`, `usage` |
-| `VideoScene` | What a video or an uploaded file shows between `start` and `end` (seconds): `description`, `on_screen_text`. Returned by `watch()`, by `getFile()`, and by the analyses asked with `include_scenes` |
+| `VideoScene` | What a video or an uploaded file shows between `start` and `end` (seconds): `description`, `on_screen_text`. Returned by `watch()` and by `getFile()` |
 | `TikTokProfileScrapeSubmission` | Async scrape submission: `task_id`, status, profile URL, expiry, `webhook_url` |
 | `TikTokProfileTask` | TikTok profile scrape task with status, profile metadata, videos, pagination, `download_url`, `error`, `webhook` |
 | `TikTokVideo` | Public TikTok video metadata returned by profile scraping, including `published_at` as a `Date` and integer counters |
@@ -1194,7 +1149,36 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveSearchTask` | TikTok LIVE search task with status, rooms, pagination, `download_url`, `error`, `webhook`; `stats.rooms_fetched` is what is billed |
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
-| `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text |
+| `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text; with `include_scenes`, `frames_analyzed` and `scenes_error` |
+
+## What's new in 3.0.0
+
+**Breaking:** the analysis methods are removed, with the API endpoints they called. Ask the same questions with extraction, `extractVideoData()` / `vn.extractVideo()` for an online video and `extractFileData()` for an uploaded file, with `what_to_extract` in plain words and/or a JSON Schema. `include_scenes` works there too, and each value comes with the moments of the video it was taken from (`evidence`).
+
+| 2.x | 3.0 |
+|---|---|
+| `analyzeVideo({ video_url, query })` | `extractVideoData({ video_url, what_to_extract })` |
+| `vn.analyze(...)`, `vn.analyze.submit(...)`, `vn.analyze.resume(...)` | `vn.extractVideo(...)`, `vn.extractVideo.submit(...)`, `vn.extractVideo.resume(...)` |
+| `analyzeFile({ file_id, query })` | `extractFileData({ file_id, what_to_extract })` |
+| `transcript_analysis` (`AnalysisResult`) | `data`: the fields you asked for |
+| `analyze_video.completed` / `analyze_video.failed` webhook events | `extract_video.completed` / `extract_video.failed` |
+
+```ts
+// 2.x
+const { transcript_analysis } = await vn.analyzeVideo({ video_url, query: 'What are the ingredients?', include_scenes: true });
+
+// 3.0
+const { data, evidence } = await vn.extractVideoData({
+  video_url,
+  what_to_extract: 'A short summary, and every ingredient with its quantity',
+  include_scenes: true,
+});
+```
+
+An extraction result has no transcript: get it with `getTranscript()`, or next to the scenes with `vn.watch()`.
+
+- **Removed:** `analyzeVideo()`, `analyzeFile()`, `vn.analyze()` with `vn.analyze.submit()` and `vn.analyze.resume()`, the `analyze_video.completed` / `analyze_video.failed` webhook events and the `analyze_video` job type, and the types that only they used: `AnalysisResult`, `AnalysisResultJSON`, `KeySubject`, `QueryAnswer`, `AnalyzeVideoPayload`, `AnalyzeFilePayload`, `AnalyzeVideoInput`, `AnalyzeVideoResult`, `AnalyzeFileResult`, `AnalyzeVideoAsyncJob`, `AnalyzeVideoJob`. `analyzeFileScenes()`, which starts the scene analysis of an uploaded file, stays.
+- **Scenes in tweet analysis:** `include_scenes: true` on `vn.tweetStatement()`, `vn.tweetStatement.submit()` and `getTweetStatement()` also reads what the post's video and the quoted post's video show. The `TweetStatement` then has `frames_analyzed`, and `scenes_error` when a video's picture could not be read.
 
 ## What's new in 2.7.0
 
@@ -1214,7 +1198,7 @@ for (const moment of evidence?.people ?? []) console.log(moment.in, moment.start
 ## What's new in 2.5.0
 
 - **Scenes in analysis and extraction:** `include_scenes: true` on `analyzeVideo()`, `analyzeFile()`, `extractVideo()` / `extractVideoData()` and `extractFileData()` makes the analysis or the extraction from what the video shows as well as what it says. Analysis results gain `scenes` and `frames_analyzed`, extraction results gain `frames_analyzed`; `scenes_error` and `transcript_error` say when one of the two could not be had.
-- **Video analysis as a background job:** [`vn.analyze()`](#analyze-an-online-video) runs the analysis of `analyzeVideo()` as a background job, for long videos with `include_scenes`, with `vn.analyze.submit()`, `vn.analyze.resume(task_id)` and the `analyze_video.completed` / `analyze_video.failed` webhook events. `analyzeVideo()` itself still makes a direct call.
+- **Video analysis as a background job:** `vn.analyze()` runs the analysis of `analyzeVideo()` as a background job, for long videos with `include_scenes`, with `vn.analyze.submit()`, `vn.analyze.resume(task_id)` and the `analyze_video.completed` / `analyze_video.failed` webhook events. `analyzeVideo()` itself still makes a direct call. (Analysis was removed in 3.0.0.)
 - **Scenes of an uploaded file:** [`uploadFile({ include_scenes: true })`](#8b-scenes-of-an-uploaded-file) analyzes the scenes of a video file at the upload, and `analyzeFileScenes(file_id)` does it for a file already uploaded. `file_info` gains `scenes_status`, `frames_analyzed` and `scenes_error`, and `getFile()` returns the `scenes` once they are there.
 - **`ScenesNotAvailableError`** (HTTP 409): thrown by `analyzeFile()` and `extractFileData()` when `include_scenes` is asked on a file that has no scenes to read. Its `scenes_status` says where their analysis stands.
 

@@ -109,17 +109,8 @@ try {
   assert(sdk.transcriptFromJSON(undefined) === undefined, 'transcriptFromJSON handles undefined');
 }
 
-// --- AnalysisResult ---
-{
-  const ar = sdk.AnalysisResult.fromJSON({
-    summary: 'Sum', people: [{ name: 'Alice', context: 'c' }],
-    places: [], key_subjects: [{ name: 'KS', description: 'd', importance: 'high' }],
-    query_answer: { answer: 'A', best_segment_index: 0, relevant_segments: ['s'] },
-  });
-  assert(ar instanceof sdk.AnalysisResult, 'AnalysisResult instance');
-  assert(ar.people.length === 1 && ar.people[0].name === 'Alice', 'AnalysisResult.people');
-  assert(ar.query_answer.answer === 'A', 'AnalysisResult.query_answer');
-}
+// --- The analysis model is gone with the analysis endpoints (3.0.0) ---
+assert(sdk.AnalysisResult === undefined, 'AnalysisResult is not exported (analysis was removed in 3.0.0)');
 
 // --- NamespaceRef ---
 {
@@ -496,6 +487,17 @@ try {
   assert(statement instanceof sdk.TweetStatement, 'TweetStatement instance');
   assert(statement.claim_type === 'factual_claim', 'TweetStatement.claim_type');
   assert(statement.topics.length === 1, 'TweetStatement.topics');
+  assert(statement.frames_analyzed === undefined && statement.scenes_error === undefined, 'TweetStatement has no scene fields without include_scenes');
+
+  // Asked with include_scenes: the frames read, and why a video's picture could not be read.
+  const withScenes = sdk.TweetStatement.fromJSON({
+    final_statement: 'The author shows a chart of rising prices.',
+    claim_type: 'factual_claim',
+    frames_analyzed: 23,
+    scenes_error: { error: 'frames_not_available', message: 'This video has no picture we can read.' },
+  });
+  assert(withScenes.frames_analyzed === 23, 'TweetStatement.frames_analyzed');
+  assert(withScenes.scenes_error.error === 'frames_not_available' && withScenes.scenes_error.message.includes('no picture'), 'TweetStatement.scenes_error');
 }
 
 // --- Watch models ---
@@ -656,7 +658,6 @@ try {
     'getFiles', 'getFile', 'uploadFile', 'deleteFile', 'getFileUrl',
     'retryFileProcessing', 'cancelFileUpload', 'analyzeFileScenes',
     'getNamespaces', 'createNamespace', 'updateNamespace', 'deleteNamespace', 'updateFileNamespaces',
-    'analyzeVideo', 'analyzeFile',
     'getTweetStatement',
     'extractVideoData', 'extractFileData',
     'submitTikTokProfileScrape', 'getTikTokProfileScrape',
@@ -673,12 +674,12 @@ try {
     );
   }
   const instance = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
-  for (const op of ['transcribe', 'watch', 'analyze', 'extractVideo', 'tweetStatement', 'tiktokProfile', 'tiktokSearch', 'tiktokLiveSearch']) {
+  for (const op of ['transcribe', 'watch', 'extractVideo', 'tweetStatement', 'tiktokProfile', 'tiktokSearch', 'tiktokLiveSearch']) {
     assert(typeof instance[op] === 'function', `client.${op} is callable (blocking)`);
     assert(typeof instance[op].submit === 'function', `client.${op}.submit exists (non-blocking)`);
     assert(typeof instance[op].resume === 'function', `client.${op}.resume exists`);
   }
-  for (const removed of ['transcribeVideoAsync', 'extractVideoDataAsync', 'getTweetStatementAsync', 'waitForTask']) {
+  for (const removed of ['transcribeVideoAsync', 'extractVideoDataAsync', 'getTweetStatementAsync', 'waitForTask', 'analyzeVideo', 'analyzeFile', 'analyze']) {
     assert(instance[removed] === undefined, `${removed} is not part of the public API`);
   }
   assert(typeof sdk.Job === 'function', 'Job is exported');
@@ -744,20 +745,20 @@ try {
   assert(watchEvent.data.result.scenes[0].on_screen_text === 'BREAKING NEWS', 'watch.completed event carries the raw result');
   assert(sdk.WatchResult.fromJSON(watchEvent.data.result).scenes[0] instanceof sdk.VideoScene, 'a watch event result parses with WatchResult.fromJSON');
 
-  // So does the event of a background video analysis.
-  const analyzeBody = JSON.stringify({
+  // So does the event of a tweet analysis asked with include_scenes.
+  const tweetBody = JSON.stringify({
     id: 'evt_3',
-    type: 'analyze_video.completed',
+    type: 'tweet_statement.completed',
     created_at: '2026-01-01T00:00:00Z',
     api_version: '1.0.0',
     data: {
-      task_id: 'job-3', task_status: 'completed', job_type: 'analyze_video', check_status_url: '/v1/analyze/video/job-3',
-      result: { video_info: { title: 'Recipe' }, transcript: [], transcript_analysis: { summary: 'A recipe.' }, scenes: [{ start: 0, end: 2, description: 'A table.', on_screen_text: '' }], frames_analyzed: 30 },
+      task_id: 'job-3', task_status: 'completed', job_type: 'tweet_statement', check_status_url: '/v1/tweet/statement/job-3',
+      result: { final_statement: 'A claim.', claim_type: 'factual_claim', frames_analyzed: 23 },
     },
   });
-  const analyzeEvent = sdk.constructWebhookEvent(analyzeBody, `t=${t},v1=${sign(analyzeBody)}`, secret, opts);
-  assert(analyzeEvent.type === 'analyze_video.completed' && analyzeEvent.data.job_type === 'analyze_video', 'constructWebhookEvent parses an analyze_video.completed event');
-  assert(analyzeEvent.data.result.frames_analyzed === 30, 'analyze_video.completed event carries the raw result');
+  const tweetEvent = sdk.constructWebhookEvent(tweetBody, `t=${t},v1=${sign(tweetBody)}`, secret, opts);
+  assert(tweetEvent.type === 'tweet_statement.completed' && tweetEvent.data.job_type === 'tweet_statement', 'constructWebhookEvent parses a tweet_statement.completed event');
+  assert(sdk.TweetStatement.fromJSON(tweetEvent.data.result).frames_analyzed === 23, 'a tweet event result parses with TweetStatement.fromJSON, frames_analyzed included');
   try {
     sdk.constructWebhookEvent(body, header, 'wrong-secret', opts);
     fail('constructWebhookEvent throws on bad signature');
@@ -1139,7 +1140,6 @@ function makeFakeApi(client) {
   const submitRoutes = {
     '/transcribe/async': 'transcribe',
     '/watch/async': 'watch',
-    '/analyze/video/async': 'analyze_video',
     '/extract/video/async': 'extract_video',
     '/tweet/statement/async': 'tweet_statement',
     '/tiktok/profile': 'tiktok_profile',
@@ -1150,6 +1150,7 @@ function makeFakeApi(client) {
   client.request = async (method, url, data, params, extraHeaders) => {
     calls.push({ method, url, data, params, extraHeaders });
     if (syncRoutes.includes(url)) throw new Error(`SDK must never call the synchronous endpoint ${url}`);
+    if (url.startsWith('/analyze/')) throw new Error(`SDK must never call the removed endpoint ${url}`);
 
     if (method === 'POST' && submitRoutes[url]) {
       const job_type = submitRoutes[url];
@@ -1382,6 +1383,55 @@ async function runOperationTests() {
   assert(legacyTweet.final_statement === 'Legacy', 'getTweetStatement is async-backed');
   assert(api.calls.filter((c) => c.url === '/tweet/statement/async').pop().data.webhook_url === 'https://example.com/hook', 'getTweetStatement passes webhook_url through');
 
+  // ── tweetStatement with include_scenes: sent only when true ──
+  {
+    const tweetSubmits = () => api.calls.filter((c) => c.url === '/tweet/statement/async');
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const scenesResult = { final_statement: 'The video shows the price on a label.', claim_type: 'factual_claim', frames_analyzed: 23 };
+
+    assert(!('include_scenes' in tweetSubmits()[0].data), 'tweetStatement(id) leaves include_scenes to the API default');
+
+    // Blocking call, include_scenes: true.
+    api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: scenesResult }]);
+    const withScenes = await client.tweetStatement({ tweet_id: '42', include_scenes: true }, FAST);
+    assert(same(tweetSubmits().pop().data, { tweet_id: '42', include_scenes: true }), 'tweetStatement sends include_scenes: true', JSON.stringify(tweetSubmits().pop().data));
+    assert(withScenes instanceof sdk.TweetStatement && withScenes.frames_analyzed === 23, 'tweetStatement with include_scenes: result.frames_analyzed');
+    assert(withScenes.scenes_error === undefined, 'tweetStatement with include_scenes: no scenes_error when the picture was read');
+
+    // Blocking call, include_scenes: false is not sent.
+    api.plan([{ task_status: 'completed', result: { final_statement: 'A claim' } }]);
+    const withoutScenes = await client.tweetStatement({ tweet_id: '43', include_scenes: false }, FAST);
+    assert(same(tweetSubmits().pop().data, { tweet_id: '43' }), 'tweetStatement leaves include_scenes: false out of the body', JSON.stringify(tweetSubmits().pop().data));
+    assert(withoutScenes.frames_analyzed === undefined, 'tweetStatement without include_scenes: no frames_analyzed');
+
+    // .submit, include_scenes: true, with the other options passed through.
+    api.plan([{ task_status: 'completed', result: { ...scenesResult, frames_analyzed: 0, scenes_error: { error: 'frames_not_available', message: 'This video has no picture we can read.' } } }]);
+    const tweetJob = await client.tweetStatement.submit({ tweet_id: '44', include_scenes: true, webhook_url: 'https://example.com/hook' });
+    assert(
+      same(tweetSubmits().pop().data, { tweet_id: '44', webhook_url: 'https://example.com/hook', include_scenes: true }),
+      'tweetStatement.submit sends include_scenes: true and webhook_url',
+      JSON.stringify(tweetSubmits().pop().data)
+    );
+    assert(tweetJob instanceof sdk.Job && tweetJob.job_type === 'tweet_statement', 'tweetStatement.submit returns a Job (job_type tweet_statement)');
+    const noPicture = await tweetJob.result(FAST);
+    assert(noPicture.scenes_error.error === 'frames_not_available' && noPicture.frames_analyzed === 0, 'tweetStatement.submit result: scenes_error when a video\'s picture could not be read');
+
+    // .submit, include_scenes: false is not sent.
+    api.plan([{ task_status: 'completed', result: { final_statement: 'A claim' } }]);
+    await client.tweetStatement.submit({ tweet_id: '45', include_scenes: false });
+    assert(same(tweetSubmits().pop().data, { tweet_id: '45' }), 'tweetStatement.submit leaves include_scenes: false out of the body', JSON.stringify(tweetSubmits().pop().data));
+
+    // getTweetStatement takes include_scenes the same way.
+    api.plan([{ task_status: 'completed', result: scenesResult }]);
+    const viaPayload = await client.getTweetStatement({ tweet_id: '46', include_scenes: true }, FAST);
+    assert(same(tweetSubmits().pop().data, { tweet_id: '46', include_scenes: true }) && viaPayload.frames_analyzed === 23, 'getTweetStatement sends include_scenes: true');
+    api.plan([{ task_status: 'completed', result: { final_statement: 'A claim' } }]);
+    await client.getTweetStatement({ tweet_id: '47', include_scenes: false }, FAST);
+    assert(same(tweetSubmits().pop().data, { tweet_id: '47' }), 'getTweetStatement leaves include_scenes: false out of the body');
+
+    assert(tweetSubmits().every((c) => c.data.include_usage === undefined), 'tweetStatement never sends include_usage on submit');
+  }
+
   // ── tiktokProfile: collects every page ──
   const video = (id) => ({ id, url: `https://www.tiktok.com/@a/video/${id}`, published_at: '2026-01-01T00:00:00Z', views: 10.7 });
   const profilePages = [[video('1'), video('2')], [video('3')], [video('4'), video('5')]];
@@ -1599,141 +1649,10 @@ async function runScenesTests() {
   const client = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
   const http = makeHttpStub(client);
 
-  // ── analyzeVideo with include_scenes: the synchronous call, as before ──
-  http.on('POST /analyze/video', [200, fx.analyzeVideoWithScenes]);
-  const analyzed = await client.analyzeVideo({ video_url: fx.VIDEO_URL, query: fx.QUESTION, include_scenes: true, include_usage: true });
-  assert(http.calls.length === 1 && http.last().method === 'POST' && http.last().url === '/analyze/video', 'analyzeVideo still posts the synchronous /analyze/video');
-  assert(
-    same(http.last().data, { video_url: fx.VIDEO_URL, query: fx.QUESTION, include_scenes: true, include_usage: true }),
-    'analyzeVideo sends include_scenes in the body',
-    JSON.stringify(http.last().data)
-  );
-  assert(analyzed.video_info instanceof sdk.VideoInfo && analyzed.video_info.duration === 79, 'analyzeVideo with scenes: video_info is VideoInfo');
-  assert(analyzed.transcript.length === 4 && analyzed.transcript[0] instanceof sdk.TranscriptSegment, 'analyzeVideo with scenes: transcript parsed');
-  assert(analyzed.transcript_analysis instanceof sdk.AnalysisResult && analyzed.transcript_analysis.timestamp === 6, 'analyzeVideo with scenes: transcript_analysis parsed');
-  assert(analyzed.transcript_analysis.query_answer.best_segment_index === 5, 'analyzeVideo with scenes: query_answer');
-  assert(allScenes(analyzed.scenes) && analyzed.scenes.length === fx.videoScenes.length, 'analyzeVideo with scenes: scenes are VideoScene');
-  assert(analyzed.scenes[3].start === 6 && analyzed.scenes[3].end === 8, 'analyzeVideo with scenes: scene start / end');
-  assert(analyzed.scenes[3].on_screen_text === 'FRANGO DESFIADO COZIDO\n500 g' && analyzed.scenes[2].on_screen_text === '', 'analyzeVideo with scenes: on_screen_text');
-  assert(analyzed.frames_analyzed === 30, 'analyzeVideo with scenes: frames_analyzed');
-  assert(!('scenes_error' in analyzed) && !('transcript_error' in analyzed), 'analyzeVideo with scenes: no scenes_error / transcript_error when both were read');
-  assert(analyzed.usage instanceof sdk.UsageBlock && analyzed.usage.charge_for('frame_analysis').quantity === 30, 'analyzeVideo with scenes: usage has the frame_analysis charge');
-  assert(analyzed.usage.analysis_tokens.total_tokens === 4736, 'analyzeVideo with scenes: usage.analysis_tokens');
-
-  // Without include_scenes the result is what it always was.
-  http.on('POST /analyze/video', [200, fx.analyzeVideoPlain]);
-  const plain = await client.analyzeVideo({ video_url: fx.VIDEO_URL, include_usage: true });
-  assert(!('include_scenes' in http.last().data), 'analyzeVideo leaves include_scenes to the API default');
-  assert(hasNoSceneFields(plain), 'analyzeVideo without include_scenes has no scene fields', Object.keys(plain).join(','));
-  assert(plain.transcript_analysis.query_answer === null && plain.usage.charge_for('frame_analysis') === undefined, 'analyzeVideo without include_scenes: no frames charged');
-
-  // The picture could not be read: the analysis is made from the transcript, and scenes_error says why.
-  http.on('POST /analyze/video', [200, {
-    status: 'success',
-    data: { ...fx.analyzeVideoPlain.data, scenes: [], frames_analyzed: 0, scenes_error: { error: 'frames_not_available', message: 'This video has no picture we can read.' } },
-  }]);
-  const noPicture = await client.analyzeVideo({ video_url: fx.VIDEO_URL, include_scenes: true });
-  assert(Array.isArray(noPicture.scenes) && noPicture.scenes.length === 0 && noPicture.frames_analyzed === 0, 'analyzeVideo: scenes is empty when the picture could not be read');
-  assert(noPicture.scenes_error.error === 'frames_not_available' && noPicture.transcript.length === 4, 'analyzeVideo: scenes_error says why, the transcript is there');
-  assert(noPicture.usage === undefined, 'analyzeVideo has no usage unless requested');
-
-  // No transcript: the analysis is made from the scenes, and transcript_error says why.
-  http.on('POST /analyze/video', [200, {
-    status: 'success',
-    data: { ...fx.analyzeVideoWithScenes.data, transcript: [], transcript_error: { error: 'transcript_not_available', message: 'No transcript found for this video.' } },
-  }]);
-  const silent = await client.analyzeVideo({ video_url: fx.VIDEO_URL, include_scenes: true });
-  assert(Array.isArray(silent.transcript) && silent.transcript.length === 0, 'analyzeVideo without speech: transcript is empty');
-  assert(silent.transcript_error.error === 'transcript_not_available' && allScenes(silent.scenes), 'analyzeVideo without speech: transcript_error says why, the scenes are there');
-
-  // ── analyze: the same analysis as a background job ──
-  const jobUrl = `/analyze/video/${fx.ANALYZE_TASK_ID}`;
-  const before = http.calls.length;
-  http.on('POST /analyze/video/async', [202, fx.analyzeAsyncSubmit]);
-  http.on(`GET ${jobUrl}`, [200, fx.analyzeAsyncProcessing], [200, fx.analyzeAsyncCompleted]);
-  const viaJob = await client.analyze({ video_url: fx.VIDEO_URL, query: fx.QUESTION, include_scenes: true }, { ...FAST, include_usage: true });
-  const jobCalls = http.calls.slice(before);
-  assert(jobCalls[0].method === 'POST' && jobCalls[0].url === '/analyze/video/async', 'analyze submits POST /analyze/video/async');
-  assert(
-    same(jobCalls[0].data, { video_url: fx.VIDEO_URL, query: fx.QUESTION, include_scenes: true }),
-    'analyze sends video_url / query / include_scenes, and no include_usage, on submit',
-    JSON.stringify(jobCalls[0].data)
-  );
-  assert(jobCalls.length === 3 && jobCalls.slice(1).every((c) => c.method === 'GET' && c.url === jobUrl), 'analyze polls GET /analyze/video/{task_id} until completed');
-  assert(jobCalls.slice(1).every((c) => same(c.params, { include_usage: 'true' })), 'analyze sends include_usage on the poll');
-  assert(!jobCalls.some((c) => c.url === '/analyze/video'), 'analyze never calls the synchronous POST /analyze/video');
-  assert(viaJob.video_info instanceof sdk.VideoInfo && viaJob.transcript[0] instanceof sdk.TranscriptSegment, 'analyze result: video_info / transcript parsed');
-  assert(viaJob.transcript_analysis instanceof sdk.AnalysisResult && same(viaJob.transcript_analysis.query_answer.relevant_segments, ['5:6', '9', '13:14', '16', '18']), 'analyze result: transcript_analysis parsed');
-  assert(allScenes(viaJob.scenes) && viaJob.frames_analyzed === 30, 'analyze result: scenes and frames_analyzed');
-  assert(viaJob.usage instanceof sdk.UsageBlock && viaJob.usage.charge_for('frame_analysis').quantity === 30, 'analyze result: usage read from the poll');
-  assert(
-    same(Object.keys(viaJob).sort(), Object.keys(analyzed).sort()),
-    'analyze result has the same fields as analyzeVideo',
-    `${Object.keys(viaJob)} / ${Object.keys(analyzed)}`
-  );
-
-  // .submit returns the handle described by the 202 answer. Asked without include_usage, the poll has no usage block.
-  http.on(`GET ${jobUrl}`, [200, { status: 'success', data: fx.analyzeAsyncCompleted.data }]);
-  const handle = await client.analyze.submit({ video_url: fx.VIDEO_URL, include_scenes: true });
-  assert(handle instanceof sdk.Job && handle.task_id === fx.ANALYZE_TASK_ID && handle.job_type === 'analyze_video', 'analyze.submit returns a Job (job_type analyze_video)');
-  assert(handle.check_status_url === `/v1${jobUrl}` && handle.webhook_url === null, 'analyze Job.check_status_url / webhook_url');
-  const snapshot = await handle.refresh();
-  assert(http.last().params === undefined, 'analyze polls send no include_usage unless requested');
-  assert(snapshot instanceof sdk.AsyncJob && snapshot.task_status === 'completed' && snapshot.request.include_scenes === true, 'analyze Job.refresh() returns the task');
-  assert(allScenes(snapshot.result.scenes) && snapshot.usage === undefined, 'analyze task.result is parsed, without usage unless requested');
-
-  // Options, resume and failures, on the generic fake of the job API.
+  // ── extraction of a video with include_scenes, on the generic fake of the job API ──
   {
     const jobs = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
     const api = makeFakeApi(jobs);
-    const hook = 'https://example.com/hooks/vidnavigator';
-    const result = fx.analyzeAsyncCompleted.data.result;
-    const submits = () => api.calls.filter((c) => c.url === '/analyze/video/async');
-
-    api.plan([{ task_status: 'processing' }, { task_status: 'completed', result }]);
-    const bare = await jobs.analyze(fx.VIDEO_URL, FAST);
-    assert(same(submits()[0].data, { video_url: fx.VIDEO_URL }), 'analyze(url) sends video_url only', JSON.stringify(submits()[0].data));
-    assert(api.last().url === '/analyze/video/analyze_video-1' && api.last().params === undefined, 'analyze(url) polls without include_usage');
-    assert(bare.usage === undefined && bare.frames_analyzed === 30, 'analyze result has no usage unless requested');
-
-    api.plan([{ task_status: 'completed', result: { ...result, transcript: 'Música Música' } }]);
-    const job = await jobs.analyze.submit({ video_url: fx.VIDEO_URL, query: fx.QUESTION, include_scenes: true, transcript_text: true, webhook_url: hook });
-    assert(
-      same(api.last().data, { video_url: fx.VIDEO_URL, query: fx.QUESTION, include_scenes: true, transcript_text: true, webhook_url: hook }),
-      'analyze.submit passes query / include_scenes / transcript_text / webhook_url through',
-      JSON.stringify(api.last().data)
-    );
-    assert(job.webhook_url === hook, 'analyze Job.webhook_url echoes the submit response');
-    const done = await job.wait(FAST);
-    assert(done.task_status === 'completed' && done.result.transcript === 'Música Música', 'analyze Job.wait() returns the completed task (transcript_text: one string)');
-
-    api.plan([{ task_status: 'completed', result }]);
-    await jobs.analyze.submit({ video_url: fx.VIDEO_URL, webhook_url: '' });
-    assert(api.last().data.webhook_url === '', 'analyze passes an empty webhook_url through');
-
-    api.addTask('saved-analysis', [{ task_status: 'completed', result, usage: fx.analyzeAsyncCompleted.usage }]);
-    const calls = api.calls.length;
-    const resumed = jobs.analyze.resume('saved-analysis', { include_usage: true });
-    assert(api.calls.length === calls, 'analyze.resume() makes no request');
-    assert(resumed instanceof sdk.Job && resumed.job_type === 'analyze_video' && resumed.task_id === 'saved-analysis', 'analyze.resume() returns a Job for the task_id');
-    const resumedResult = await resumed.result(FAST);
-    assert(allScenes(resumedResult.scenes) && resumedResult.usage.charge_for('frame_analysis').quantity === 30, 'resumed analyze Job.result() with usage');
-
-    const failures = [
-      [{ error: 'video_too_long', message: 'Too long', http_status: 400 }, sdk.BadRequestError],
-      [{ error: 'limit_exceeded', message: 'Out of credits mid-job', http_status: 402 }, sdk.InsufficientCreditsError],
-      [{ error: 'video_not_found', message: 'Gone', http_status: 404 }, sdk.NotFoundError],
-    ];
-    for (const [error, Cls] of failures) {
-      api.plan([{ task_status: 'processing' }, { task_status: 'failed', result: null, error }]);
-      const e = await jobs.analyze({ video_url: fx.VIDEO_URL, include_scenes: true }, FAST).catch((err) => err);
-      assert(e instanceof Cls, `failed analyze job (${error.http_status} ${error.error}) throws ${Cls.name}`, e && `${e.name}: ${e.message}`);
-      assert(e.error_code === error.error && e.status_code === error.http_status, `failed analyze job ${error.error} carries error / http_status`);
-      assert(typeof e.task_id === 'string' && e.task_id.startsWith('analyze_video-'), `failed analyze job ${error.error} error carries task_id`);
-    }
-    assert(submits().every((c) => c.data.include_usage === undefined), 'analyze never sends include_usage on submit');
-
-    // ── extraction of a video with include_scenes ──
     const exSubmits = () => api.calls.filter((c) => c.url === '/extract/video/async');
     api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: fx.extractedRecipe, video_info: fx.videoInfo, frames_analyzed: 30, usage: fx.extractVideoUsage }]);
     const extracted = await jobs.extractVideoData({ video_url: fx.VIDEO_URL, schema: fx.recipeSchema, include_scenes: true, include_usage: true }, FAST);
@@ -1824,50 +1743,30 @@ async function runScenesTests() {
   assert(refused instanceof sdk.BadRequestError && refused.status_code === 400, 'analyzeFileScenes on an audio file throws BadRequestError', refused && `${refused.name}: ${refused.message}`);
   assert(refused.error_code === 'frames_not_available' && refused.message.includes('no picture'), 'analyzeFileScenes on an audio file: error_code frames_not_available');
 
-  // ── analyzeFile with include_scenes: 409 until the file has its scenes ──
-  http.on('POST /analyze/file', [409, fx.scenesNotAvailable], [200, fx.analyzeFileWithScenes]);
-  const notYet = await client.analyzeFile({ file_id: fx.FILE_ID, query: fx.QUESTION, include_scenes: true }).catch((err) => err);
-  assert(notYet instanceof sdk.ScenesNotAvailableError && notYet instanceof sdk.VidNavigatorError, 'analyzeFile with scenes on a file without scenes throws ScenesNotAvailableError', notYet && `${notYet.name}: ${notYet.message}`);
+  // ── extractFileData with include_scenes: 409 until the file has its scenes ──
+  http.on('POST /extract/file', [409, fx.scenesNotAvailable]);
+  const notYet = await client.extractFileData({ file_id: fx.FILE_ID, what_to_extract: fx.WHAT_TO_EXTRACT, include_scenes: true }).catch((err) => err);
+  assert(notYet instanceof sdk.ScenesNotAvailableError && notYet instanceof sdk.VidNavigatorError, 'extractFileData with scenes on a file without scenes throws ScenesNotAvailableError', notYet && `${notYet.name}: ${notYet.message}`);
   assert(notYet.name === 'ScenesNotAvailableError' && notYet.status_code === 409 && notYet.error_code === 'scenes_not_available', 'ScenesNotAvailableError carries status_code 409 / error_code');
   assert(notYet.scenes_status === 'none' && notYet.scenes_error === undefined, 'ScenesNotAvailableError.scenes_status is none when the scenes were never asked for');
   assert(notYet.error_message === fx.scenesNotAvailable.message && notYet.message.includes('This file has no scenes yet'), 'ScenesNotAvailableError carries the API message');
   assert(notYet.details.scenes_status === 'none', 'ScenesNotAvailableError.details is the response body');
 
-  const fileAnalysis = await client.analyzeFile({ file_id: fx.FILE_ID, query: fx.QUESTION, include_scenes: true, include_usage: true });
-  assert(
-    same(http.last().data, { file_id: fx.FILE_ID, query: fx.QUESTION, include_scenes: true, include_usage: true }),
-    'analyzeFile sends include_scenes in the body',
-    JSON.stringify(http.last().data)
-  );
-  assert(fileAnalysis.file_info instanceof sdk.FileInfo && fileAnalysis.file_info.scenes_status === 'completed' && fileAnalysis.file_info.frames_analyzed === 30, 'analyzeFile with scenes: file_info.scenes_status / frames_analyzed');
-  assert(allScenes(fileAnalysis.scenes) && fileAnalysis.frames_analyzed === 30, 'analyzeFile with scenes: scenes and frames_analyzed');
-  assert(fileAnalysis.transcript[0] instanceof sdk.TranscriptSegment && fileAnalysis.transcript_analysis instanceof sdk.AnalysisResult, 'analyzeFile with scenes: transcript and transcript_analysis parsed');
-  assert(fileAnalysis.transcript_analysis.query_answer.best_segment_index === 5, 'analyzeFile with scenes: query_answer');
-  assert(fileAnalysis.usage.charge_for('analysis_request').quantity === 1 && fileAnalysis.usage.charge_for('frame_analysis') === undefined, 'analyzeFile with scenes: the frames of a file are not charged by the analysis');
-
-  http.on('POST /analyze/file', [409, fx.scenesStillProcessing]);
-  const running = await client.analyzeFile({ file_id: fx.FILE_ID, include_scenes: true }).catch((err) => err);
+  http.on('POST /extract/file', [409, fx.scenesStillProcessing]);
+  const running = await client.extractFileData({ file_id: fx.FILE_ID, what_to_extract: fx.WHAT_TO_EXTRACT, include_scenes: true }).catch((err) => err);
   assert(running instanceof sdk.ScenesNotAvailableError && running.scenes_status === 'processing', 'ScenesNotAvailableError.scenes_status is processing while the scenes are analyzed');
 
-  http.on('POST /analyze/file', [409, fx.scenesFailed]);
-  const failedScenes = await client.analyzeFile({ file_id: fx.AUDIO_FILE_ID, include_scenes: true }).catch((err) => err);
+  http.on('POST /extract/file', [409, fx.scenesFailed]);
+  const failedScenes = await client.extractFileData({ file_id: fx.AUDIO_FILE_ID, what_to_extract: fx.WHAT_TO_EXTRACT, include_scenes: true }).catch((err) => err);
   assert(failedScenes instanceof sdk.ScenesNotAvailableError && failedScenes.scenes_status === 'failed', 'ScenesNotAvailableError.scenes_status is failed after a failed scene analysis');
   assert(same(failedScenes.scenes_error, fx.NO_PICTURE), 'ScenesNotAvailableError.scenes_error says why the scene analysis failed');
 
-  http.on('POST /analyze/file', [409, { status: 'error', error: 'conflict', message: 'Something else' }]);
-  const other409 = await client.analyzeFile({ file_id: fx.FILE_ID }).catch((err) => err);
+  http.on('POST /extract/file', [409, { status: 'error', error: 'conflict', message: 'Something else' }]);
+  const other409 = await client.extractFileData({ file_id: fx.FILE_ID, what_to_extract: fx.WHAT_TO_EXTRACT }).catch((err) => err);
   assert(other409.constructor === sdk.VidNavigatorError && other409.status_code === 409 && other409.error_code === 'conflict', 'another 409 stays a plain VidNavigatorError');
 
-  http.on('POST /analyze/file', [200, fx.analyzeFilePlain]);
-  const filePlain = await client.analyzeFile({ file_id: fx.FILE_ID, include_usage: true });
-  assert(!('include_scenes' in http.last().data) && hasNoSceneFields(filePlain), 'analyzeFile without include_scenes has no scene fields', Object.keys(filePlain).join(','));
-  assert(filePlain.file_info.scenes_status === undefined && filePlain.transcript_analysis.summary.startsWith('A brief segment'), 'analyzeFile without include_scenes: result as before');
-
-  // ── extractFileData with include_scenes ──
-  http.on('POST /extract/file', [409, fx.scenesNotAvailable], [200, fx.extractFileWithScenes]);
-  const exNotYet = await client.extractFileData({ file_id: fx.FILE_ID, schema: fx.recipeSchema, include_scenes: true }).catch((err) => err);
-  assert(exNotYet instanceof sdk.ScenesNotAvailableError && exNotYet.scenes_status === 'none', 'extractFileData with scenes on a file without scenes throws ScenesNotAvailableError');
-
+  // ── extractFileData with include_scenes, once the file has its scenes ──
+  http.on('POST /extract/file', [200, fx.extractFileWithScenes]);
   const fileExtraction = await client.extractFileData({ file_id: fx.FILE_ID, schema: fx.recipeSchema, include_scenes: true, include_usage: true });
   assert(http.last().data.include_scenes === true && http.last().data.file_id === fx.FILE_ID, 'extractFileData sends include_scenes in the body');
   assert(fileExtraction.data.dish === 'PATÊ DE FRANGO CREMOSO' && fileExtraction.data.ingredients.length === 3, 'extractFileData with scenes: data');
@@ -1876,9 +1775,10 @@ async function runScenesTests() {
   assert(!('scenes_error' in fileExtraction) && !('transcript_error' in fileExtraction), 'extractFileData with scenes: no scenes_error / transcript_error when both were read');
   assert(fileExtraction.usage.analysis_tokens.total_tokens === 2148 && fileExtraction.usage.charge_for('frame_analysis') === undefined, 'extractFileData with scenes: the frames of a file are not charged by the extraction');
 
-  http.on('POST /extract/file', [200, { status: 'success', data: { dish: 'Soup' }, file_info: fx.analyzeFilePlain.data.file_info }]);
+  http.on('POST /extract/file', [200, { status: 'success', data: { dish: 'Soup' }, file_info: fx.fileInfoWithoutScenes }]);
   const exPlain = await client.extractFileData({ file_id: fx.FILE_ID, schema: fx.recipeSchema });
-  assert(!('include_scenes' in http.last().data) && sceneKeys.every((key) => !(key in exPlain)), 'extractFileData without include_scenes has no scene fields', Object.keys(exPlain).join(','));
+  assert(!('include_scenes' in http.last().data) && hasNoSceneFields(exPlain), 'extractFileData without include_scenes has no scene fields', Object.keys(exPlain).join(','));
+  assert(exPlain.file_info instanceof sdk.FileInfo && exPlain.file_info.scenes_status === undefined, 'extractFileData without include_scenes: file_info as before');
 
   const fileSchemaPath = path.join(__dirname, 'tmp-scenes-file-schema.json');
   fs.writeFileSync(fileSchemaPath, JSON.stringify(fx.recipeSchema));

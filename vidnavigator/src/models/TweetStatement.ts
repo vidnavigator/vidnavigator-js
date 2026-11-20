@@ -1,4 +1,5 @@
 import { UsageBlock } from './Usage';
+import { ScenesError } from './Watch';
 
 export type TweetClaimType =
   | 'factual_claim'
@@ -58,6 +59,8 @@ export interface TweetStatementJSON {
   tweet_media_summary?: string | null;
   quoted_tweet_text?: string | null;
   quoted_media_summary?: string | null;
+  frames_analyzed?: number;
+  scenes_error?: ScenesError;
 }
 
 export class TweetStatement {
@@ -76,6 +79,13 @@ export class TweetStatement {
   tweet_media_summary?: string | null;
   quoted_tweet_text?: string | null;
   quoted_media_summary?: string | null;
+  /** With `include_scenes: true`: number of frames analyzed to read the scenes of the post's videos. */
+  frames_analyzed?: number;
+  /**
+   * With `include_scenes: true`, when a video's picture could not be read (e.g. `frames_not_available`).
+   * The analysis still succeeds: that video is used through its transcript alone, when it has one.
+   */
+  scenes_error?: ScenesError;
   /** Per-call usage, populated when requested with include_usage. */
   usage?: UsageBlock;
 

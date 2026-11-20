@@ -63,13 +63,13 @@ for (const scene of scenes) {
   console.log(scene.start, scene.end, scene.description, scene.on_screen_text);
 }
 
-// An analysis made from what the video shows as well as what it says
-const { transcript_analysis } = await vn.analyzeVideo({
+// Structured data from what the video shows as well as what it says
+const { data, evidence } = await vn.extractVideoData({
   video_url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
-  query: 'What is written on screen?',
+  what_to_extract: 'A short summary, and the text written on screen',
   include_scenes: true,
 });
-console.log(transcript_analysis.query_answer?.answer);
+console.log(data, evidence);
 ```
 
 For full SDK documentation, see [`vidnavigator/README.md`](./vidnavigator/README.md).

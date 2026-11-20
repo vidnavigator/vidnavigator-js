@@ -9,11 +9,10 @@
  */
 
 const VIDEO_URL = 'https://www.dailymotion.com/video/x84243e';
-const QUESTION = 'What are the ingredients and their quantities?';
+const WHAT_TO_EXTRACT = 'Every ingredient with its quantity';
 const FILE_ID = '64a1b2c3d4e5f67890abcdef';
 const AUDIO_FILE_ID = '64a1b2c3d4e5f67890abcd00';
 const NAMESPACE_ID = '64a1b2c3d4e5f67890abc001';
-const ANALYZE_TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
 const EXTRACT_TASK_ID = '550e8400-e29b-41d4-a716-446655440001';
 
 const NO_PICTURE = {
@@ -30,145 +29,6 @@ const videoInfo = {
   likes: 0,
   published_date: '2021-09-09',
   keywords: [],
-};
-
-const videoTranscript = [
-  { text: 'Música', start: 0, end: 0.62 },
-  { text: 'Música', start: 30, end: 57.42 },
-  { text: '¡Suscríbete', start: 60, end: 75.92 },
-  { text: 'al canal!', start: 75.92, end: 76.46 },
-];
-
-const videoScenes = [
-  { start: 0, end: 2, description: 'A wooden table holds a small green bowl of crackers, a larger green bowl filled with a creamy mixture, and an orange bowl of olives.', on_screen_text: 'PATÊ DE FRANGO\nCREMOSO' },
-  { start: 2, end: 4, description: 'The same green bowl of crackers, the same green bowl of creamy mixture, and the same orange bowl of olives are visible on the wooden table.', on_screen_text: 'PATÊ DE FRANGO\nCREMOSO' },
-  { start: 4, end: 6, description: 'The scene is blurred as the camera moves quickly across the wooden table.', on_screen_text: '' },
-  { start: 6, end: 8, description: 'A hand holds a red and white patterned container over a clear glass bowl containing shredded chicken.', on_screen_text: 'FRANGO DESFIADO COZIDO\n500 g' },
-];
-
-const videoAnalysis = {
-  summary: 'The video demonstrates how to make a creamy chicken pâté (Patê de Frango Cremoso).',
-  people: [],
-  places: [],
-  key_subjects: ['Patê de Frango Cremoso', 'shredded chicken', 'mayonnaise'],
-  timestamp: 6,
-  relevant_text: '[Picture] A hand holds a red and white patterned container over a clear glass bowl containing shredded chicken.\nOn screen: FRANGO DESFIADO COZIDO\n500 g',
-  query_answer: {
-    answer: 'Chicken (shredded, cooked) – 500 g; Mayonnaise – 300 g; Requeijão (cream cheese) – 250 g; Grated carrots – 2; Corn (green) – 250 g; Green olives – 250 g; Green herbs – to taste; Crackers (served on side).',
-    best_segment_index: 5,
-    relevant_segments: ['5:6', '9', '13', '14', '16:18'],
-  },
-};
-
-const videoAnalysisUsage = {
-  charges: [
-    { service_type: 'standard_request', quantity: 1, credits: 1 },
-    { service_type: 'frame_analysis', quantity: 30, credits: 1 },
-    { service_type: 'analysis_request', quantity: 1, credits: 1, tokens: { prompt_tokens: 3382, completion_tokens: 1354, total_tokens: 4736 } },
-  ],
-  total_credits: 3,
-};
-
-/** POST /analyze/video with include_scenes and a query. */
-const analyzeVideoWithScenes = {
-  status: 'success',
-  data: {
-    video_info: videoInfo,
-    transcript: videoTranscript,
-    transcript_analysis: videoAnalysis,
-    scenes: videoScenes,
-    frames_analyzed: 30,
-  },
-  usage: videoAnalysisUsage,
-};
-
-/** POST /analyze/video without include_scenes. */
-const analyzeVideoPlain = {
-  status: 'success',
-  data: {
-    video_info: videoInfo,
-    transcript: videoTranscript,
-    transcript_analysis: {
-      summary: 'The video consists of background music and a brief prompt urging viewers to subscribe to the channel.',
-      people: [],
-      places: [],
-      key_subjects: ['Music', 'Subscribe'],
-      timestamp: 0,
-      relevant_text: null,
-      query_answer: null,
-    },
-  },
-  usage: {
-    charges: [
-      { service_type: 'standard_request', quantity: 1, credits: 1 },
-      { service_type: 'analysis_request', quantity: 1, credits: 1, tokens: { prompt_tokens: 1339, completion_tokens: 426, total_tokens: 1765 } },
-    ],
-    total_credits: 2,
-  },
-};
-
-/** POST /analyze/video/async (202). */
-const analyzeAsyncSubmit = {
-  status: 'success',
-  data: {
-    task_id: ANALYZE_TASK_ID,
-    task_status: 'processing',
-    job_type: 'analyze_video',
-    expires_at: '2026-11-16T13:35:54.473122+00:00',
-    check_status_url: `/v1/analyze/video/${ANALYZE_TASK_ID}`,
-    webhook_url: null,
-    message: 'Job started. Poll check_status_url for the result.',
-    docs_url: 'https://docs.vidnavigator.com/guides/async-jobs',
-  },
-};
-
-/** GET /analyze/video/{task_id}?include_usage=true once the job is completed. */
-const analyzeAsyncCompleted = {
-  status: 'success',
-  data: {
-    task_id: ANALYZE_TASK_ID,
-    task_status: 'completed',
-    job_type: 'analyze_video',
-    request: { video_url: VIDEO_URL, include_scenes: true, query: QUESTION },
-    created_at: '2026-11-16T12:35:54.473000',
-    started_at: '2026-11-16T12:35:54.481000',
-    completed_at: '2026-11-16T12:35:57.729000',
-    expires_at: '2026-11-16T13:35:57.729000',
-    check_status_url: `/v1/analyze/video/${ANALYZE_TASK_ID}`,
-    webhook: null,
-    result: {
-      video_info: videoInfo,
-      transcript: videoTranscript,
-      transcript_analysis: {
-        ...videoAnalysis,
-        query_answer: {
-          answer: 'Frango desfiado cozido – 500 g; Maionese – 300 g; Requeijão – 250 g; Cenoura ralada – 2 unidades; Milho verde – 250 g; Azeitona verde – 250 g; Cheiro‑verde – a gosto.',
-          best_segment_index: 5,
-          relevant_segments: ['5:6', '9', '13:14', '16', '18'],
-        },
-      },
-      scenes: videoScenes,
-      frames_analyzed: 30,
-    },
-  },
-  usage: videoAnalysisUsage,
-};
-
-/** Assembled: the same task while it runs. */
-const analyzeAsyncProcessing = {
-  status: 'success',
-  data: {
-    task_id: ANALYZE_TASK_ID,
-    task_status: 'processing',
-    job_type: 'analyze_video',
-    request: { video_url: VIDEO_URL, include_scenes: true, query: QUESTION },
-    created_at: '2026-11-16T12:35:54.473000',
-    started_at: '2026-11-16T12:35:54.481000',
-    completed_at: null,
-    expires_at: '2026-11-16T13:35:54.473000',
-    check_status_url: `/v1/analyze/video/${ANALYZE_TASK_ID}`,
-    webhook: null,
-  },
 };
 
 const recipeSchema = {
@@ -338,7 +198,7 @@ const getAudioFile = {
   },
 };
 
-/** The `file_info` of the video file once its scenes are analyzed, as analyze and extract return it. */
+/** The `file_info` of the video file once its scenes are analyzed, as extraction returns it. */
 const fileInfoWithScenes = {
   id: FILE_ID,
   name: 'test-scenes-recipe.mp4',
@@ -392,7 +252,7 @@ const fileScenesAlreadyThere = {
 /** Assembled: POST /file/{file_id}/scenes on an audio file (400). */
 const fileScenesNoPicture = { status: 'error', error_code: NO_PICTURE.error, ...NO_PICTURE };
 
-/** POST /analyze/file or /extract/file with include_scenes on a file whose scenes were never asked for (409). */
+/** POST /extract/file with include_scenes on a file whose scenes were never asked for (409). */
 const scenesNotAvailable = {
   status: 'error',
   error: 'scenes_not_available',
@@ -420,70 +280,17 @@ const scenesFailed = {
   scenes_error: NO_PICTURE,
 };
 
-const fileAnalysisUsage = {
-  charges: [
-    { service_type: 'analysis_request', quantity: 1, credits: 1, tokens: { prompt_tokens: 3487, completion_tokens: 1306, total_tokens: 4793 } },
-  ],
-  total_credits: 1,
-};
-
-/** POST /analyze/file with include_scenes and a query, once the file has its scenes. */
-const analyzeFileWithScenes = {
-  status: 'success',
-  data: {
-    file_info: fileInfoWithScenes,
-    transcript: fileTranscript,
-    scenes: fileScenes,
-    frames_analyzed: 30,
-    transcript_analysis: {
-      summary: 'The video demonstrates how to make a creamy chicken salad (Patê de Frango Cremoso) by mixing shredded cooked chicken, mayonnaise, requeijão, carrots, corn, green olives, and herbs in a glass bowl.',
-      people: [],
-      places: [],
-      key_subjects: ['Patê de Frango Cremoso', 'creamy chicken salad', 'crackers'],
-      timestamp: 6,
-      relevant_text: '[Picture] A hand pours shredded cooked chicken from a red and white patterned bowl into the clear glass bowl.\nOn screen: FRANGO DESFIADO COZIDO 500 g',
-      query_answer: {
-        answer: 'Frango desfiado cozido – 500 g; Maionese – 300 g; Requeijão – 250 g; Cenoura ralada – 2 cenouras; Milho verde – 250 g; Azeitona verde – 250 g; Cheiro‑verde – a gosto.',
-        best_segment_index: 5,
-        relevant_segments: ['5:6', '9', '13', '14', '16', '18'],
-      },
-    },
-  },
-  usage: fileAnalysisUsage,
-};
-
-/** POST /analyze/file without include_scenes, before the scenes were asked for. */
-const analyzeFilePlain = {
-  status: 'success',
-  data: {
-    file_info: {
-      id: FILE_ID,
-      name: 'test-scenes-recipe.mp4',
-      size: 8492486,
-      type: 'video/mp4',
-      duration: 78.421433,
-      status: 'completed',
-      created_at: '2026-11-16T12:38:21.203Z',
-      updated_at: '2026-11-16T12:38:38.829Z',
-      has_transcript: true,
-    },
-    transcript: fileTranscript,
-    transcript_analysis: {
-      summary: 'A brief segment featuring music followed by a thank‑you expression.',
-      people: [],
-      places: [],
-      key_subjects: ['Music'],
-      timestamp: 0.0,
-      relevant_text: null,
-      query_answer: null,
-    },
-  },
-  usage: {
-    charges: [
-      { service_type: 'analysis_request', quantity: 1, credits: 1, tokens: { prompt_tokens: 812, completion_tokens: 303, total_tokens: 1115 } },
-    ],
-    total_credits: 1,
-  },
+/** The `file_info` of the video file before its scenes were asked for, as extraction returns it. */
+const fileInfoWithoutScenes = {
+  id: FILE_ID,
+  name: 'test-scenes-recipe.mp4',
+  size: 8492486,
+  type: 'video/mp4',
+  duration: 78.421433,
+  status: 'completed',
+  created_at: '2026-11-16T12:38:21.203Z',
+  updated_at: '2026-11-16T12:38:38.829Z',
+  has_transcript: true,
 };
 
 /** POST /extract/file with include_scenes, once the file has its scenes. */
@@ -509,19 +316,12 @@ const extractFileWithScenes = {
 
 module.exports = {
   VIDEO_URL,
-  QUESTION,
+  WHAT_TO_EXTRACT,
   FILE_ID,
   AUDIO_FILE_ID,
-  ANALYZE_TASK_ID,
   EXTRACT_TASK_ID,
   NO_PICTURE,
   videoInfo,
-  videoScenes,
-  analyzeVideoWithScenes,
-  analyzeVideoPlain,
-  analyzeAsyncSubmit,
-  analyzeAsyncProcessing,
-  analyzeAsyncCompleted,
   recipeSchema,
   extractedRecipe,
   extractVideoUsage,
@@ -539,7 +339,6 @@ module.exports = {
   scenesNotAvailable,
   scenesStillProcessing,
   scenesFailed,
-  analyzeFileWithScenes,
-  analyzeFilePlain,
+  fileInfoWithoutScenes,
   extractFileWithScenes,
 };
