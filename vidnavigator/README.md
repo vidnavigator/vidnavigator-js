@@ -939,7 +939,7 @@ if (usage) {
 }
 ```
 
-`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `frame_analysis`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*` and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived via a cache-hit sponsorship, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
+`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `frame_analysis`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*` and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
 
 ---
 
