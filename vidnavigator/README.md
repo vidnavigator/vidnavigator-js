@@ -1151,6 +1151,10 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text; with `include_scenes`, `frames_analyzed` and `scenes_error` |
 
+## What's new in 3.0.1
+
+- **`people`, `places` and `key_subjects` of search results can be read with `.name`.** The API sends them as lists of names (`["Sam Altman"]`), while the types promised objects, so `result.people[0].name` was `undefined`. `VideoSearchResult` and `FileSearchResult` now turn each name into `{ name }`, as the Python SDK does.
+
 ## What's new in 3.0.0
 
 **Breaking:** the analysis methods are removed, with the API endpoints they called. Ask the same questions with extraction, `extractVideoData()` / `vn.extractVideo()` for an online video and `extractFileData()` for an uploaded file, with `what_to_extract` in plain words and/or a JSON Schema. `include_scenes` works there too, and each value comes with the moments of the video it was taken from (`evidence`).
