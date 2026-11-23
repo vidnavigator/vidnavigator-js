@@ -4931,7 +4931,7 @@
     "/file/{file_id}/cancel": {
       "post": {
         "summary": "Cancel file processing",
-        "description": "Cancel an ongoing file upload/processing\n\nOnly a file whose `status` is `processing` can be cancelled, and only by the member who uploaded it.",
+        "description": "Cancel an ongoing file upload/processing\n\nOnly a file whose `status` is `processing` can be cancelled. Any member of the file's organization can cancel it.",
         "operationId": "cancelFileUpload",
         "tags": [
           "Files"
@@ -5161,7 +5161,7 @@
     "/file/{file_id}/delete": {
       "delete": {
         "summary": "Delete a file",
-        "description": "Delete a file and its associated data from the database and cloud storage\n\nOnly the member who uploaded the file can delete it.",
+        "description": "Delete a file and its associated data from the database and cloud storage\n\nAny member of the file's organization can delete it.",
         "operationId": "deleteFile",
         "tags": [
           "Files"
@@ -8830,7 +8830,7 @@
         }
       },
       "AccessDenied": {
-        "description": "Access denied: the plan of the API key does not include this endpoint, or the file belongs to another organization, or only the member who uploaded it may do this (`access_denied`); an application connected through OAuth tried to upload, change or delete (`insufficient_scope`).",
+        "description": "Access denied: the plan of the API key does not include this endpoint, or the file belongs to another organization (`access_denied`); an application connected through OAuth tried to upload, change or delete (`insufficient_scope`).",
         "content": {
           "application/json": {
             "schema": {
