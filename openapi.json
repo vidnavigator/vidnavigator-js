@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "VidNavigator Developer API",
-    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nCheck the documentation for the rate limits for each endpoint.\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe endpoints that transcribe a video or read its picture (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`, `/watch`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n| `POST /watch` | `POST /watch/async` | `GET /watch/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints \u2014 they have no duration cap. See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/api-reference/errors",
+    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\nEvery date in an answer is ISO 8601 in UTC, to the millisecond: `2026-11-23T00:06:04.123Z`.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nCheck the documentation for the rate limits for each endpoint.\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe endpoints that transcribe a video or read its picture (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`, `/watch`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n| `POST /watch` | `POST /watch/async` | `GET /watch/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints. They take videos of any length, except `POST /watch/async`, which takes up to 2 hours (any length for YouTube). See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/api-reference/errors",
     "version": "1.0.0",
     "contact": {
       "name": "VidNavigator Support",
@@ -116,7 +116,40 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Invalid request: no body (`request_body_required`), no `video_url` (`missing_parameter`), a URL this endpoint does not read (`wrong_endpoint`, `invalid_platform`, `unsupported_platform`), or a `language` that is not a 2-letter ISO code (`invalid_language`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "request_body_required",
+                        "missing_parameter",
+                        "wrong_endpoint",
+                        "invalid_platform",
+                        "unsupported_platform",
+                        "invalid_language"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/VideoNotFound"
@@ -135,6 +168,12 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -263,8 +302,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "request_body_required",
                         "missing_parameter",
-                        "invalid_parameter",
+                        "invalid_url",
+                        "unsupported_url",
                         "no_videos_found",
                         "video_too_long"
                       ]
@@ -291,6 +332,12 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -416,6 +463,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -503,6 +559,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -607,7 +672,8 @@
                         "invalid_parameter",
                         "invalid_url",
                         "no_videos_found",
-                        "video_too_long"
+                        "video_too_long",
+                        "unsupported_url"
                       ]
                     },
                     "message": {
@@ -643,7 +709,8 @@
                         "video_unavailable",
                         "video_not_yet_available",
                         "frames_not_available",
-                        "metadata_fetch_failed"
+                        "metadata_fetch_failed",
+                        "transcript_unavailable"
                       ]
                     },
                     "message": {
@@ -677,8 +744,7 @@
                       "type": "string",
                       "enum": [
                         "video_download_failed",
-                        "watch_failed",
-                        "watch_unavailable"
+                        "watch_failed"
                       ]
                     },
                     "message": {
@@ -705,9 +771,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "video_download_failed",
-                        "watch_failed",
-                        "watch_unavailable"
+                        "watch_unavailable",
+                        "service_unavailable"
                       ]
                     },
                     "message": {
@@ -717,6 +782,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -852,6 +920,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -939,6 +1016,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1036,7 +1122,36 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "The upload was cancelled (`file_cancelled`), or the file has no picture to read, an audio file (`frames_not_available`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "file_cancelled",
+                        "frames_not_available"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "403": {
             "$ref": "#/components/responses/AccessDenied"
@@ -1063,7 +1178,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "watch_unavailable"
+                        "watch_unavailable",
+                        "service_unavailable"
                       ]
                     },
                     "message": {
@@ -1073,6 +1189,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -1361,7 +1480,7 @@
             "$ref": "#/components/responses/GeoRestricted"
           },
           "404": {
-            "description": "`transcript_not_available`: the video has no transcript and auto-transcription is disabled or not supported (YouTube). `video_unavailable` / `video_not_yet_available`: the video is gone or not published yet. `transcript_unavailable` / `metadata_fetch_failed`: we could not reach the video after our retries (may be temporary).",
+            "description": "The video is gone (`video_unavailable`) or not published yet (`video_not_yet_available`); it has no transcript and `transcribe` is false, or it has no speech (`transcript_not_available`, \"No speech was found in this video.\"); its transcript or metadata could not be read (`transcript_unavailable`, `metadata_fetch_failed`). With `include_scenes`, a video without a transcript is extracted from its scenes instead, and `transcript_error` says why.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1424,6 +1543,9 @@
           },
           "503": {
             "$ref": "#/components/responses/SystemOverload"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -1480,6 +1602,187 @@
                     "format": "uri",
                     "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/webhooks",
                     "example": "https://example.com/hooks/vidnavigator"
+                  }
+                }
+              }
+            },
+            "application/yaml": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "video_url"
+                ],
+                "properties": {
+                  "video_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL of the video to extract data from",
+                    "example": "https://www.tiktok.com/@user/video/1234567890"
+                  },
+                  "schema": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
+                  },
+                  "what_to_extract": {
+                    "type": "string",
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
+                  },
+                  "transcribe": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available."
+                  },
+                  "include_scenes": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, the scenes of the video (what it shows, with the text readable on screen) are read as well, as `POST /watch` does, and used together with the transcript."
+                  },
+                  "webhook_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/webhooks",
+                    "example": "https://example.com/hooks/vidnavigator"
+                  }
+                }
+              }
+            },
+            "application/x-yaml": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "video_url"
+                ],
+                "properties": {
+                  "video_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL of the video to extract data from",
+                    "example": "https://www.tiktok.com/@user/video/1234567890"
+                  },
+                  "schema": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
+                  },
+                  "what_to_extract": {
+                    "type": "string",
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
+                  },
+                  "transcribe": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available."
+                  },
+                  "include_scenes": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, the scenes of the video (what it shows, with the text readable on screen) are read as well, as `POST /watch` does, and used together with the transcript."
+                  },
+                  "webhook_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/webhooks",
+                    "example": "https://example.com/hooks/vidnavigator"
+                  }
+                }
+              }
+            },
+            "text/yaml": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "video_url"
+                ],
+                "properties": {
+                  "video_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL of the video to extract data from",
+                    "example": "https://www.tiktok.com/@user/video/1234567890"
+                  },
+                  "schema": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ExtractionSchema"
+                      }
+                    ],
+                    "description": "The fields to extract, as a standard JSON Schema. Optional when `what_to_extract` is given: the schema is then written from it and returned in the answer."
+                  },
+                  "what_to_extract": {
+                    "type": "string",
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
+                  },
+                  "transcribe": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available."
+                  },
+                  "include_scenes": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, the scenes of the video (what it shows, with the text readable on screen) are read as well, as `POST /watch` does, and used together with the transcript."
+                  },
+                  "webhook_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Where to POST the result when the job finishes. Overrides the account-level default configured in Studio \u2192 API. Pass an empty string to opt this job out of that default. Must be a publicly reachable https URL \u2014 private, loopback and link-local hosts are rejected. See https://docs.vidnavigator.com/webhooks",
+                    "example": "https://example.com/hooks/vidnavigator"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "video_url"
+                ],
+                "properties": {
+                  "video_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL of the video to extract data from",
+                    "example": "https://youtube.com/watch?v=dQw4w9WgXcQ"
+                  },
+                  "schema": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "JSON or YAML schema file. The file may contain either the schema object directly or a full extraction request object with a nested `schema` property. The schema is a standard JSON Schema. Optional when `what_to_extract` is given."
+                  },
+                  "what_to_extract": {
+                    "type": "string",
+                    "description": "What to extract, in plain words. With a `schema`, it guides the extraction. Without one, the schema is written from it (the same text gives the same fields) and returned as `schema` beside `data`, so it can be passed in later requests.",
+                    "example": "Every product shown or mentioned, with its price and whether it is sponsored"
+                  },
+                  "transcribe": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "When true, automatically transcribes the video audio if no platform transcript is available. Applies to every platform, YouTube included."
+                  },
+                  "include_scenes": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, the scenes of the video (what it shows, with the text readable on screen) are read as well, as `POST /watch` does, and used together with the transcript."
+                  },
+                  "include_usage": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, includes token usage statistics in the response"
+                  },
+                  "webhook_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Where to send the result when the job ends."
                   }
                 }
               }
@@ -1589,6 +1892,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1676,6 +1988,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1939,7 +2260,6 @@
                       "type": "string",
                       "enum": [
                         "file_not_found",
-                        "video_unavailable",
                         "transcript_not_available"
                       ]
                     },
@@ -2005,10 +2325,44 @@
             }
           },
           "500": {
-            "$ref": "#/components/responses/InternalServerError"
+            "description": "Processing failed (`extraction_failed`, `plan_compilation_failed`, `schema_generation_failed`, `internal_server_error`). Charges are reverted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "extraction_failed",
+                        "plan_compilation_failed",
+                        "schema_generation_failed",
+                        "internal_server_error"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "503": {
             "$ref": "#/components/responses/SystemOverload"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -2323,6 +2677,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -2390,6 +2753,14 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/TikTokSearchTask"
+                    },
+                    "usage": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/UsageBlock"
+                        }
+                      ],
+                      "description": "With `include_usage=true`, once `task_status` is `completed`: the charges of the task."
                     }
                   }
                 }
@@ -2400,10 +2771,47 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "404": {
-            "description": "Task not found, expired, or not owned by this user."
+            "description": "Task not found, expired, or not owned by this user (`task_not_found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "task_not_found"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -2436,7 +2844,8 @@
                     "type": "integer",
                     "minimum": 1,
                     "description": "Maximum number of matching videos to return. The scraper stops paginating once this is reached.",
-                    "example": 100
+                    "example": 100,
+                    "maximum": 5000
                   },
                   "after_datetime": {
                     "type": "string",
@@ -2558,6 +2967,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -2628,6 +3046,14 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/TikTokProfileTask"
+                    },
+                    "usage": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/UsageBlock"
+                        }
+                      ],
+                      "description": "With `include_usage=true`, once `task_status` is `completed`: the charges of the task."
                     }
                   }
                 }
@@ -2690,6 +3116,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -2928,6 +3363,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -2995,6 +3439,14 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/TikTokLiveSearchTask"
+                    },
+                    "usage": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/UsageBlock"
+                        }
+                      ],
+                      "description": "With `include_usage=true`, once `task_status` is `completed`: the charges of the task."
                     }
                   }
                 }
@@ -3005,10 +3457,47 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "404": {
-            "description": "Task not found, expired, or not owned by this user."
+            "description": "Task not found, expired, or not owned by this user (`task_not_found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "task_not_found"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -3201,6 +3690,15 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -3230,7 +3728,7 @@
                   },
                   "use_enhanced_search": {
                     "type": "boolean",
-                    "default": true,
+                    "default": false,
                     "description": "Whether to use enhanced search"
                   },
                   "start_year": {
@@ -3380,6 +3878,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -3411,6 +3918,11 @@
                     "type": "boolean",
                     "default": false,
                     "description": "When true, the scenes of the post's video and of the quoted post's video (what they show, with the text readable on screen) are read as well, as `POST /watch` does, and used together with their transcripts. A video without speech is then summarized from its scenes."
+                  },
+                  "include_usage": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, the answer carries a `usage` block with the charges of the request."
                   }
                 }
               }
@@ -3558,6 +4070,9 @@
                           }
                         }
                       }
+                    },
+                    "usage": {
+                      "$ref": "#/components/schemas/UsageBlock"
                     }
                   }
                 }
@@ -3617,6 +4132,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -3736,6 +4260,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -3823,6 +4356,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -3907,7 +4449,9 @@
                       "type": "string",
                       "enum": [
                         "processing",
-                        "completed"
+                        "completed",
+                        "failed",
+                        "cancelled"
                       ]
                     },
                     "message": {
@@ -3971,19 +4515,83 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "413": {
-            "$ref": "#/components/responses/StorageQuotaExceeded"
+            "description": "No file sent (`missing_file`, `no_selected_file`) or a file type that is not accepted (`invalid_file_type`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "missing_file",
+                        "no_selected_file",
+                        "invalid_file_type"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "402": {
-            "$ref": "#/components/responses/PaymentRequired"
+            "$ref": "#/components/responses/StorageQuotaExceeded"
           },
           "500": {
-            "$ref": "#/components/responses/InternalServerError"
+            "description": "The upload could not be stored or recorded (`upload_failed`, `database_error`, `file_not_found`, `internal_server_error`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "upload_failed",
+                        "database_error",
+                        "file_not_found",
+                        "internal_server_error"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "503": {
             "$ref": "#/components/responses/StorageNotConfigured"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
           }
         }
       }
@@ -3991,7 +4599,7 @@
     "/files": {
       "get": {
         "summary": "Get list of uploaded files",
-        "description": "Retrieve a paginated list of all files uploaded by the authenticated user. Supports filtering by status and namespace.",
+        "description": "Retrieve a paginated list of all files of the API key's organization. Supports filtering by status and namespace.",
         "operationId": "getFiles",
         "tags": [
           "Files"
@@ -4088,6 +4696,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4167,6 +4784,12 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4227,7 +4850,35 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "The file is neither failed nor cancelled (`not_retryable`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "not_retryable"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "403": {
             "$ref": "#/components/responses/AccessDenied"
@@ -4236,7 +4887,43 @@
             "$ref": "#/components/responses/FileNotFound"
           },
           "500": {
-            "$ref": "#/components/responses/InternalServerError"
+            "description": "The retry could not be started (`database_error`, `processing_error`, `internal_server_error`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "database_error",
+                        "processing_error",
+                        "internal_server_error"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4244,7 +4931,7 @@
     "/file/{file_id}/cancel": {
       "post": {
         "summary": "Cancel file processing",
-        "description": "Cancel an ongoing file upload/processing",
+        "description": "Cancel an ongoing file upload/processing\n\nOnly a file whose `status` is `processing` can be cancelled, and only by the member who uploaded it.",
         "operationId": "cancelFileUpload",
         "tags": [
           "Files"
@@ -4301,6 +4988,43 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "400": {
+            "description": "The file is not processing any more (`file_not_processing`): only a file still being processed can be cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "file_not_processing"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -4361,10 +5085,75 @@
             "$ref": "#/components/responses/AccessDenied"
           },
           "404": {
-            "$ref": "#/components/responses/FileNotFound"
+            "description": "The file does not exist (`file_not_found`) or has no stored media (`storage_path_missing`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "file_not_found",
+                        "storage_path_missing"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "500": {
-            "$ref": "#/components/responses/InternalServerError"
+            "description": "The download link could not be made (`url_generation_failed`, `storage_not_configured`, `internal_server_error`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "url_generation_failed",
+                        "storage_not_configured",
+                        "internal_server_error"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4372,7 +5161,7 @@
     "/file/{file_id}/delete": {
       "delete": {
         "summary": "Delete a file",
-        "description": "Delete a file and its associated data from the database and cloud storage",
+        "description": "Delete a file and its associated data from the database and cloud storage\n\nOnly the member who uploaded the file can delete it.",
         "operationId": "deleteFile",
         "tags": [
           "Files"
@@ -4429,6 +5218,12 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4468,6 +5263,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       },
@@ -4521,10 +5325,50 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "No `name` (`missing_parameter`), an empty or reserved name (`invalid_parameter`), a name already used (`namespace_exists`), or the 5-namespace limit reached (`namespace_limit_reached`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "missing_parameter",
+                        "invalid_parameter",
+                        "namespace_exists",
+                        "namespace_limit_reached"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4591,10 +5435,80 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "No `name` (`missing_parameter`), an empty name or the `default` namespace (`invalid_parameter`), or a name already used (`namespace_exists`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "missing_parameter",
+                        "invalid_parameter",
+                        "namespace_exists"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "404": {
+            "description": "No such namespace (`namespace_not_found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "namespace_not_found"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -4639,10 +5553,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "404": {
-            "description": "Namespace not found or could not be deleted",
+            "description": "The `default` namespace cannot be deleted (`invalid_parameter`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4654,6 +5565,47 @@
                         "error"
                       ]
                     },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_parameter"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such namespace (`namespace_not_found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "namespace_not_found"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
                     "message": {
                       "type": "string"
                     }
@@ -4664,6 +5616,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4754,13 +5715,50 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "No `namespace_ids` (`missing_parameter`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "missing_parameter"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "description": "Same as `error`."
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/FileNotFound"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4799,6 +5797,12 @@
                     "type": "boolean",
                     "default": false,
                     "description": "When true, the response includes the `usage` block of this request."
+                  },
+                  "top_k": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "description": "How many files to return, at most 10 (and at most the plan's limit). Defaults to the largest."
                   }
                 }
               }
@@ -4855,6 +5859,15 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/AccessDenied"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4923,6 +5936,12 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -4997,7 +6016,7 @@
     "schemas": {
       "UsageBlock": {
         "type": "object",
-        "description": "Per-call usage, returned only when the request sets `include_usage=true`: the charges of this request, one entry per `service_type`, and the total credits deducted. A waived charge carries `waived: true` and `credits_saved`, with a top-level `waived.credits_saved` summary.\n\nFor endpoints that run an AI analysis (`/extract/video`, `/extract/file`, `/youtube/search`), the `analysis_request` entry carries a nested `tokens` object with the request's token counts.",
+        "description": "Per-call usage, returned only when the request sets `include_usage=true`: the charges of this request, one entry per `service_type`, the total credits deducted, and the credits left on the account. A waived charge carries `waived: true` and `credits_saved`, with a top-level `waived.credits_saved` summary.\n\nFor endpoints that run an AI analysis (`/extract/video`, `/extract/file`, `/youtube/search`), the `analysis_request` entry carries a nested `tokens` object with the request's token counts.",
         "properties": {
           "charges": {
             "type": "array",
@@ -5068,6 +6087,10 @@
                 "description": "Total credits waived on this request."
               }
             }
+          },
+          "credits_remaining_after": {
+            "type": "number",
+            "description": "Credits left on the account once this request is charged: the month's credits plus the purchased ones. Absent on plans without a credit limit."
           }
         }
       },
@@ -5911,7 +6934,7 @@
                 "$ref": "#/components/schemas/UsageBlock"
               }
             ],
-            "description": "Per-call usage, only present when include_usage=true: the charges (charges, total_credits, credits_remaining_after, waived) and the token counts (prompt_tokens, completion_tokens, total_tokens) in one object."
+            "description": "Returned when `include_usage=true`: the charges of the request, with the token counts of the extraction on the `analysis_request` entry."
           },
           "schema": {
             "allOf": [
@@ -7215,6 +8238,23 @@
               },
               "error": {
                 "$ref": "#/components/schemas/AsyncJobError"
+              },
+              "schema": {
+                "type": "object",
+                "description": "extract_video events: the JSON Schema written from `what_to_extract`, when the request had no `schema`."
+              },
+              "evidence": {
+                "$ref": "#/components/schemas/ExtractionEvidence"
+              },
+              "frames_analyzed": {
+                "type": "integer",
+                "description": "With `include_scenes`: the frames read."
+              },
+              "scenes_error": {
+                "$ref": "#/components/schemas/AsyncJobError"
+              },
+              "transcript_error": {
+                "$ref": "#/components/schemas/AsyncJobError"
               }
             }
           }
@@ -7710,7 +8750,7 @@
     },
     "responses": {
       "ContentRestricted": {
-        "description": "Content restricted - requires login or age verification",
+        "description": "The content requires a login or an age check (`content_restricted`), or the API key may not use this endpoint (`access_denied`, `insufficient_scope`).",
         "content": {
           "application/json": {
             "schema": {
@@ -7725,7 +8765,9 @@
                 "error": {
                   "type": "string",
                   "enum": [
-                    "content_restricted"
+                    "content_restricted",
+                    "access_denied",
+                    "insufficient_scope"
                   ]
                 },
                 "message": {
@@ -7788,7 +8830,7 @@
         }
       },
       "AccessDenied": {
-        "description": "Access denied - insufficient permissions",
+        "description": "Access denied: the plan of the API key does not include this endpoint, or the file belongs to another organization, or only the member who uploaded it may do this (`access_denied`); an application connected through OAuth tried to upload, change or delete (`insufficient_scope`).",
         "content": {
           "application/json": {
             "schema": {
@@ -7803,7 +8845,8 @@
                 "error": {
                   "type": "string",
                   "enum": [
-                    "access_denied"
+                    "access_denied",
+                    "insufficient_scope"
                   ]
                 },
                 "message": {
@@ -7961,7 +9004,7 @@
         }
       },
       "StorageQuotaExceeded": {
-        "description": "Storage quota exceeded",
+        "description": "The storage of the plan is full (`storage_quota_exceeded`).",
         "content": {
           "application/json": {
             "schema": {
@@ -7988,7 +9031,7 @@
         }
       },
       "StorageNotConfigured": {
-        "description": "File storage not configured on server",
+        "description": "File storage is unavailable (`storage_not_configured`), or the service is briefly unable to authenticate or bill the request (`service_unavailable`).",
         "content": {
           "application/json": {
             "schema": {
@@ -8003,7 +9046,8 @@
                 "error": {
                   "type": "string",
                   "enum": [
-                    "storage_not_configured"
+                    "storage_not_configured",
+                    "service_unavailable"
                   ]
                 },
                 "message": {
@@ -8015,7 +9059,7 @@
         }
       },
       "SystemOverload": {
-        "description": "System is temporarily overloaded",
+        "description": "Temporarily overloaded (`system_overload`, with `retry_after_seconds`), or briefly unable to authenticate or bill the request (`service_unavailable`, with a `Retry-After` header). Retry later.",
         "content": {
           "application/json": {
             "schema": {
@@ -8030,7 +9074,8 @@
                 "error": {
                   "type": "string",
                   "enum": [
-                    "system_overload"
+                    "system_overload",
+                    "service_unavailable"
                   ]
                 },
                 "message": {
@@ -8075,6 +9120,78 @@
                   "type": "string"
                 }
               }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "The API key is missing (`missing_api_key`), unknown or malformed (`invalid_api_key`), or deactivated (`api_key_deactivated`).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "error"
+                  ]
+                },
+                "error": {
+                  "type": "string",
+                  "enum": [
+                    "missing_api_key",
+                    "invalid_api_key",
+                    "api_key_deactivated"
+                  ]
+                },
+                "error_code": {
+                  "type": "string",
+                  "description": "Same as `error`."
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "The service is briefly unable to authenticate or bill the request (`service_unavailable`). Nothing was charged: retry after the `Retry-After` seconds.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "error"
+                  ]
+                },
+                "error": {
+                  "type": "string",
+                  "enum": [
+                    "service_unavailable"
+                  ]
+                },
+                "error_code": {
+                  "type": "string",
+                  "description": "Same as `error`."
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds to wait before retrying.",
+            "schema": {
+              "type": "integer"
             }
           }
         }
