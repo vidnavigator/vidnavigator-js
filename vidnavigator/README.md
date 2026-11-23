@@ -1068,7 +1068,7 @@ With `include_scenes: true`, the `TweetStatement` also has `frames_analyzed`, an
 | `searchVideos(payload)` | **Deprecated** — forwards to `searchYouTube()` |
 | `searchFiles(payload)` | Semantic search across uploaded files, with optional `namespace_ids` scope |
 
-**`searchYouTube` options:** `query` (required), `use_enhanced_search` (default `true`), `start_year` / `end_year` (only videos published in or after / in or before that year), `focus` (what comes first among the matches: `'relevance'` (default) \| `'recency'` \| `'popularity'` \| `'brevity'`), `duration` (maximum length in seconds; longer videos are left out), `max_results` (caps candidates analysed & cost; defaults to your plan ceiling), `include_usage`.
+**`searchYouTube` options:** `query` (required), `use_enhanced_search` (default `false`: the slower enhanced search runs only when you pass `true`), `start_year` / `end_year` (only videos published in or after / in or before that year), `focus` (what comes first among the matches: `'relevance'` (default) \| `'recency'` \| `'popularity'` \| `'brevity'`), `duration` (maximum length in seconds; longer videos are left out), `max_results` (caps candidates analysed & cost; defaults to your plan ceiling), `include_usage`.
 
 Results include `relevance_score`, `transcript_summary`, `people`, `places`, `key_subjects`, `query_answer`, `timestamps`, and `relevant_text`. If credits run out mid-search the API returns a partial result: `searchYouTube` surfaces it as `{ status: 'partial', error_code: 'insufficient_credits_video_search', results, usage? }` instead of throwing.
 
