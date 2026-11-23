@@ -7913,9 +7913,22 @@
             "nullable": true,
             "description": "HTTP status your endpoint returned on the last attempt."
           },
+          "last_error_code": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "redirect_refused",
+              "http_error",
+              "timeout",
+              "connection_failed",
+              "address_not_allowed"
+            ],
+            "description": "Why the last attempt failed. `redirect_refused`: your endpoint answered with a redirect, and webhooks do not follow redirects (use the final URL). `http_error`: your endpoint answered with an error status (see `response_status`). `timeout`: no answer within 10 seconds. `connection_failed`: we could not connect. `address_not_allowed`: the host does not resolve to a public address. Null when the last attempt succeeded."
+          },
           "last_error": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "A sentence describing `last_error_code`."
           },
           "delivered_at": {
             "type": "string",
