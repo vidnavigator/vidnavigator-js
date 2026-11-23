@@ -196,6 +196,7 @@ assert(sdk.AnalysisResult === undefined, 'AnalysisResult is not exported (analys
   });
   assert(ub.waived && ub.waived.credits_saved === 5, 'UsageBlock.waived.credits_saved');
   assert(ub.charges[0].waived === true, 'UsageCharge.waived');
+  assert(ub.credits_remaining_after === undefined, 'UsageBlock.credits_remaining_after is undefined when absent (no credit limit)');
   const tokens = ub.analysis_tokens;
   assert(tokens && tokens.total_tokens === 15, 'UsageBlock.analysis_tokens falls back to flat token fields');
 }
@@ -581,6 +582,48 @@ assert(sdk.AnalysisResult === undefined, 'AnalysisResult is not exported (analys
   assert(ud.channelsIndexed.limit === 10, 'CapacityMetric.limit');
   assert(ud.storage instanceof sdk.StorageUsage, 'UsageData.storage is StorageUsage');
   assert(ud.generatedAt instanceof Date, 'UsageData.generatedAt is Date');
+}
+
+// --- UsageData: every counter /usage sends, and an account without a subscription period ---
+const USAGE_DATA_JSON = {
+  usage_period: { start: '2026-11-01T00:00:00Z', end: '2026-12-01T00:00:00Z' },
+  billing_period: { start: '2026-11-01T00:00:00Z', end: '2026-12-01T00:00:00Z', interval: 'month' },
+  subscription: { plan_id: 'p1', plan_name: 'Pro', interval: 'month', status: 'active', cancel_at_period_end: false },
+  credits: { monthly_total: 1000, monthly_remaining: 500, purchased: 0 },
+  usage: {
+    standard_request: { used: 3 },
+    residential_request: { used: 7 },
+    search_request: { used: 2 },
+    analysis_request: { used: 1 },
+    scene_analysis_hour: { used: 0.25, unit: 'hours' },
+    transcription_hour: { used: 0.5, unit: 'hours' },
+    frame_analysis: { used: 120, unit: 'frames' },
+  },
+  channels_indexed: { used: 0, limit: 10, remaining: 10, percentage: 0 },
+  storage: {
+    used_bytes: 0, used_formatted: '0 B',
+    limit_bytes: 1073741824, limit_formatted: '1 GB',
+    remaining_bytes: 1073741824, remaining_formatted: '1 GB', percentage: 0,
+  },
+  generated_at: '2026-11-23T12:00:00Z',
+};
+{
+  const ud = sdk.UsageData.fromJSON(USAGE_DATA_JSON);
+  assert(ud.usage.frameAnalysis instanceof sdk.ActivityCount && ud.usage.frameAnalysis.used === 120 && ud.usage.frameAnalysis.unit === 'frames', 'UsageData.usage.frameAnalysis');
+  assert(ud.usage.sceneAnalysisHour instanceof sdk.ActivityCount && ud.usage.sceneAnalysisHour.used === 0.25 && ud.usage.sceneAnalysisHour.unit === 'hours', 'UsageData.usage.sceneAnalysisHour');
+  assert(ud.usage.transcriptionHour.used === 0.5 && ud.usage.standardRequest.used === 3, 'UsageData.usage keeps the other counters');
+  assert(ud.usagePeriod.start instanceof Date && ud.usagePeriod.start.toISOString() === '2026-11-01T00:00:00.000Z', 'UsageData.usagePeriod.start is a Date');
+  assert(ud.billingPeriod.end instanceof Date && ud.billingPeriod.interval === 'month', 'UsageData.billingPeriod.end is a Date');
+
+  const noPeriod = sdk.UsageData.fromJSON({
+    ...USAGE_DATA_JSON,
+    usage_period: { start: null, end: null },
+    billing_period: { start: null, end: null, interval: null },
+    subscription: { plan_id: 'free', plan_name: 'Explorer', interval: null, status: null, cancel_at_period_end: null },
+  });
+  assert(noPeriod.usagePeriod.start === undefined && noPeriod.usagePeriod.end === undefined, 'UsageData: null usage_period dates are undefined, not 1970');
+  assert(noPeriod.billingPeriod.start === undefined && noPeriod.billingPeriod.end === undefined, 'UsageData: null billing_period dates are undefined, not 1970');
+  assert(noPeriod.subscription.planName === 'Explorer', 'UsageData without a subscription period still parses');
 }
 
 // --- VideoSearchResult ---
@@ -1992,6 +2035,11 @@ async function runErrorMappingTests() {
   nextError = axiosError(402, { status: 'partial', error_code: 'insufficient_credits_video_search', data: { results: [], query: 'q', total_found: 0 } });
   const partial = await client.searchYouTube({ query: 'q' });
   assert(partial.status === 'partial', 'searchYouTube 402 partial results still surface (not InsufficientCreditsError)');
+  assert(partial.error_code === 'insufficient_credits_video_search' && partial.query === 'q', 'searchYouTube partial result carries error_code and query');
+
+  nextError = axiosError(402, { status: 'error', error: 'limit_exceeded', error_code: 'insufficient_credits', message: 'Not enough credits.' });
+  const noCredits = await client.searchYouTube({ query: 'q' }).catch((err) => err);
+  assert(noCredits instanceof sdk.PaymentRequiredError, 'searchYouTube 402 with status error still throws PaymentRequiredError');
 
   nextError = axiosError(503, { status: 'error', error: 'system_overload', message: 'Busy', retry_after_seconds: 12 });
   const overload = await client.tiktokSearch('ai').catch((err) => err);
@@ -2077,7 +2125,22 @@ async function runLiveRoomTests() {
   assert(seen[0] === 120000 && seen[1] === 300000 && seen[2] === undefined, `LIVE room timeout raised, never lowered (${seen})`);
 }
 
+async function runUsageTests() {
+  const client = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
+  client.request = async (method, url) => {
+    assert(method === 'GET' && url === '/usage', 'getUsage calls GET /usage');
+    return {
+      status: 'success',
+      data: { ...USAGE_DATA_JSON, usage_period: { start: null, end: null }, billing_period: { start: null, end: null, interval: null } },
+    };
+  };
+  const usage = await client.getUsage();
+  assert(usage.usage.sceneAnalysisHour.used === 0.25 && usage.usage.frameAnalysis.used === 120, 'getUsage returns frameAnalysis and sceneAnalysisHour');
+  assert(usage.usagePeriod.start === undefined && usage.billingPeriod.end === undefined, 'getUsage: null period dates are undefined');
+}
+
 runClientMethodTests()
+  .then(runUsageTests)
   .then(runLiveRoomTests)
   .then(runOperationTests)
   .then(runWatchTests)

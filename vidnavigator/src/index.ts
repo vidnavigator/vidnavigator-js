@@ -71,7 +71,7 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '3.0.1';
+export const SDK_VERSION = '3.0.2';
 
 /**
  * A LIVE room usually answers in 1-5 s, up to ~30 s when the API has to open a TikTok page, and two
