@@ -51,6 +51,7 @@ export class UsageCharge {
 export interface UsageBlockJSON {
   charges?: UsageChargeJSON[];
   total_credits?: number;
+  /** Credits left on the account (monthly + purchased) after this request's charges. Absent on plans without a credit limit. */
   credits_remaining_after?: number;
   waived?: { credits_saved: number };
   /** Legacy flat token fields. Some /extract/* responses may still echo these. */
@@ -70,6 +71,10 @@ export interface UsageBlockJSON {
 export class UsageBlock {
   charges: UsageCharge[];
   total_credits?: number;
+  /**
+   * Credits left on the account (monthly + purchased) after this request's charges.
+   * `undefined` on plans without a credit limit, where the API leaves it out.
+   */
   credits_remaining_after?: number;
   waived?: { credits_saved: number };
   /** Legacy flat token fields, only present on some /extract/* responses. */
@@ -231,13 +236,14 @@ export class StorageUsage {
 export type PlanInterval = 'month' | 'year';
 
 export interface UsageDataJSON {
+  /** `start` and `end` are null when the account has no subscription period. */
   usage_period: {
-    start: string;
-    end: string;
+    start: string | null;
+    end: string | null;
   };
   billing_period: {
-    start: string;
-    end: string;
+    start: string | null;
+    end: string | null;
     interval: PlanInterval;
   };
   subscription: {
@@ -253,12 +259,22 @@ export interface UsageDataJSON {
     residential_request?: ActivityCountJSON;
     search_request?: ActivityCountJSON;
     analysis_request?: ActivityCountJSON;
+    /** Hours of video whose scenes were analyzed (`unit: 'hours'`). */
+    scene_analysis_hour?: ActivityCountJSON;
     transcription_hour?: ActivityCountJSON;
+    /** Frames analyzed by `watch` and by `include_scenes` (`unit: 'frames'`). */
+    frame_analysis?: ActivityCountJSON;
+    /** @deprecated Legacy counters below: the API no longer sends them. */
     video_scene_analyses?: ActivityCountJSON;
+    /** @deprecated */
     video_transcripts?: ActivityCountJSON;
+    /** @deprecated */
     youtube_transcripts?: ActivityCountJSON;
+    /** @deprecated */
     video_searches?: ActivityCountJSON;
+    /** @deprecated */
     video_analyses?: ActivityCountJSON;
+    /** @deprecated */
     video_uploads?: ActivityCountJSON;
   };
   channels_indexed: CapacityMetricJSON;
@@ -266,14 +282,21 @@ export interface UsageDataJSON {
   generated_at: string;
 }
 
+/** A date of the API, or `undefined` when it sent null (never `new Date(null)`, which is 1970). */
+function optionalDate(value: string | null | undefined): Date | undefined {
+  return value ? new Date(value) : undefined;
+}
+
 export class UsageData {
+  /** `start` and `end` are `undefined` when the account has no subscription period. */
   public usagePeriod: {
-    start: Date;
-    end: Date;
+    start: Date | undefined;
+    end: Date | undefined;
   };
+  /** `start` and `end` are `undefined` when the account has no subscription period. */
   public billingPeriod: {
-    start: Date;
-    end: Date;
+    start: Date | undefined;
+    end: Date | undefined;
     interval: PlanInterval;
   };
   public subscription: {
@@ -289,12 +312,22 @@ export class UsageData {
     residentialRequest?: ActivityCount;
     searchRequest?: ActivityCount;
     analysisRequest?: ActivityCount;
+    /** Hours of video whose scenes were analyzed. */
+    sceneAnalysisHour?: ActivityCount;
     transcriptionHour?: ActivityCount;
+    /** Frames analyzed by `watch` and by `include_scenes`. */
+    frameAnalysis?: ActivityCount;
+    /** @deprecated Legacy counters below: the API no longer sends them, so they stay undefined. */
     videoSceneAnalyses?: ActivityCount;
+    /** @deprecated */
     videoTranscripts?: ActivityCount;
+    /** @deprecated */
     youtubeTranscripts?: ActivityCount;
+    /** @deprecated */
     videoSearches?: ActivityCount;
+    /** @deprecated */
     videoAnalyses?: ActivityCount;
+    /** @deprecated */
     videoUploads?: ActivityCount;
   };
   public channelsIndexed: CapacityMetric;
@@ -303,13 +336,13 @@ export class UsageData {
 
   constructor(data: UsageDataJSON) {
     this.usagePeriod = {
-      start: new Date(data.usage_period.start),
-      end: new Date(data.usage_period.end),
+      start: optionalDate(data.usage_period?.start),
+      end: optionalDate(data.usage_period?.end),
     };
     this.billingPeriod = {
-      start: new Date(data.billing_period.start),
-      end: new Date(data.billing_period.end),
-      interval: data.billing_period.interval,
+      start: optionalDate(data.billing_period?.start),
+      end: optionalDate(data.billing_period?.end),
+      interval: data.billing_period?.interval,
     };
     this.subscription = {
       planId: data.subscription.plan_id,
@@ -324,7 +357,9 @@ export class UsageData {
       residentialRequest: data.usage.residential_request ? ActivityCount.fromJSON(data.usage.residential_request) : undefined,
       searchRequest: data.usage.search_request ? ActivityCount.fromJSON(data.usage.search_request) : undefined,
       analysisRequest: data.usage.analysis_request ? ActivityCount.fromJSON(data.usage.analysis_request) : undefined,
+      sceneAnalysisHour: data.usage.scene_analysis_hour ? ActivityCount.fromJSON(data.usage.scene_analysis_hour) : undefined,
       transcriptionHour: data.usage.transcription_hour ? ActivityCount.fromJSON(data.usage.transcription_hour) : undefined,
+      frameAnalysis: data.usage.frame_analysis ? ActivityCount.fromJSON(data.usage.frame_analysis) : undefined,
       videoSceneAnalyses: data.usage.video_scene_analyses ? ActivityCount.fromJSON(data.usage.video_scene_analyses) : undefined,
       videoTranscripts: data.usage.video_transcripts ? ActivityCount.fromJSON(data.usage.video_transcripts) : undefined,
       youtubeTranscripts: data.usage.youtube_transcripts ? ActivityCount.fromJSON(data.usage.youtube_transcripts) : undefined,

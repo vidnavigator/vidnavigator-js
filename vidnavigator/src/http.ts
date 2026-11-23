@@ -43,6 +43,9 @@ export function buildApiError(status: number, data: any, fallbackMessage?: strin
     case 401:
       return new AuthenticationError(message, status, errorCode, errorMessage, details);
     case 402:
+      if (errorCode === 'storage_quota_exceeded') {
+        return new StorageQuotaExceededError(message, status, errorCode, errorMessage, details);
+      }
       if (errorCode === 'limit_exceeded') {
         return new InsufficientCreditsError(message, status, errorCode, errorMessage, details);
       }

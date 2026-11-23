@@ -923,7 +923,8 @@ export interface TikTokLiveSearchStats {
   pages_fetched?: number;
   /**
    * Distinct rooms TikTok returned, including any past `max_results`. For information:
-   * billing follows `results_count` (1 `residential_request` per 30, minimum 1 per search).
+   * billing follows `results_count` (1 `residential_request` per 30, minimum 1 per search)
+   * and `pages_fetched` (at least 1 per 5).
    */
   rooms_fetched?: number;
   results_count?: number;

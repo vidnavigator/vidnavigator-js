@@ -563,7 +563,7 @@ for (const room of task.results) {
 - Each room has the same `id`, `url`, `author` and `stats` fields as a keyword search result, plus `started_at` (a `Date`), `stats.viewers` / `stats.total_viewers`, `hashtags` (the `#tags` of the title), `category` (the LIVE's category on TikTok, e.g. `'Gaming'`) and `game_tags`.
 - `stream_urls` holds `flv` and `hls` URLs keyed by quality (`origin`, `uhd`, `hd`, `sd`, `ld`), `default_quality`, an `audio_only` stream and `expires_at`. The URLs play while the LIVE is on. They are returned by default; pass `include_stream_urls: false` to leave them out. Not every LIVE offers HLS, so `hls` can be empty.
 - `country` defaults to `'us'`. Results keep TikTok's ranking; a keyword with no LIVE room in that country at that moment completes with zero results.
-- Billing: 1 `residential_request` per 30 rooms returned (`task.stats.results_count`), minimum 1 per search.
+- Billing: 1 `residential_request` per 30 rooms returned (`task.stats.results_count`), minimum 1 per search and 1 per 5 TikTok pages read (`task.stats.pages_fetched`).
 
 ### 6c. TikTok LIVE room (sync)
 
@@ -907,9 +907,14 @@ const usage = await vn.getUsage();
 console.log(`Credits remaining: ${usage.credits.monthly_remaining}`);
 console.log(`Transcription hours used: ${usage.usage.transcriptionHour?.used}`);
 console.log(`Standard requests used: ${usage.usage.standardRequest?.used}`);
+console.log(`Frames analyzed: ${usage.usage.frameAnalysis?.used}`);
+console.log(`Scene analysis hours: ${usage.usage.sceneAnalysisHour?.used}`);
 console.log(`Storage: ${usage.storage.usedFormatted} / ${usage.storage.limitFormatted}`);
 console.log(`Channels indexed: ${usage.channelsIndexed.used} / ${usage.channelsIndexed.limit}`);
+console.log(`Period ends: ${usage.billingPeriod.end?.toISOString() ?? 'no subscription period'}`);
 ```
+
+`usage.usage` has one counter per meter: `standardRequest`, `residentialRequest`, `searchRequest`, `analysisRequest`, `sceneAnalysisHour`, `transcriptionHour` and `frameAnalysis`. The older `videoTranscripts`, `youtubeTranscripts`, `videoSearches`, `videoAnalyses`, `videoSceneAnalyses` and `videoUploads` are deprecated: the API no longer sends them. `usagePeriod` and `billingPeriod` have `start` and `end` as `Date`s, or `undefined` when the account has no subscription period.
 
 ### Per-call usage
 
@@ -925,7 +930,7 @@ const { usage } = await vn.getTranscript({
 
 if (usage) {
   console.log(usage.total_credits);            // net credits deducted by this request
-  console.log(usage.credits_remaining_after);  // balance after the request (when provided)
+  console.log(usage.credits_remaining_after);  // credits left after the request (undefined without a credit limit)
 
   // Every meter that fired, consolidated to one entry per service_type:
   for (const charge of usage.charges) {
@@ -938,6 +943,8 @@ if (usage) {
   console.log(tokens?.total_tokens);
 }
 ```
+
+`credits_remaining_after` is the number of credits left on the account (monthly + purchased) after this request's charges. It is `undefined` on plans without a credit limit, where the API leaves it out.
 
 `service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `frame_analysis`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*` and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
 
@@ -1061,7 +1068,7 @@ With `include_scenes: true`, the `TweetStatement` also has `frames_analyzed`, an
 | `searchVideos(payload)` | **Deprecated** — forwards to `searchYouTube()` |
 | `searchFiles(payload)` | Semantic search across uploaded files, with optional `namespace_ids` scope |
 
-**`searchYouTube` options:** `query` (required), `use_enhanced_search` (default `true`), `start_year` / `end_year` (only videos published in or after / in or before that year), `focus` (what comes first among the matches: `'relevance'` (default) \| `'recency'` \| `'popularity'` \| `'brevity'`), `duration` (maximum length in seconds; longer videos are left out), `max_results` (caps candidates analysed & cost; defaults to your plan ceiling), `include_usage`.
+**`searchYouTube` options:** `query` (required), `use_enhanced_search` (default `false`: the slower enhanced search runs only when you pass `true`), `start_year` / `end_year` (only videos published in or after / in or before that year), `focus` (what comes first among the matches: `'relevance'` (default) \| `'recency'` \| `'popularity'` \| `'brevity'`), `duration` (maximum length in seconds; longer videos are left out), `max_results` (caps candidates analysed & cost; defaults to your plan ceiling), `include_usage`.
 
 Results include `relevance_score`, `transcript_summary`, `people`, `places`, `key_subjects`, `query_answer`, `timestamps`, and `relevant_text`. If credits run out mid-search the API returns a partial result: `searchYouTube` surfaces it as `{ status: 'partial', error_code: 'insufficient_credits_video_search', results, usage? }` instead of throwing.
 
@@ -1105,7 +1112,7 @@ try {
 | `AccessDeniedError` | 403 | Insufficient permissions |
 | `NotFoundError` | 404 | Resource does not exist, or a job's `task_id` is unknown or expired (`task_not_found`) |
 | `ScenesNotAvailableError` | 409 | `include_scenes` was asked on an uploaded file that has no scenes to read (`scenes_not_available`). Has `scenes_status` (`'none'`, `'processing'` or `'failed'`) and, when failed, `scenes_error` |
-| `StorageQuotaExceededError` | 413 | Storage quota exceeded |
+| `StorageQuotaExceededError` | 402 | The storage of the plan is full (`storage_quota_exceeded`, on upload). A `PaymentRequiredError`, from 3.0.2 |
 | `RateLimitExceededError` | 429 | Too many requests |
 | `TooManyActiveJobsError` | 429 | A job could not start: too many of your jobs are already running (`too_many_active_jobs`). Extends `RateLimitExceededError` |
 | `GeoRestrictedError` | 451 | Content unavailable in your region |
@@ -1146,10 +1153,15 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokSearchTask` | TikTok keyword search task with status, results, pagination, `download_url`, `error`, `webhook`; `stats` shows the `sort_by` / `published_within` the search ran with |
 | `TikTokSearchResult` | Normalized TikTok keyword result, including `published_at` as a `Date` and integer counters |
 | `TikTokLiveSearchSubmission` | Async TikTok LIVE search submission: `task_id`, query, country, `include_stream_urls`, expiry, `webhook_url` |
-| `TikTokLiveSearchTask` | TikTok LIVE search task with status, rooms, pagination, `download_url`, `error`, `webhook`; `stats.rooms_fetched` is what is billed |
+| `TikTokLiveSearchTask` | TikTok LIVE search task with status, rooms, pagination, `download_url`, `error`, `webhook`; billing follows `stats.results_count` and `stats.pages_fetched` |
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text; with `include_scenes`, `frames_analyzed` and `scenes_error` |
+
+## What's new in 3.0.2
+
+- **`getUsage()` keeps every counter:** `usage.frameAnalysis` and `usage.sceneAnalysisHour` were dropped; they are now there with the other counters. The legacy `videoTranscripts`, `youtubeTranscripts`, `videoSearches`, `videoAnalyses`, `videoSceneAnalyses` and `videoUploads` counters, which the API no longer sends, are marked deprecated.
+- **`getUsage()` on an account without a subscription period:** the API sends `null` dates then, which became January 1, 1970. `usagePeriod.start`, `usagePeriod.end`, `billingPeriod.start` and `billingPeriod.end` are now `undefined` instead.
 
 ## What's new in 3.0.1
 
