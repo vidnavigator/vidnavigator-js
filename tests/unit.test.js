@@ -614,6 +614,24 @@ assert(sdk.AnalysisResult === undefined, 'AnalysisResult is not exported (analys
   assert(fsr.namespaces[0].name === 'Meetings', 'FileSearchResult.namespaces[0].name');
 }
 
+// --- people / places / key_subjects arrive as names: read with `.name` ---
+{
+  const vsr = sdk.VideoSearchResult.fromJSON({
+    title: 'SR', url: 'https://x.com',
+    people: ['Sam Altman'], places: ['San Francisco'], key_subjects: ['AI regulation'],
+  });
+  assert(vsr.people[0].name === 'Sam Altman', 'VideoSearchResult.people: a name becomes { name }');
+  assert(vsr.places[0].name === 'San Francisco', 'VideoSearchResult.places: a name becomes { name }');
+  assert(vsr.key_subjects[0].name === 'AI regulation', 'VideoSearchResult.key_subjects: a name becomes { name }');
+  const fsr = sdk.FileSearchResult.fromJSON({
+    id: 'f1', name: 'call.mp3', status: 'completed',
+    people: ['John Smith', { name: 'Ann', context: 'host' }], key_subjects: ['Pricing'],
+  });
+  assert(fsr.people[0].name === 'John Smith' && fsr.people[1].context === 'host', 'FileSearchResult.people: names and objects');
+  assert(fsr.key_subjects[0].name === 'Pricing', 'FileSearchResult.key_subjects: a name becomes { name }');
+  assert(fsr.places === undefined, 'FileSearchResult.places absent stays undefined');
+}
+
 // --- Error classes ---
 {
   const errors = [

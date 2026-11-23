@@ -3565,7 +3565,7 @@
             }
           },
           "400": {
-            "description": "Missing or invalid tweet_id",
+            "description": "Missing or invalid `tweet_id` (`missing_parameter`, `request_body_required`), or a video that needs speech-to-text and is longer than 10 minutes (`video_too_long`): use `POST /tweet/statement/async` for it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5717,45 +5717,34 @@
           },
           "people": {
             "type": "array",
+            "description": "The people mentioned, by name.",
             "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "context": {
-                  "type": "string"
-                }
-              }
-            }
+              "type": "string"
+            },
+            "example": [
+              "Sam Altman"
+            ]
           },
           "places": {
             "type": "array",
+            "description": "The places mentioned, by name.",
             "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "context": {
-                  "type": "string"
-                }
-              }
-            }
+              "type": "string"
+            },
+            "example": [
+              "San Francisco"
+            ]
           },
           "key_subjects": {
             "type": "array",
+            "description": "The main subjects, in a few words each.",
             "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "description": {
-                  "type": "string"
-                }
-              }
-            }
+              "type": "string"
+            },
+            "example": [
+              "AI regulation",
+              "Model pricing"
+            ]
           },
           "timestamp": {
             "type": "number"
@@ -6027,45 +6016,34 @@
           },
           "people": {
             "type": "array",
+            "description": "The people mentioned, by name.",
             "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "context": {
-                  "type": "string"
-                }
-              }
-            }
+              "type": "string"
+            },
+            "example": [
+              "Sam Altman"
+            ]
           },
           "places": {
             "type": "array",
+            "description": "The places mentioned, by name.",
             "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "context": {
-                  "type": "string"
-                }
-              }
-            }
+              "type": "string"
+            },
+            "example": [
+              "San Francisco"
+            ]
           },
           "key_subjects": {
             "type": "array",
+            "description": "The main subjects, in a few words each.",
             "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "description": {
-                  "type": "string"
-                }
-              }
-            }
+              "type": "string"
+            },
+            "example": [
+              "AI regulation",
+              "Model pricing"
+            ]
           }
         }
       },

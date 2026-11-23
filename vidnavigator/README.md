@@ -939,7 +939,7 @@ if (usage) {
 }
 ```
 
-`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `frame_analysis`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*` and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived via a cache-hit sponsorship, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
+`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `frame_analysis`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*` and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
 
 ---
 
@@ -1150,6 +1150,10 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text; with `include_scenes`, `frames_analyzed` and `scenes_error` |
+
+## What's new in 3.0.1
+
+- **`people`, `places` and `key_subjects` of search results can be read with `.name`.** The API sends them as lists of names (`["Sam Altman"]`), while the types promised objects, so `result.people[0].name` was `undefined`. `VideoSearchResult` and `FileSearchResult` now turn each name into `{ name }`, as the Python SDK does.
 
 ## What's new in 3.0.0
 
