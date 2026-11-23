@@ -704,6 +704,7 @@ const USAGE_DATA_JSON = {
   const soe = new sdk.SystemOverloadError('msg', 503, 'system_overload', 'busy', null, 30);
   assert(soe.retry_after_seconds === 30, 'SystemOverloadError.retry_after_seconds');
   assert(new sdk.InsufficientCreditsError('m') instanceof sdk.PaymentRequiredError, 'InsufficientCreditsError extends PaymentRequiredError');
+  assert(new sdk.StorageQuotaExceededError('m') instanceof sdk.PaymentRequiredError, 'StorageQuotaExceededError extends PaymentRequiredError');
   assert(new sdk.TooManyActiveJobsError('m') instanceof sdk.RateLimitExceededError, 'TooManyActiveJobsError extends RateLimitExceededError');
   const sna = new sdk.ScenesNotAvailableError('msg', 409, 'scenes_not_available', 'No scenes yet', null, 'failed', { error: 'frames_not_available', message: 'No picture' });
   assert(sna.scenes_status === 'failed' && sna.scenes_error.error === 'frames_not_available', 'ScenesNotAvailableError.scenes_status / scenes_error');
@@ -1686,6 +1687,7 @@ async function runWatchTests() {
     [{ error: 'frames_not_available', message: 'No picture to read', http_status: 404 }, sdk.NotFoundError],
     [{ error: 'video_too_long', message: 'Too long', http_status: 400 }, sdk.BadRequestError],
     [{ error: 'limit_exceeded', message: 'Out of credits mid-job', http_status: 402 }, sdk.InsufficientCreditsError],
+    [{ error: 'storage_quota_exceeded', message: 'Storage full', http_status: 402 }, sdk.StorageQuotaExceededError],
   ];
   for (const [error, Cls] of failures) {
     api.plan([{ task_status: 'processing' }, { task_status: 'failed', result: null, error }]);

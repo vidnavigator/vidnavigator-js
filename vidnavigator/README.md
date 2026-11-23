@@ -1112,7 +1112,7 @@ try {
 | `AccessDeniedError` | 403 | Insufficient permissions |
 | `NotFoundError` | 404 | Resource does not exist, or a job's `task_id` is unknown or expired (`task_not_found`) |
 | `ScenesNotAvailableError` | 409 | `include_scenes` was asked on an uploaded file that has no scenes to read (`scenes_not_available`). Has `scenes_status` (`'none'`, `'processing'` or `'failed'`) and, when failed, `scenes_error` |
-| `StorageQuotaExceededError` | 413 | Storage quota exceeded |
+| `StorageQuotaExceededError` | 402 | The storage of the plan is full (`storage_quota_exceeded`, on upload). A `PaymentRequiredError`, from 3.0.2 |
 | `RateLimitExceededError` | 429 | Too many requests |
 | `TooManyActiveJobsError` | 429 | A job could not start: too many of your jobs are already running (`too_many_active_jobs`). Extends `RateLimitExceededError` |
 | `GeoRestrictedError` | 451 | Content unavailable in your region |

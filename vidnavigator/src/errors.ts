@@ -114,9 +114,11 @@ export class ServerError extends VidNavigatorError {
 }
 
 /**
- * Raised when storage quota is exceeded (HTTP 413).
+ * Raised when the storage of the plan is full: HTTP 402 `storage_quota_exceeded`
+ * on `uploadFile` (413 is still mapped here too). A `PaymentRequiredError`, so
+ * code that catches that one keeps working.
  */
-export class StorageQuotaExceededError extends VidNavigatorError {
+export class StorageQuotaExceededError extends PaymentRequiredError {
   constructor(message: string, status_code?: number, error_code?: string, error_message?: string, details?: any) {
     super(message, status_code, error_code, error_message, details);
     this.name = 'StorageQuotaExceededError';
