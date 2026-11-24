@@ -81,7 +81,7 @@ export class NotFoundError extends VidNavigatorError {
 }
 
 /**
- * Raised when rate limits are exceeded (HTTP 429).
+ * Raised on HTTP 429: too many requests (`rate_limit_exceeded`). Wait `Retry-After` seconds.
  */
 export class RateLimitExceededError extends VidNavigatorError {
     constructor(message: string, status_code?: number, error_code?: string, error_message?: string, details?: any) {
@@ -92,7 +92,8 @@ export class RateLimitExceededError extends VidNavigatorError {
 }
 
 /**
- * Raised when usage limits are exceeded and payment is required (HTTP 402).
+ * Raised on HTTP 402. Catch it for any 402, or one of its subclasses to know which:
+ * `InsufficientCreditsError` (not enough credits) or `StorageQuotaExceededError` (the storage of the plan is full).
  */
 export class PaymentRequiredError extends VidNavigatorError {
     constructor(message: string, status_code?: number, error_code?: string, error_message?: string, details?: any) {
@@ -159,9 +160,9 @@ export class SystemOverloadError extends VidNavigatorError {
 } 
 
 /**
- * Raised when an async job could not be submitted because the account is out of credits
- * (HTTP 402, `limit_exceeded`), e.g. less than 60 seconds of transcription credit left.
- * No task is created. Extends `PaymentRequiredError`.
+ * Raised when the account does not have enough credits: HTTP 402 `insufficient_credits`.
+ * Thrown at job submit time (no task is created; e.g. less than 60 seconds of transcription
+ * credit left) and by `result()` when a job runs out of credits. Extends `PaymentRequiredError`.
  */
 export class InsufficientCreditsError extends PaymentRequiredError {
   constructor(message: string, status_code?: number, error_code?: string, error_message?: string, details?: any) {

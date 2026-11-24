@@ -420,13 +420,13 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "limit_exceeded"
+                        "insufficient_credits"
                       ]
                     },
                     "error_code": {
                       "type": "string",
                       "enum": [
-                        "limit_exceeded"
+                        "insufficient_credits"
                       ]
                     },
                     "message": {
@@ -892,13 +892,13 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "limit_exceeded"
+                        "insufficient_credits"
                       ]
                     },
                     "error_code": {
                       "type": "string",
                       "enum": [
-                        "limit_exceeded"
+                        "insufficient_credits"
                       ]
                     },
                     "message": {
@@ -1882,13 +1882,13 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "limit_exceeded"
+                        "insufficient_credits"
                       ]
                     },
                     "error_code": {
                       "type": "string",
                       "enum": [
-                        "limit_exceeded"
+                        "insufficient_credits"
                       ]
                     },
                     "message": {
@@ -4289,13 +4289,13 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "limit_exceeded"
+                        "insufficient_credits"
                       ]
                     },
                     "error_code": {
                       "type": "string",
                       "enum": [
-                        "limit_exceeded"
+                        "insufficient_credits"
                       ]
                     },
                     "message": {
@@ -6225,7 +6225,7 @@
       },
       "PaymentRequiredBody": {
         "type": "object",
-        "description": "Standard 402 error body returned when the user has insufficient credits.",
+        "description": "402 body when the account does not have enough credits (`insufficient_credits`).",
         "properties": {
           "status": {
             "type": "string",
@@ -6236,13 +6236,13 @@
           "error": {
             "type": "string",
             "enum": [
-              "limit_exceeded"
+              "insufficient_credits"
             ]
           },
           "error_code": {
             "type": "string",
             "enum": [
-              "limit_exceeded"
+              "insufficient_credits"
             ]
           },
           "message": {
@@ -9086,7 +9086,7 @@
         }
       },
       "PaymentRequired": {
-        "description": "Usage limit exceeded - upgrade required",
+        "description": "Not enough credits (`insufficient_credits`): upgrade the plan or buy credits.",
         "content": {
           "application/json": {
             "schema": {
@@ -9101,7 +9101,7 @@
                 "error": {
                   "type": "string",
                   "enum": [
-                    "limit_exceeded"
+                    "insufficient_credits"
                   ]
                 },
                 "message": {

@@ -1686,7 +1686,7 @@ async function runWatchTests() {
   const failures = [
     [{ error: 'frames_not_available', message: 'No picture to read', http_status: 404 }, sdk.NotFoundError],
     [{ error: 'video_too_long', message: 'Too long', http_status: 400 }, sdk.BadRequestError],
-    [{ error: 'limit_exceeded', message: 'Out of credits mid-job', http_status: 402 }, sdk.InsufficientCreditsError],
+    [{ error: 'insufficient_credits', message: 'Out of credits mid-job', http_status: 402 }, sdk.InsufficientCreditsError],
     [{ error: 'storage_quota_exceeded', message: 'Storage full', http_status: 402 }, sdk.StorageQuotaExceededError],
   ];
   for (const [error, Cls] of failures) {
@@ -1937,7 +1937,7 @@ async function runPollingTests() {
   // Failures: read the `error` object; typed by http_status; carry task_id.
   const failures = [
     [{ error: 'invalid_parameter', message: 'Bad URL', http_status: 400 }, sdk.BadRequestError],
-    [{ error: 'limit_exceeded', message: 'Out of credits mid-job', http_status: 402 }, sdk.InsufficientCreditsError],
+    [{ error: 'insufficient_credits', message: 'Out of credits mid-job', http_status: 402 }, sdk.InsufficientCreditsError],
     [{ error: 'video_not_found', message: 'Gone', http_status: 404 }, sdk.NotFoundError],
     [{ error: 'geo_restricted', message: 'Blocked', http_status: 451 }, sdk.GeoRestrictedError],
     [{ error: 'internal_error', message: 'Boom', http_status: 500 }, sdk.ServerError],
@@ -1998,7 +1998,8 @@ async function runErrorMappingTests() {
   client.client.request = async () => { throw nextError; };
   client.client.post = async () => { throw nextError; };
 
-  const limit402 = { status: 'error', error: 'limit_exceeded', error_code: 'limit_exceeded', message: 'Less than 60 seconds of transcription credit left' };
+  const limit402 = { status: 'error', error: 'insufficient_credits', error_code: 'insufficient_credits', message: 'Less than 60 seconds of transcription credit left' };
+  const legacy402 = { status: 'error', error: 'limit_exceeded', error_code: 'limit_exceeded', message: 'Not enough credits (code before November 2026)' };
   const jobs429 = { status: 'error', error: 'too_many_active_jobs', message: 'Too many jobs already running' };
   const cases = [
     ['transcribe submit 402', () => client.transcribe('https://x.com/v'), 402, limit402, sdk.InsufficientCreditsError],
@@ -2006,6 +2007,9 @@ async function runErrorMappingTests() {
     ['tweetStatement submit 402', () => client.tweetStatement('1'), 402, limit402, sdk.InsufficientCreditsError],
     ['tiktokProfile submit 402', () => client.tiktokProfile('https://www.tiktok.com/@a'), 402, limit402, sdk.InsufficientCreditsError],
     ['watch submit 402', () => client.watch('https://x.com/v'), 402, limit402, sdk.InsufficientCreditsError],
+    ['transcribe submit 402 (limit_exceeded)', () => client.transcribe('https://x.com/v'), 402, legacy402, sdk.InsufficientCreditsError],
+    ['getTranscript 402', () => client.getTranscript({ video_url: 'x' }), 402, limit402, sdk.InsufficientCreditsError],
+    ['uploadFile 402 (storage full)', () => client.uploadFile({ filePath: __filename }), 402, { status: 'error', error: 'storage_quota_exceeded', message: 'Storage full' }, sdk.StorageQuotaExceededError],
     ['watch.submit 429', () => client.watch.submit('https://x.com/v'), 429, jobs429, sdk.TooManyActiveJobsError],
     ['watch submit 400 (unknown detail)', () => client.watch({ video_url: 'https://x.com/v', detail: 'extreme' }), 400, { status: 'error', error: 'invalid_parameter', message: 'detail must be one of: low, auto, high' }, sdk.BadRequestError],
     ['transcribe submit 429', () => client.transcribe('https://x.com/v'), 429, jobs429, sdk.TooManyActiveJobsError],
@@ -2039,9 +2043,9 @@ async function runErrorMappingTests() {
   assert(partial.status === 'partial', 'searchYouTube 402 partial results still surface (not InsufficientCreditsError)');
   assert(partial.error_code === 'insufficient_credits_video_search' && partial.query === 'q', 'searchYouTube partial result carries error_code and query');
 
-  nextError = axiosError(402, { status: 'error', error: 'limit_exceeded', error_code: 'insufficient_credits', message: 'Not enough credits.' });
+  nextError = axiosError(402, { status: 'error', error: 'insufficient_credits', error_code: 'insufficient_credits', message: 'Not enough credits.' });
   const noCredits = await client.searchYouTube({ query: 'q' }).catch((err) => err);
-  assert(noCredits instanceof sdk.PaymentRequiredError, 'searchYouTube 402 with status error still throws PaymentRequiredError');
+  assert(noCredits instanceof sdk.InsufficientCreditsError && noCredits instanceof sdk.PaymentRequiredError, 'searchYouTube 402 with status error throws InsufficientCreditsError, a PaymentRequiredError');
 
   nextError = axiosError(503, { status: 'error', error: 'system_overload', message: 'Busy', retry_after_seconds: 12 });
   const overload = await client.tiktokSearch('ai').catch((err) => err);

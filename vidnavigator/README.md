@@ -310,7 +310,7 @@ try {
 **When a job fails**, `result()` and the one-liners throw an error built from the job's `error` details (`error`, `message`, `http_status`), using the same error class as any other API error, for example `NotFoundError` for a missing video. The error also carries the `task_id`. `wait()` returns the failed task instead, with `task.error` set.
 
 **When a job can't start**, submitting throws right away and no job is created:
-- `InsufficientCreditsError` (402): not enough credits (for transcription, less than 60 seconds left). A job can also be accepted and then run out of credits while it runs; `result()` then throws the same `InsufficientCreditsError`, so handle it in both places.
+- `InsufficientCreditsError` (402, `insufficient_credits`): not enough credits (for transcription, less than 60 seconds left). A job can also be accepted and then run out of credits while it runs; `result()` then throws the same `InsufficientCreditsError`, so handle it in both places.
 - `TooManyActiveJobsError` (429): too many of your jobs are already running. Wait for some to finish and retry.
 
 **Large batches.** Your account can only have a limited number of jobs running at once, so `Promise.all` over hundreds of URLs will hit `TooManyActiveJobsError`. Keep a fixed number in flight and retry when the limit is reached:
@@ -1107,13 +1107,13 @@ try {
 |-------------|:----:|------|
 | `BadRequestError` | 400 | Invalid parameters |
 | `AuthenticationError` | 401 | Invalid or missing API key |
-| `PaymentRequiredError` | 402 | Credit limit reached |
-| `InsufficientCreditsError` | 402 | A job could not start: not enough credits (`limit_exceeded`). Extends `PaymentRequiredError` |
+| `PaymentRequiredError` | 402 | Any 402. Its two subclasses, `InsufficientCreditsError` and `StorageQuotaExceededError`, say which one |
+| `InsufficientCreditsError` | 402 | Not enough credits (`insufficient_credits`), at job submit or while a job runs. Extends `PaymentRequiredError` |
 | `AccessDeniedError` | 403 | Insufficient permissions |
 | `NotFoundError` | 404 | Resource does not exist, or a job's `task_id` is unknown or expired (`task_not_found`) |
 | `ScenesNotAvailableError` | 409 | `include_scenes` was asked on an uploaded file that has no scenes to read (`scenes_not_available`). Has `scenes_status` (`'none'`, `'processing'` or `'failed'`) and, when failed, `scenes_error` |
 | `StorageQuotaExceededError` | 402 | The storage of the plan is full (`storage_quota_exceeded`, on upload). A `PaymentRequiredError`, from 3.0.2 |
-| `RateLimitExceededError` | 429 | Too many requests |
+| `RateLimitExceededError` | 429 | Too many requests (`rate_limit_exceeded`); wait `Retry-After` seconds |
 | `TooManyActiveJobsError` | 429 | A job could not start: too many of your jobs are already running (`too_many_active_jobs`). Extends `RateLimitExceededError` |
 | `GeoRestrictedError` | 451 | Content unavailable in your region |
 | `ServerError` | 5xx | Unexpected server error |
@@ -1157,6 +1157,11 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text; with `include_scenes`, `frames_analyzed` and `scenes_error` |
+
+## What's new in 3.1.0
+
+- **The API's code for "not enough credits" is now `insufficient_credits`** (it was `limit_exceeded`). Both codes throw `InsufficientCreditsError`, a `PaymentRequiredError`; `error_code` carries the code the API sent.
+- **The same error classes as the Python SDK** (3.1.0): `PaymentRequiredError`, `InsufficientCreditsError`, `StorageQuotaExceededError`, `RateLimitExceededError`, `TooManyActiveJobsError`, `TaskTimeoutError`.
 
 ## What's new in 3.0.2
 
