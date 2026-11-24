@@ -16,7 +16,7 @@ export interface PollableTask {
 }
 
 export interface PollOptions<TTask = PollableTask> {
-  /** Delay between polls once the task has run for 10 seconds, in ms. Default 3000. Polling is free and not rate-limited. */
+  /** Delay between polls once the task has run for 10 seconds, in ms. Default 3000. Polling is free and has its own, higher rate limit. */
   intervalMs?: number;
   /** Poll every second during the first 10 seconds so short clips return fast. Default true. */
   fastStart?: boolean;

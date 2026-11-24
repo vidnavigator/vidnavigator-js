@@ -301,7 +301,7 @@ try {
 | Option | Default | |
 |---|---|---|
 | `timeoutMs` | 30 minutes | Stop waiting and throw `TaskTimeoutError` (with `task_id`). `0` waits forever |
-| `intervalMs` | `3000` | Time between checks. Checking costs no credits and is not rate-limited |
+| `intervalMs` | `3000` | Time between checks. Checking costs no credits; polls have their own, higher [rate limit](https://docs.vidnavigator.com/api-reference/rate-limiting) |
 | `fastStart` | `true` | Check every second for the first 10 seconds, so short clips return quickly |
 | `signal` | | An `AbortSignal` to stop waiting early (the job keeps running) |
 | `onPoll` | | Called with each task snapshot, e.g. for progress logs |
