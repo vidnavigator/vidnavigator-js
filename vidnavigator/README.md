@@ -301,7 +301,7 @@ try {
 | Option | Default | |
 |---|---|---|
 | `timeoutMs` | 30 minutes | Stop waiting and throw `TaskTimeoutError` (with `task_id`). `0` waits forever |
-| `intervalMs` | `3000` | Time between checks. Checking costs no credits; polls have their own, higher [rate limit](https://docs.vidnavigator.com/api-reference/rate-limiting) |
+| `intervalMs` | `3000` | Time between checks. Checking costs no credits. Rate limits: see the [documentation](https://docs.vidnavigator.com/api-reference/rate-limiting) |
 | `fastStart` | `true` | Check every second for the first 10 seconds, so short clips return quickly |
 | `signal` | | An `AbortSignal` to stop waiting early (the job keeps running) |
 | `onPoll` | | Called with each task snapshot, e.g. for progress logs |
@@ -1113,7 +1113,7 @@ try {
 | `NotFoundError` | 404 | Resource does not exist, or a job's `task_id` is unknown or expired (`task_not_found`) |
 | `ScenesNotAvailableError` | 409 | `include_scenes` was asked on an uploaded file that has no scenes to read (`scenes_not_available`). Has `scenes_status` (`'none'`, `'processing'` or `'failed'`) and, when failed, `scenes_error` |
 | `StorageQuotaExceededError` | 402 | The storage of the plan is full (`storage_quota_exceeded`, on upload). A `PaymentRequiredError`, from 3.0.2 |
-| `RateLimitExceededError` | 429 | Too many requests (`rate_limit_exceeded`); wait `Retry-After` seconds |
+| `RateLimitExceededError` | 429 | Too many requests (`rate_limit_exceeded`): see the [rate limits](https://docs.vidnavigator.com/api-reference/rate-limiting) |
 | `TooManyActiveJobsError` | 429 | A job could not start: too many of your jobs are already running (`too_many_active_jobs`). Extends `RateLimitExceededError` |
 | `GeoRestrictedError` | 451 | Content unavailable in your region |
 | `ServerError` | 5xx | Unexpected server error |
