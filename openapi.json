@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "VidNavigator Developer API",
-    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\nEvery date in an answer is ISO 8601 in UTC, to the millisecond: `2026-11-23T00:06:04.123Z`.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nCheck the documentation for the rate limits for each endpoint.\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe endpoints that transcribe a video or read its picture (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`, `/watch`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n| `POST /watch` | `POST /watch/async` | `GET /watch/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints. They take videos of any length, except `POST /watch/async`, which takes up to 2 hours (any length for YouTube). See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/api-reference/errors",
+    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\nEvery date in an answer is ISO 8601 in UTC, to the millisecond: `2026-11-23T00:06:04.123Z`.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nBy default, each organization may make 300 calls a minute, and 1,200 polls a minute of async jobs (`GET .../{task_id}`), counted apart. Past that the API answers `429 rate_limit_exceeded` with a `Retry-After` header. Calls without an API key are limited to 60 a minute per IP address. See https://docs.vidnavigator.com/api-reference/rate-limiting\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe endpoints that transcribe a video or read its picture (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`, `/watch`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n| `POST /watch` | `POST /watch/async` | `GET /watch/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints. They take videos of any length, except `POST /watch/async`, which takes up to 2 hours (any length for YouTube). See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/api-reference/errors",
     "version": "1.0.0",
     "contact": {
       "name": "VidNavigator Support",
@@ -338,6 +338,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -435,7 +438,7 @@
             }
           },
           "429": {
-            "description": "Too many jobs already running for this account.",
+            "description": "Too many jobs already running for this account (`too_many_active_jobs`), or too many requests for the organization (`rate_limit_exceeded`, see `Retry-After`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -450,13 +453,22 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "too_many_active_jobs"
+                        "too_many_active_jobs",
+                        "rate_limit_exceeded"
                       ]
                     },
                     "message": {
                       "type": "string"
                     }
                   }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "With `rate_limit_exceeded`: seconds to wait before the next call.",
+                "schema": {
+                  "type": "integer"
                 }
               }
             }
@@ -568,6 +580,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -785,6 +800,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -892,7 +910,7 @@
             }
           },
           "429": {
-            "description": "Too many jobs already running for this account.",
+            "description": "Too many jobs already running for this account (`too_many_active_jobs`), or too many requests for the organization (`rate_limit_exceeded`, see `Retry-After`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -907,13 +925,22 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "too_many_active_jobs"
+                        "too_many_active_jobs",
+                        "rate_limit_exceeded"
                       ]
                     },
                     "message": {
                       "type": "string"
                     }
                   }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "With `rate_limit_exceeded`: seconds to wait before the next call.",
+                "schema": {
+                  "type": "integer"
                 }
               }
             }
@@ -1025,6 +1052,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -1192,6 +1222,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -1546,6 +1579,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -1864,7 +1900,7 @@
             }
           },
           "429": {
-            "description": "Too many jobs already running for this account.",
+            "description": "Too many jobs already running for this account (`too_many_active_jobs`), or too many requests for the organization (`rate_limit_exceeded`, see `Retry-After`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1879,13 +1915,22 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "too_many_active_jobs"
+                        "too_many_active_jobs",
+                        "rate_limit_exceeded"
                       ]
                     },
                     "message": {
                       "type": "string"
                     }
                   }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "With `rate_limit_exceeded`: seconds to wait before the next call.",
+                "schema": {
+                  "type": "integer"
                 }
               }
             }
@@ -1997,6 +2042,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -2363,6 +2411,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -2686,6 +2737,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -2812,6 +2866,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -2976,6 +3033,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -3125,6 +3185,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -3372,6 +3435,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -3498,6 +3564,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -3887,6 +3956,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -4141,6 +4213,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -4232,7 +4307,7 @@
             }
           },
           "429": {
-            "description": "Too many jobs already running for this account.",
+            "description": "Too many jobs already running for this account (`too_many_active_jobs`), or too many requests for the organization (`rate_limit_exceeded`, see `Retry-After`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4247,13 +4322,22 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "too_many_active_jobs"
+                        "too_many_active_jobs",
+                        "rate_limit_exceeded"
                       ]
                     },
                     "message": {
                       "type": "string"
                     }
                   }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "With `rate_limit_exceeded`: seconds to wait before the next call.",
+                "schema": {
+                  "type": "integer"
                 }
               }
             }
@@ -4365,6 +4449,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -4592,6 +4679,9 @@
           },
           "403": {
             "$ref": "#/components/responses/AccessDenied"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -4705,6 +4795,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -4790,6 +4883,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -4924,6 +5020,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -5025,6 +5124,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -5154,6 +5256,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -5224,6 +5329,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -5272,6 +5380,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       },
@@ -5369,6 +5480,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -5509,6 +5623,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       },
@@ -5625,6 +5742,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -5759,6 +5879,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -5868,6 +5991,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -5942,6 +6068,9 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
           }
         }
       }
@@ -8984,7 +9113,27 @@
         }
       },
       "RateLimitExceeded": {
-        "description": "Rate limit exceeded",
+        "description": "Too many requests for the organization of the API key (`rate_limit_exceeded`): by default 300 calls a minute, and 1,200 polls a minute of async jobs (`GET .../{task_id}`), counted apart. Wait `Retry-After` seconds before the next call.",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds to wait before the next call.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "X-RateLimit-Limit": {
+            "description": "Calls a minute allowed for this kind of call.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "X-RateLimit-Remaining": {
+            "description": "Calls left in the current minute: 0 on this answer.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
         "content": {
           "application/json": {
             "schema": {
@@ -8999,17 +9148,19 @@
                 "error": {
                   "type": "string",
                   "enum": [
-                    "limit_exceeded"
+                    "rate_limit_exceeded"
                   ]
+                },
+                "error_code": {
+                  "type": "string",
+                  "description": "Same as `error`."
                 },
                 "message": {
                   "type": "string"
                 },
-                "usage": {
-                  "type": "integer"
-                },
-                "limit": {
-                  "type": "integer"
+                "retry_after_seconds": {
+                  "type": "integer",
+                  "description": "Same as the `Retry-After` header."
                 }
               }
             }
