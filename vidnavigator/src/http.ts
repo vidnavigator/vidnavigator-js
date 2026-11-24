@@ -18,6 +18,9 @@ import {
   ScenesNotAvailableError,
 } from './errors';
 
+/** The codes of a 402 for "not enough credits"; `limit_exceeded` is the API's code for it before November 2026. */
+const INSUFFICIENT_CREDITS_CODES = new Set(['insufficient_credits', 'insufficient_credits_video_search', 'limit_exceeded']);
+
 export function parseApiErrorPayload(data: any): {
   errorCode?: string;
   errorMessage?: string;
@@ -46,7 +49,7 @@ export function buildApiError(status: number, data: any, fallbackMessage?: strin
       if (errorCode === 'storage_quota_exceeded') {
         return new StorageQuotaExceededError(message, status, errorCode, errorMessage, details);
       }
-      if (errorCode === 'limit_exceeded') {
+      if (errorCode && INSUFFICIENT_CREDITS_CODES.has(errorCode)) {
         return new InsufficientCreditsError(message, status, errorCode, errorMessage, details);
       }
       return new PaymentRequiredError(message, status, errorCode, errorMessage, details);
