@@ -590,7 +590,7 @@
     "/watch": {
       "post": {
         "summary": "Watch a video",
-        "description": "Read what a video **shows**, along with what it says. The response holds the video's transcript and a list of `scenes`: for each one, when it starts and ends, a description of the picture, and the text readable on screen.\n\nWorks with every platform `POST /transcript` and `POST /transcribe` support. The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise. On YouTube the video is watched with its sound, so a person or a brand that is introduced on screen or by voice is named in the scenes.\n\n**Options:**\n- `detail`: how closely the picture is followed (`low`, `auto`, `high`). The number of frames depends on the video at every level: few on a fixed shot, many on a fast-cut clip\n- `include_transcript=false`: the scenes only\n- `transcript_text=true`: the transcript as a single text string instead of segments\n\nA video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned.\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous. For media longer than ~10 minutes use `POST /watch/async` instead, which returns a `task_id` and can call your webhook when it finishes. See https://docs.vidnavigator.com/guides/async-jobs\n\nVideos longer than 2 hours are not accepted (`video_too_long`), except on YouTube.",
+        "description": "Read what a video **shows**, along with what it says. The response holds the video's transcript and a list of `scenes`: for each one, when it starts and ends, a description of the picture, and the text readable on screen.\n\nWorks with every platform `POST /transcript` and `POST /transcribe` support. The transcript comes from the platform's captions when it has them, and from speech-to-text otherwise. On YouTube the video is watched with its sound, so a person or a brand that is introduced on screen or by voice is named in the scenes.\n\n**Options:**\n- `include_transcript=false`: the scenes only\n- `transcript_text=true`: the transcript as a single text string instead of segments\n\nA video without speech is not an error: `transcript` is empty, `transcript_error` says why, and the scenes are returned.\n\nSet `include_usage=true` to receive the `usage` block.\n\n**Long videos:** this endpoint is synchronous. For media longer than ~10 minutes use `POST /watch/async` instead, which returns a `task_id` and can call your webhook when it finishes. See https://docs.vidnavigator.com/guides/async-jobs\n\nVideos longer than 2 hours are not accepted (`video_too_long`), except on YouTube.",
         "operationId": "watchVideo",
         "tags": [
           "Watch"
@@ -610,16 +610,6 @@
                     "format": "uri",
                     "description": "URL of the video to watch. For Instagram carousel posts and Snapchat highlights, append ?img_index=N to select a specific video.",
                     "example": "https://www.tiktok.com/@nasa/video/7300000000000000000"
-                  },
-                  "detail": {
-                    "type": "string",
-                    "enum": [
-                      "low",
-                      "auto",
-                      "high"
-                    ],
-                    "default": "auto",
-                    "description": "How closely the picture is followed. At every level a frame is taken where the picture changes, and at least one every 10 seconds; the level sets how small a change counts. `low` keeps the larger changes, `auto` is the balanced default, `high` follows faster cuts and looks at a still picture twice as often. A higher level analyzes more frames on a video whose picture changes often. On YouTube the level sets the length of a scene: about 20 seconds (`low`), 10 (`auto`) or 5 (`high`), shorter where the picture changes faster."
                   },
                   "include_transcript": {
                     "type": "boolean",
@@ -830,16 +820,6 @@
                     "format": "uri",
                     "description": "URL of the video to watch. For Instagram carousel posts and Snapchat highlights, append ?img_index=N to select a specific video.",
                     "example": "https://www.tiktok.com/@nasa/video/7300000000000000000"
-                  },
-                  "detail": {
-                    "type": "string",
-                    "enum": [
-                      "low",
-                      "auto",
-                      "high"
-                    ],
-                    "default": "auto",
-                    "description": "How closely the picture is followed. At every level a frame is taken where the picture changes, and at least one every 10 seconds; the level sets how small a change counts. `low` keeps the larger changes, `auto` is the balanced default, `high` follows faster cuts and looks at a still picture twice as often. A higher level analyzes more frames on a video whose picture changes often. On YouTube the level sets the length of a scene: about 20 seconds (`low`), 10 (`auto`) or 5 (`high`), shorter where the picture changes faster."
                   },
                   "include_transcript": {
                     "type": "boolean",
