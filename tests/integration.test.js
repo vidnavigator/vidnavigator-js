@@ -265,7 +265,7 @@ async function run() {
         assert(!!watched.transcript_error, 'watch without a transcript says why (transcript_error)');
       }
       assert(watched.usage instanceof sdk.UsageBlock, 'watch result.usage (include_usage read on the poll)');
-      assert(!!watched.usage.charge_for('frame_analysis'), 'watch usage has the frame_analysis charge');
+      assert(!!watched.usage.charge_for('watch_hour'), 'watch usage has the watch_hour charge');
     } catch (e) { fail('watch (blocking)', `${e.name}: ${e.message} task_id=${e.task_id}`); }
 
     console.log('--- watch.submit / resume (scenes only) ---');

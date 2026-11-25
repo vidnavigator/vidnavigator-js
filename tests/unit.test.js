@@ -597,6 +597,7 @@ const USAGE_DATA_JSON = {
     analysis_request: { used: 1 },
     scene_analysis_hour: { used: 0.25, unit: 'hours' },
     transcription_hour: { used: 0.5, unit: 'hours' },
+    watch_hour: { used: 1.25, unit: 'hours' },
     frame_analysis: { used: 120, unit: 'frames' },
   },
   channels_indexed: { used: 0, limit: 10, remaining: 10, percentage: 0 },
@@ -609,6 +610,7 @@ const USAGE_DATA_JSON = {
 };
 {
   const ud = sdk.UsageData.fromJSON(USAGE_DATA_JSON);
+  assert(ud.usage.watchHour instanceof sdk.ActivityCount && ud.usage.watchHour.used === 1.25 && ud.usage.watchHour.unit === 'hours', 'UsageData.usage.watchHour');
   assert(ud.usage.frameAnalysis instanceof sdk.ActivityCount && ud.usage.frameAnalysis.used === 120 && ud.usage.frameAnalysis.unit === 'frames', 'UsageData.usage.frameAnalysis');
   assert(ud.usage.sceneAnalysisHour instanceof sdk.ActivityCount && ud.usage.sceneAnalysisHour.used === 0.25 && ud.usage.sceneAnalysisHour.unit === 'hours', 'UsageData.usage.sceneAnalysisHour');
   assert(ud.usage.transcriptionHour.used === 0.5 && ud.usage.standardRequest.used === 3, 'UsageData.usage keeps the other counters');
@@ -1585,7 +1587,8 @@ async function runWatchTests() {
   const usage = {
     charges: [
       { service_type: 'standard_request', quantity: 1, credits: 1 },
-      { service_type: 'frame_analysis', quantity: 9, credits: 1 },
+      // 12.5 s of video: one started minute, in hours.
+      { service_type: 'watch_hour', quantity: 0.0167, credits: 1 },
     ],
     total_credits: 2,
   };
@@ -1609,7 +1612,8 @@ async function runWatchTests() {
   assert(res.scenes[0].on_screen_text === 'BREAKING NEWS' && res.scenes[1].on_screen_text === '', 'watch scenes on_screen_text');
   assert(res.frames_analyzed === 9, 'watch result.frames_analyzed');
   assert(res.usage instanceof sdk.UsageBlock && res.usage.total_credits === 2, 'watch result.usage');
-  assert(res.usage.charge_for('frame_analysis').quantity === 9, 'watch usage has the frame_analysis charge');
+  assert(res.usage.charge_for('watch_hour').quantity === 0.0167, 'watch usage has the watch_hour charge');
+  assert(res.usage.charge_for('frame_analysis') === undefined, 'watch usage has no frame_analysis charge');
 
   // ── every option is passed through; .submit returns a handle ──
   api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: { video_info: { title: 'T' }, scenes, frames_analyzed: 4 } }]);
@@ -1648,7 +1652,7 @@ async function runWatchTests() {
   assert(api.calls.length === beforeResume, 'watch.resume() makes no request');
   assert(resumed instanceof sdk.Job && resumed.job_type === 'watch' && resumed.task_id === 'saved-watch', 'watch.resume() returns a Job for the task_id');
   const resumedResult = await resumed.result(FAST);
-  assert(resumedResult instanceof sdk.WatchResult && resumedResult.usage.charge_for('frame_analysis').quantity === 9, 'resumed watch Job.result() with usage');
+  assert(resumedResult instanceof sdk.WatchResult && resumedResult.usage.charge_for('watch_hour').quantity === 0.0167, 'resumed watch Job.result() with usage');
 
   // ── a video without a transcript is not an error ──
   api.plan([{
@@ -1723,7 +1727,7 @@ async function runScenesTests() {
     assert(extracted.data.ingredients[0].quantity === '500 g' && extracted.video_info instanceof sdk.VideoInfo, 'extraction with scenes: data and video_info');
     assert(extracted.frames_analyzed === 30, 'extraction with scenes: frames_analyzed beside data');
     assert(!('scenes_error' in extracted) && !('transcript_error' in extracted), 'extraction with scenes: no scenes_error / transcript_error when both were read');
-    assert(extracted.usage.charge_for('frame_analysis').quantity === 30, 'extraction with scenes: usage has the frame_analysis charge');
+    assert(extracted.usage.charge_for('watch_hour').quantity === 0.0333, 'extraction with scenes: usage has the watch_hour charge');
 
     api.plan([{ task_status: 'completed', result: fx.extractedRecipe, video_info: fx.videoInfo, frames_analyzed: 0, scenes_error: { error: 'frames_not_available', message: 'This video has no picture we can read.' } }]);
     const fromTranscript = await jobs.extractVideo({ video_url: fx.VIDEO_URL, schema: fx.recipeSchema, include_scenes: true }, FAST);
@@ -1836,7 +1840,7 @@ async function runScenesTests() {
   assert(fileExtraction.frames_analyzed === 30, 'extractFileData with scenes: frames_analyzed beside data');
   assert(fileExtraction.file_info instanceof sdk.FileInfo && fileExtraction.file_info.scenes_status === 'completed', 'extractFileData with scenes: file_info.scenes_status');
   assert(!('scenes_error' in fileExtraction) && !('transcript_error' in fileExtraction), 'extractFileData with scenes: no scenes_error / transcript_error when both were read');
-  assert(fileExtraction.usage.analysis_tokens.total_tokens === 2148 && fileExtraction.usage.charge_for('frame_analysis') === undefined, 'extractFileData with scenes: the frames of a file are not charged by the extraction');
+  assert(fileExtraction.usage.analysis_tokens.total_tokens === 2148 && fileExtraction.usage.charge_for('watch_hour') === undefined, 'extractFileData with scenes: the scenes of a file are not charged by the extraction');
 
   http.on('POST /extract/file', [200, { status: 'success', data: { dish: 'Soup' }, file_info: fx.fileInfoWithoutScenes }]);
   const exPlain = await client.extractFileData({ file_id: fx.FILE_ID, schema: fx.recipeSchema });
@@ -2142,6 +2146,7 @@ async function runUsageTests() {
   };
   const usage = await client.getUsage();
   assert(usage.usage.sceneAnalysisHour.used === 0.25 && usage.usage.frameAnalysis.used === 120, 'getUsage returns frameAnalysis and sceneAnalysisHour');
+  assert(usage.usage.watchHour instanceof sdk.ActivityCount && usage.usage.watchHour.used === 1.25 && usage.usage.watchHour.unit === 'hours', 'getUsage returns watchHour');
   assert(usage.usagePeriod.start === undefined && usage.billingPeriod.end === undefined, 'getUsage: null period dates are undefined');
 }
 

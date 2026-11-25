@@ -6162,13 +6162,14 @@
                     "analysis_request",
                     "search_request",
                     "scene_analysis_hour",
-                    "frame_analysis"
+                    "frame_analysis",
+                    "watch_hour"
                   ],
                   "description": "The kind of charge."
                 },
                 "quantity": {
                   "type": "number",
-                  "description": "Net units consumed (hours for `transcription_hour`, frames for `frame_analysis`)."
+                  "description": "Net units consumed (hours for `transcription_hour` and `watch_hour`, frames for `frame_analysis`)."
                 },
                 "credits": {
                   "type": "number",
@@ -6354,7 +6355,15 @@
                     "$ref": "#/components/schemas/ActivityCount"
                   }
                 ],
-                "description": "Video frames analyzed by `/watch`"
+                "description": "Video frames analyzed: the former unit of `/watch`, replaced by `watch_hour`"
+              },
+              "watch_hour": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ActivityCount"
+                  }
+                ],
+                "description": "Hours of video watched: `/watch`, and `include_scenes` on extraction, tweet analysis and uploaded files"
               }
             }
           },
