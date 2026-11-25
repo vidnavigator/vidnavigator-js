@@ -193,7 +193,6 @@ Pass an object instead of a URL for more options:
 | Option | Type | Description |
 |---|---|---|
 | `video_url` | `string` | URL of the video (`?img_index=N` selects one video of an Instagram carousel or a Snapchat highlight) |
-| `detail` | `string` | How closely the picture is followed: `'low'`, `'auto'` (the default) or `'high'`. The number of frames depends on the video at every level: few on a fixed shot, many on a fast-cut clip. A higher level analyzes more frames when the picture changes often. |
 | `include_transcript` | `boolean` | Default `true`. `false` returns the scenes only (the result has no `transcript`). |
 | `transcript_text` | `boolean` | Return the transcript as a single string instead of segments |
 | `webhook_url` | `string` | Optional; see [Webhooks](#4-webhooks) |
@@ -203,7 +202,7 @@ The waiting options (`timeoutMs`, `include_usage`, ...) go in the second argumen
 To start it without waiting, use the handle, as for any background job:
 
 ```ts
-const job = await vn.watch.submit({ video_url: url, detail: 'high' }, { include_usage: true });
+const job = await vn.watch.submit({ video_url: url }, { include_usage: true });
 console.log(job.task_id);
 
 const watched = await job.result();                                  // waits if needed
@@ -212,7 +211,7 @@ console.log(watched.usage?.charge_for('watch_hour')?.quantity);      // hours of
 const later = vn.watch.resume(savedTaskId);                          // the same handle, later
 ```
 
-`vn.watchVideo({ video_url, detail, include_usage: true })` is the same call with `include_usage` in the payload, like `transcribeVideo()`.
+`vn.watchVideo({ video_url, include_usage: true })` is the same call with `include_usage` in the payload, like `transcribeVideo()`.
 
 Errors worth handling: `NotFoundError` with `error_code` `'frames_not_available'` (a live stream, or a clip of a few seconds, has no picture to read) and `BadRequestError` with `error_code` `'video_too_long'` (videos longer than 2 hours are not accepted, except on YouTube).
 
@@ -969,7 +968,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 
 | Method | Description |
 |--------|-------------|
-| `watch(urlOrInput, options?)` | What a video shows, scene by scene, next to its transcript. Input: `video_url`, `detail` (`'low'`, `'auto'`, `'high'`), `include_transcript`, `transcript_text`, `webhook_url`. Returns a `WatchResult`. See [Background jobs](#background-jobs) |
+| `watch(urlOrInput, options?)` | What a video shows, scene by scene, next to its transcript. Input: `video_url`, `include_transcript`, `transcript_text`, `webhook_url`. Returns a `WatchResult`. See [Background jobs](#background-jobs) |
 | `watchVideo(payload, options?)` | Same as `watch()`, with `include_usage` in the payload |
 
 ### Background jobs
@@ -1162,6 +1161,7 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 
 - **Watching is counted in hours of video.** The scenes (`watch`, and `include_scenes` on extraction, tweet analysis and uploaded files) are charged on the new `watch_hour` meter, in hours, instead of `frame_analysis`: read `usage.charge_for('watch_hour')` on a call, and `(await vn.getUsage()).usage.watchHour` (unit `'hours'`) for the period. `'watch_hour'` is added to `UsageServiceType`. Prices: see the [documentation](https://docs.vidnavigator.com/api-reference/usage-costs).
 - **`usage.frameAnalysis` stays** in `getUsage()`: it counts the scenes charged in frames earlier in the period. `frames_analyzed` is unchanged.
+- **`detail` on watch is deprecated:** the API no longer uses it and the SDK no longer sends it.
 
 ## What's new in 3.1.0
 

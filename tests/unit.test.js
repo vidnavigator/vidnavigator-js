@@ -1599,7 +1599,7 @@ async function runWatchTests() {
   api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: watched, usage }]);
   const res = await client.watch(url, { ...FAST, include_usage: true });
   assert(submits().length === 1 && submits()[0].method === 'POST', 'watch submits POST /watch/async');
-  assert(same(submits()[0].data, { video_url: url }), 'watch(url) sends video_url only (detail is left to the API default)', JSON.stringify(submits()[0].data));
+  assert(same(submits()[0].data, { video_url: url }), 'watch(url) sends video_url only', JSON.stringify(submits()[0].data));
   assert(api.last().method === 'GET' && api.last().url === '/watch/watch-1', 'watch polls GET /watch/{task_id}');
   assert(api.last().params.include_usage === 'true', 'watch sends include_usage on the poll');
   assert(api.pollsOf('watch-1') === 2, 'watch polls until completed');
@@ -1623,8 +1623,8 @@ async function runWatchTests() {
   });
   assert(api.calls.length === before + 1, 'watch.submit makes exactly one request');
   assert(
-    same(api.last().data, { video_url: url, detail: 'high', include_transcript: false, transcript_text: true, webhook_url: hook }),
-    'watch.submit passes detail / include_transcript / transcript_text / webhook_url through',
+    same(api.last().data, { video_url: url, include_transcript: false, transcript_text: true, webhook_url: hook }),
+    'watch.submit passes include_transcript / transcript_text / webhook_url through, and never the deprecated detail',
     JSON.stringify(api.last().data)
   );
   assert(job instanceof sdk.Job && job.job_type === 'watch' && job.task_id === 'watch-2', 'watch.submit returns a Job (job_type watch)');
@@ -1644,6 +1644,13 @@ async function runWatchTests() {
   api.plan([{ task_status: 'completed', result: watched }]);
   await client.watch.submit({ video_url: url, webhook_url: '' });
   assert(api.last().data.webhook_url === '', 'watch passes an empty webhook_url through');
+
+  // The deprecated detail is accepted (3.x callers keep working) but never sent, and the caller's object is left as it was.
+  api.plan([{ task_status: 'completed', result: watched }]);
+  const withDetail = { video_url: url, detail: 'auto' };
+  await client.watch.submit(withDetail);
+  assert(!('detail' in api.last().data), 'watch.submit never sends the deprecated detail', JSON.stringify(api.last().data));
+  assert(withDetail.detail === 'auto', 'watch.submit does not modify the input object');
 
   // ── resume by task_id ──
   api.addTask('saved-watch', [{ task_status: 'completed', result: watched, usage }]);
@@ -1678,7 +1685,7 @@ async function runWatchTests() {
   // ── watchVideo: the blocking method, include_usage in the payload ──
   api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: watched, usage }]);
   const viaMethod = await client.watchVideo({ video_url: url, detail: 'low', include_usage: true }, FAST);
-  assert(same(submits().pop().data, { video_url: url, detail: 'low' }), 'watchVideo submits to /watch/async without include_usage', JSON.stringify(submits().pop().data));
+  assert(same(submits().pop().data, { video_url: url }), 'watchVideo submits to /watch/async without include_usage or the deprecated detail', JSON.stringify(submits().pop().data));
   assert(api.last().params.include_usage === 'true', 'watchVideo include_usage is read from the poll');
   assert(viaMethod instanceof sdk.WatchResult && viaMethod.usage instanceof sdk.UsageBlock, 'watchVideo returns a WatchResult with usage');
 
@@ -2015,7 +2022,7 @@ async function runErrorMappingTests() {
     ['getTranscript 402', () => client.getTranscript({ video_url: 'x' }), 402, limit402, sdk.InsufficientCreditsError],
     ['uploadFile 402 (storage full)', () => client.uploadFile({ filePath: __filename }), 402, { status: 'error', error: 'storage_quota_exceeded', message: 'Storage full' }, sdk.StorageQuotaExceededError],
     ['watch.submit 429', () => client.watch.submit('https://x.com/v'), 429, jobs429, sdk.TooManyActiveJobsError],
-    ['watch submit 400 (unknown detail)', () => client.watch({ video_url: 'https://x.com/v', detail: 'extreme' }), 400, { status: 'error', error: 'invalid_parameter', message: 'detail must be one of: low, auto, high' }, sdk.BadRequestError],
+    ['watch submit 400', () => client.watch('bad'), 400, { status: 'error', error: 'invalid_parameter', message: 'Bad URL' }, sdk.BadRequestError],
     ['transcribe submit 429', () => client.transcribe('https://x.com/v'), 429, jobs429, sdk.TooManyActiveJobsError],
     ['extractVideo.submit 429', () => client.extractVideo.submit({ video_url: 'https://x.com/v', schema: {} }), 429, jobs429, sdk.TooManyActiveJobsError],
     ['tweetStatement.submit 429', () => client.tweetStatement.submit('1'), 429, jobs429, sdk.TooManyActiveJobsError],

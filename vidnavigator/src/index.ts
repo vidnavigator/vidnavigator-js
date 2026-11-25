@@ -123,17 +123,14 @@ export type TranscribeInput = {
   all_videos?: boolean;
 } & WebhookOption;
 
-/** How closely {@link VidNavigatorClient.watch} follows the picture. */
+/** @deprecated No longer used by the API; ignored. */
 export type WatchDetail = 'low' | 'auto' | 'high';
 
 /** Input for {@link VidNavigatorClient.watch}. A plain string is treated as `video_url`. */
 export type WatchInput = {
   /** `?img_index=N` selects one video of an Instagram carousel or a Snapchat highlight. */
   video_url: string;
-  /**
-   * How closely the picture is followed. Default `auto`. The number of frames depends on the
-   * video at every level; a higher level analyzes more frames when the picture changes often.
-   */
+  /** @deprecated No longer used by the API; ignored. */
   detail?: WatchDetail;
   /** Default true. `false` returns the scenes only: the result has no `transcript`. */
   include_transcript?: boolean;
@@ -458,6 +455,13 @@ function tweetStatementBody(input: string | TweetStatementInput): Record<string,
   return include_scenes === true ? { ...rest, include_scenes: true } : rest;
 }
 
+/** The body of a watch job. A deprecated `detail` is accepted but never sent: the API no longer uses it. */
+function watchBody(input: string | WatchInput): Record<string, unknown> {
+  if (typeof input === 'string') return { video_url: input };
+  const { detail: _detail, ...rest } = input;
+  return rest;
+}
+
 function buildAsyncJobParams(options?: SubmitOptions): Record<string, string> | undefined {
   // Like the TikTok pollers, the async job pollers take include_usage as a query string value.
   return options?.include_usage ? { include_usage: 'true' } : undefined;
@@ -618,8 +622,7 @@ export class VidNavigatorClient {
 
     this.watch = this.defineOperation({
       jobType: 'watch',
-      submit: (input: string | WatchInput) =>
-        this.submitAsyncJob('/watch/async', typeof input === 'string' ? { video_url: input } : input),
+      submit: (input: string | WatchInput) => this.submitAsyncJob('/watch/async', watchBody(input)),
       fetchTask: (task_id, options) =>
         this.getAsyncJob(`/watch/${encodeURIComponent(task_id)}`, options, (raw: WatchResultJSON) =>
           WatchResult.fromJSON(raw)
