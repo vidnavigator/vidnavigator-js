@@ -5,6 +5,9 @@ export type UsageServiceType =
   | 'standard_request'
   | 'residential_request'
   | 'transcription_hour'
+  // Hours of video watched: `watch`, and `include_scenes` (quantity in hours).
+  | 'watch_hour'
+  // Frames analyzed: the former unit of `watch`, replaced by `watch_hour`.
   | 'frame_analysis'
   | 'analysis_request'
   | 'search_request'
@@ -262,7 +265,12 @@ export interface UsageDataJSON {
     /** Hours of video whose scenes were analyzed (`unit: 'hours'`). */
     scene_analysis_hour?: ActivityCountJSON;
     transcription_hour?: ActivityCountJSON;
-    /** Frames analyzed by `watch` and by `include_scenes` (`unit: 'frames'`). */
+    /** Hours of video watched by `watch` and by `include_scenes` (`unit: 'hours'`). */
+    watch_hour?: ActivityCountJSON;
+    /**
+     * Frames analyzed (`unit: 'frames'`): the former unit of `watch`, replaced by `watch_hour`.
+     * Past charges of the current period still carry it.
+     */
     frame_analysis?: ActivityCountJSON;
     /** @deprecated Legacy counters below: the API no longer sends them. */
     video_scene_analyses?: ActivityCountJSON;
@@ -315,7 +323,12 @@ export class UsageData {
     /** Hours of video whose scenes were analyzed. */
     sceneAnalysisHour?: ActivityCount;
     transcriptionHour?: ActivityCount;
-    /** Frames analyzed by `watch` and by `include_scenes`. */
+    /** Hours of video watched by `watch` and by `include_scenes`. */
+    watchHour?: ActivityCount;
+    /**
+     * Frames analyzed: the former unit of `watch`, replaced by `watchHour`.
+     * Past charges of the current period still carry it.
+     */
     frameAnalysis?: ActivityCount;
     /** @deprecated Legacy counters below: the API no longer sends them, so they stay undefined. */
     videoSceneAnalyses?: ActivityCount;
@@ -359,6 +372,7 @@ export class UsageData {
       analysisRequest: data.usage.analysis_request ? ActivityCount.fromJSON(data.usage.analysis_request) : undefined,
       sceneAnalysisHour: data.usage.scene_analysis_hour ? ActivityCount.fromJSON(data.usage.scene_analysis_hour) : undefined,
       transcriptionHour: data.usage.transcription_hour ? ActivityCount.fromJSON(data.usage.transcription_hour) : undefined,
+      watchHour: data.usage.watch_hour ? ActivityCount.fromJSON(data.usage.watch_hour) : undefined,
       frameAnalysis: data.usage.frame_analysis ? ActivityCount.fromJSON(data.usage.frame_analysis) : undefined,
       videoSceneAnalyses: data.usage.video_scene_analyses ? ActivityCount.fromJSON(data.usage.video_scene_analyses) : undefined,
       videoTranscripts: data.usage.video_transcripts ? ActivityCount.fromJSON(data.usage.video_transcripts) : undefined,

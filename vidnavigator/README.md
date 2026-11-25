@@ -193,26 +193,25 @@ Pass an object instead of a URL for more options:
 | Option | Type | Description |
 |---|---|---|
 | `video_url` | `string` | URL of the video (`?img_index=N` selects one video of an Instagram carousel or a Snapchat highlight) |
-| `detail` | `string` | How closely the picture is followed: `'low'`, `'auto'` (the default) or `'high'`. The number of frames depends on the video at every level: few on a fixed shot, many on a fast-cut clip. A higher level analyzes more frames when the picture changes often. |
 | `include_transcript` | `boolean` | Default `true`. `false` returns the scenes only (the result has no `transcript`). |
 | `transcript_text` | `boolean` | Return the transcript as a single string instead of segments |
 | `webhook_url` | `string` | Optional; see [Webhooks](#4-webhooks) |
 
-The waiting options (`timeoutMs`, `include_usage`, ...) go in the second argument, as for every background job. With `include_usage: true` the result has a `usage` block; the frames are its `frame_analysis` charge.
+The waiting options (`timeoutMs`, `include_usage`, ...) go in the second argument, as for every background job. With `include_usage: true` the result has a `usage` block; the hours of video watched are its `watch_hour` charge. Prices: see the [documentation](https://docs.vidnavigator.com/api-reference/usage-costs).
 
 To start it without waiting, use the handle, as for any background job:
 
 ```ts
-const job = await vn.watch.submit({ video_url: url, detail: 'high' }, { include_usage: true });
+const job = await vn.watch.submit({ video_url: url }, { include_usage: true });
 console.log(job.task_id);
 
 const watched = await job.result();                                  // waits if needed
-console.log(watched.usage?.charge_for('frame_analysis')?.quantity);  // frames charged
+console.log(watched.usage?.charge_for('watch_hour')?.quantity);      // hours of video charged
 
 const later = vn.watch.resume(savedTaskId);                          // the same handle, later
 ```
 
-`vn.watchVideo({ video_url, detail, include_usage: true })` is the same call with `include_usage` in the payload, like `transcribeVideo()`.
+`vn.watchVideo({ video_url, include_usage: true })` is the same call with `include_usage` in the payload, like `transcribeVideo()`.
 
 Errors worth handling: `NotFoundError` with `error_code` `'frames_not_available'` (a live stream, or a clip of a few seconds, has no picture to read) and `BadRequestError` with `error_code` `'video_too_long'` (videos longer than 2 hours are not accepted, except on YouTube).
 
@@ -799,7 +798,7 @@ const { data, frames_analyzed } = await vn.extractVideoData({
 console.log(data, frames_analyzed); // quantities that are only written on screen are found too
 ```
 
-When the picture cannot be read, the fields are extracted from the transcript alone and the result has a `scenes_error`; a video without a transcript is extracted from its scenes, with a `transcript_error`. The same option works on an uploaded file, `vn.extractFileData({ file_id, schema, include_scenes: true })`, once the file has its scenes (see [Scenes of an uploaded file](#8b-scenes-of-an-uploaded-file)). With `include_usage: true`, the frames are the `frame_analysis` charge of the `usage` block: 1 credit per 2,000 frames analyzed, with at least 667 frames per hour of video; for an uploaded file the frames are charged once, when its scenes are analyzed.
+When the picture cannot be read, the fields are extracted from the transcript alone and the result has a `scenes_error`; a video without a transcript is extracted from its scenes, with a `transcript_error`. The same option works on an uploaded file, `vn.extractFileData({ file_id, schema, include_scenes: true })`, once the file has its scenes (see [Scenes of an uploaded file](#8b-scenes-of-an-uploaded-file)). With `include_usage: true`, the scenes are the `watch_hour` charge of the `usage` block. What the scenes are billed, on a video and on an uploaded file: see the [documentation](https://docs.vidnavigator.com/api-reference/usage-costs).
 
 **Schema format:** a standard JSON Schema whose root is an object, `{ type: 'object', properties: { ... } }`. Property types: `string`, `number`, `integer`, `boolean`, `array` (with `items`, the schema of one element) and `object` (with its own `properties`); `enum` restricts a property to a list of values. Give each property a `description`: it tells what to put in it. At most 10 fields per level and 3 levels of nesting. A Zod schema converted with `zod-to-json-schema` works as it is. `required` and `additionalProperties` change nothing: a field the video does not give comes back as `null`. An invalid schema is rejected with a `BadRequestError` before anything runs.
 
@@ -907,14 +906,14 @@ const usage = await vn.getUsage();
 console.log(`Credits remaining: ${usage.credits.monthly_remaining}`);
 console.log(`Transcription hours used: ${usage.usage.transcriptionHour?.used}`);
 console.log(`Standard requests used: ${usage.usage.standardRequest?.used}`);
-console.log(`Frames analyzed: ${usage.usage.frameAnalysis?.used}`);
+console.log(`Hours of video watched: ${usage.usage.watchHour?.used}`);
 console.log(`Scene analysis hours: ${usage.usage.sceneAnalysisHour?.used}`);
 console.log(`Storage: ${usage.storage.usedFormatted} / ${usage.storage.limitFormatted}`);
 console.log(`Channels indexed: ${usage.channelsIndexed.used} / ${usage.channelsIndexed.limit}`);
 console.log(`Period ends: ${usage.billingPeriod.end?.toISOString() ?? 'no subscription period'}`);
 ```
 
-`usage.usage` has one counter per meter: `standardRequest`, `residentialRequest`, `searchRequest`, `analysisRequest`, `sceneAnalysisHour`, `transcriptionHour` and `frameAnalysis`. The older `videoTranscripts`, `youtubeTranscripts`, `videoSearches`, `videoAnalyses`, `videoSceneAnalyses` and `videoUploads` are deprecated: the API no longer sends them. `usagePeriod` and `billingPeriod` have `start` and `end` as `Date`s, or `undefined` when the account has no subscription period.
+`usage.usage` has one counter per meter: `standardRequest`, `residentialRequest`, `searchRequest`, `analysisRequest`, `sceneAnalysisHour`, `transcriptionHour`, `watchHour` and `frameAnalysis`. `frameAnalysis` (unit `'frames'`) counts the scenes charged in the former unit, before `watchHour`. The older `videoTranscripts`, `youtubeTranscripts`, `videoSearches`, `videoAnalyses`, `videoSceneAnalyses` and `videoUploads` are deprecated: the API no longer sends them. `usagePeriod` and `billingPeriod` have `start` and `end` as `Date`s, or `undefined` when the account has no subscription period.
 
 ### Per-call usage
 
@@ -946,7 +945,7 @@ if (usage) {
 
 `credits_remaining_after` is the number of credits left on the account (monthly + purchased) after this request's charges. It is `undefined` on plans without a credit limit, where the API leaves it out.
 
-`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `frame_analysis`, `analysis_request`, `search_request`, `scene_analysis_hour`. LLM token counts (for `/extract/*` and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
+`service_type` is one of: `standard_request`, `residential_request`, `transcription_hour`, `watch_hour`, `analysis_request`, `search_request`, `scene_analysis_hour`. `watch_hour` replaces `frame_analysis`, the former meter of the scenes. What each meter costs: see the [documentation](https://docs.vidnavigator.com/api-reference/usage-costs). LLM token counts (for `/extract/*` and `/youtube/search`) are nested inside the `analysis_request` charge — read them via the `analysis_tokens` accessor rather than expecting flat `total_tokens`. When a charge is waived, the entry carries `waived: true` + `credits_saved`, and the block carries a top-level `waived.credits_saved`.
 
 ---
 
@@ -969,7 +968,7 @@ All methods return a `Promise`. Responses are automatically parsed into typed mo
 
 | Method | Description |
 |--------|-------------|
-| `watch(urlOrInput, options?)` | What a video shows, scene by scene, next to its transcript. Input: `video_url`, `detail` (`'low'`, `'auto'`, `'high'`), `include_transcript`, `transcript_text`, `webhook_url`. Returns a `WatchResult`. See [Background jobs](#background-jobs) |
+| `watch(urlOrInput, options?)` | What a video shows, scene by scene, next to its transcript. Input: `video_url`, `include_transcript`, `transcript_text`, `webhook_url`. Returns a `WatchResult`. See [Background jobs](#background-jobs) |
 | `watchVideo(payload, options?)` | Same as `watch()`, with `include_usage` in the payload |
 
 ### Background jobs
@@ -1157,6 +1156,12 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text; with `include_scenes`, `frames_analyzed` and `scenes_error` |
+
+## What's new in 3.2.0
+
+- **Watching is counted in hours of video.** The scenes (`watch`, and `include_scenes` on extraction, tweet analysis and uploaded files) are charged on the new `watch_hour` meter, in hours, instead of `frame_analysis`: read `usage.charge_for('watch_hour')` on a call, and `(await vn.getUsage()).usage.watchHour` (unit `'hours'`) for the period. `'watch_hour'` is added to `UsageServiceType`. Prices: see the [documentation](https://docs.vidnavigator.com/api-reference/usage-costs).
+- **`usage.frameAnalysis` stays** in `getUsage()`: it counts the scenes charged in frames earlier in the period. `frames_analyzed` is unchanged.
+- **`detail` on watch is deprecated:** the API no longer uses it and the SDK no longer sends it.
 
 ## What's new in 3.1.0
 

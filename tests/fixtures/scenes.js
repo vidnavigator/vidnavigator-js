@@ -65,7 +65,8 @@ const extractVideoUsage = {
   charges: [
     { service_type: 'standard_request', quantity: 1, credits: 1 },
     { service_type: 'transcription_hour', quantity: 0.02194444444, credits: 1 },
-    { service_type: 'frame_analysis', quantity: 30, credits: 1 },
+    // 79 s of video: two started minutes, in hours.
+    { service_type: 'watch_hour', quantity: 0.0333, credits: 1 },
     { service_type: 'analysis_request', quantity: 1, credits: 1, tokens: { prompt_tokens: 1483, completion_tokens: 790, total_tokens: 2273 } },
   ],
   total_credits: 4,

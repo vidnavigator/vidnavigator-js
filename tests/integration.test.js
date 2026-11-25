@@ -224,16 +224,7 @@ async function run() {
     assert(e.task_id === undefined, 'rejected submit has no task_id');
   }
 
-  // ── Watch: refused before a job exists (400 / 404, no credits) ──
-  console.log('--- watch (unknown detail rejected at submit) ---');
-  try {
-    await client.watch.submit({ video_url: TEST_YOUTUBE_URL, detail: 'extreme', webhook_url: '' });
-    fail('watch unknown detail throws BadRequestError');
-  } catch (e) {
-    assert(e instanceof sdk.BadRequestError, 'watch unknown detail throws BadRequestError', e && `${e.name}: ${e.message}`);
-    assert(e.task_id === undefined, 'rejected watch submit has no task_id');
-  }
-
+  // ── Watch: an unknown task is a 404 (no credits) ──
   console.log('--- watch.resume (unknown task) ---');
   try {
     await client.watch.resume('00000000-0000-0000-0000-000000000000').result();
@@ -265,12 +256,12 @@ async function run() {
         assert(!!watched.transcript_error, 'watch without a transcript says why (transcript_error)');
       }
       assert(watched.usage instanceof sdk.UsageBlock, 'watch result.usage (include_usage read on the poll)');
-      assert(!!watched.usage.charge_for('frame_analysis'), 'watch usage has the frame_analysis charge');
+      assert(!!watched.usage.charge_for('watch_hour'), 'watch usage has the watch_hour charge');
     } catch (e) { fail('watch (blocking)', `${e.name}: ${e.message} task_id=${e.task_id}`); }
 
     console.log('--- watch.submit / resume (scenes only) ---');
     try {
-      const job = await client.watch.submit({ video_url: watchUrl, detail: 'low', include_transcript: false, webhook_url: '' });
+      const job = await client.watch.submit({ video_url: watchUrl, include_transcript: false, webhook_url: '' });
       assert(job instanceof sdk.Job && job.job_type === 'watch', 'watch.submit returns a Job (job_type watch)');
       assert(typeof job.task_id === 'string' && job.task_id.length > 0, 'watch Job.task_id');
       assert(typeof job.check_status_url === 'string' && job.check_status_url.endsWith(job.task_id), 'watch Job.check_status_url');
