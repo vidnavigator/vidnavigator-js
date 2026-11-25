@@ -1562,7 +1562,6 @@
                         "internal_server_error",
                         "extraction_failed",
                         "transcription_failed",
-                        "plan_compilation_failed",
                         "schema_generation_failed"
                       ]
                     },
@@ -2373,7 +2372,7 @@
             }
           },
           "500": {
-            "description": "Processing failed (`extraction_failed`, `plan_compilation_failed`, `schema_generation_failed`, `internal_server_error`). Charges are reverted.",
+            "description": "Processing failed (`extraction_failed`, `schema_generation_failed`, `internal_server_error`). Charges are reverted.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2389,7 +2388,6 @@
                       "type": "string",
                       "enum": [
                         "extraction_failed",
-                        "plan_compilation_failed",
                         "schema_generation_failed",
                         "internal_server_error"
                       ]
