@@ -71,7 +71,7 @@ export { Job } from './jobs';
 export type { TaskStatus, PollableTask, PollOptions, JobOperation, SubmitOptions, RunOptions, JobInfo } from './jobs';
 
 /** SDK version (keep in sync with package.json) */
-export const SDK_VERSION = '3.2.0';
+export const SDK_VERSION = '3.3.0';
 
 /**
  * A LIVE room usually answers in 1-5 s, up to ~30 s when the API has to open a TikTok page, and two
@@ -259,13 +259,16 @@ export type UploadFileAcceptedResult = {
 
 export type UploadFileResult = UploadFileSuccessResult | UploadFileAcceptedResult;
 
-/** Answer of {@link VidNavigatorClient.analyzeFileScenes}. */
-export type AnalyzeFileScenesResult = {
+/** Answer of {@link VidNavigatorClient.watchFile}. */
+export type WatchFileResult = {
   file_id: string;
   /** `processing`: the analysis was started, or is already running. `completed`: the scenes are already there. */
   scenes_status: Extract<FileScenesStatus, 'processing' | 'completed'>;
   message: string;
 };
+
+/** Answer of {@link VidNavigatorClient.analyzeFileScenes}, the former name of {@link WatchFileResult}. */
+export type AnalyzeFileScenesResult = WatchFileResult;
 
 /** Answer of {@link VidNavigatorClient.getFile}. */
 export type GetFileResult = {
@@ -376,7 +379,7 @@ export type ExtractFileDataPayload = {
   /**
    * Default false. `true` extracts from the transcript of the file and its scenes together. The
    * scenes are the ones kept with the file: ask for them at the upload (`include_scenes`) or with
-   * {@link VidNavigatorClient.analyzeFileScenes}. A file that has none is refused with
+   * {@link VidNavigatorClient.watchFile}. A file that has none is refused with
    * `ScenesNotAvailableError`.
    */
   include_scenes?: boolean;
@@ -564,7 +567,7 @@ export class VidNavigatorClient {
   readonly watch: JobOperation<string | WatchInput, WatchAsyncJob, WatchResult>;
 
   /**
-   * Structured-data extraction from a video of any length, built on `POST /extract/video/async`.
+   * Structured-data extraction from a video of any length, built on `POST /extract/async`.
    * The schema is validated when you submit. With `include_scenes: true` the fields are extracted
    * from the transcript and from what the video shows. Same shapes as
    * {@link VidNavigatorClient.transcribe}.
@@ -639,7 +642,7 @@ export class VidNavigatorClient {
       submit: (input: ExtractVideoInput) => this.submitExtractVideo(input),
       fetchTask: (task_id, options) =>
         this.getAsyncJob(
-          `/extract/video/${encodeURIComponent(task_id)}`,
+          `/extract/${encodeURIComponent(task_id)}`,
           options,
           (raw) => raw as Record<string, unknown>
         ),
@@ -756,9 +759,9 @@ export class VidNavigatorClient {
       appendOptionalFormField(form, 'transcribe', input.transcribe);
       appendOptionalFormField(form, 'include_scenes', input.include_scenes);
       appendOptionalFormField(form, 'webhook_url', input.webhook_url);
-      return this.submitAsyncJob('/extract/video/async', form, form.getHeaders());
+      return this.submitAsyncJob('/extract/async', form, form.getHeaders());
     }
-    return this.submitAsyncJob('/extract/video/async', input);
+    return this.submitAsyncJob('/extract/async', input);
   }
 
   private async getAsyncJob<T>(
@@ -1130,15 +1133,17 @@ export class VidNavigatorClient {
    * `file_info.scenes_status` with {@link VidNavigatorClient.getFile}, which returns the scenes
    * once it is `completed`; `extractFileData` reads them with `include_scenes: true`.
    *
-   * An audio file has no picture: the call throws `BadRequestError` with `error_code`
-   * `frames_not_available`.
+   * Calls `POST /watch/file` with `{ file_id }`. An audio file has no picture: the call throws
+   * `BadRequestError` with `error_code` `frames_not_available`.
    */
-  async analyzeFileScenes(file_id: string): Promise<AnalyzeFileScenesResult> {
-    const response = await this.request<ApiSuccessResponse<AnalyzeFileScenesResult>>(
-      'POST',
-      `/file/${file_id}/scenes`
-    );
+  async watchFile(file_id: string): Promise<WatchFileResult> {
+    const response = await this.request<ApiSuccessResponse<WatchFileResult>>('POST', '/watch/file', { file_id });
     return response.data;
+  }
+
+  /** Alias of {@link VidNavigatorClient.watchFile}, kept for existing code: same call, same answer. */
+  async analyzeFileScenes(file_id: string): Promise<AnalyzeFileScenesResult> {
+    return this.watchFile(file_id);
   }
 
   async cancelFileUpload(
@@ -1214,7 +1219,7 @@ export class VidNavigatorClient {
   //region --- Extraction ---
   /**
    * Structured-data extraction from an online video. Blocking convenience wrapper around
-   * {@link VidNavigatorClient.extractVideo}: submits to `POST /extract/video/async` and polls, so
+   * {@link VidNavigatorClient.extractVideo}: submits to `POST /extract/async` and polls, so
    * media of any length works. The result carries the extracted `data` and the video's `video_info`.
    * With `include_scenes: true` the fields are extracted from the transcript and from what the video
    * shows, and the result also has `frames_analyzed`.
@@ -1231,7 +1236,7 @@ export class VidNavigatorClient {
    * Structured-data extraction from an uploaded file. With `include_scenes: true` the fields are
    * extracted from the transcript of the file and its scenes together, and the result has
    * `frames_analyzed`. The scenes are the ones kept with the file: ask for them at the upload
-   * (`include_scenes`) or with {@link VidNavigatorClient.analyzeFileScenes}. A file that has none
+   * (`include_scenes`) or with {@link VidNavigatorClient.watchFile}. A file that has none
    * is refused with `ScenesNotAvailableError` (HTTP 409).
    */
   async extractFileData(

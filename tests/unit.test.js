@@ -441,7 +441,7 @@ assert(sdk.AnalysisResult === undefined, 'AnalysisResult is not exported (analys
     started_at: '2026-01-01T00:00:01Z',
     completed_at: '2026-01-01T00:00:05Z',
     expires_at: '2026-01-01T01:00:05Z',
-    check_status_url: '/v1/extract/video/job-1',
+    check_status_url: '/v1/extract/job-1',
     webhook: { status: 'pending', attempts: 0 },
     result: { value: 42 },
   }, parser);
@@ -720,7 +720,7 @@ const USAGE_DATA_JSON = {
   const methods = [
     'getTranscript', 'getYouTubeTranscript', 'transcribeVideo', 'watchVideo',
     'getFiles', 'getFile', 'uploadFile', 'deleteFile', 'getFileUrl',
-    'retryFileProcessing', 'cancelFileUpload', 'analyzeFileScenes',
+    'retryFileProcessing', 'cancelFileUpload', 'watchFile', 'analyzeFileScenes',
     'getNamespaces', 'createNamespace', 'updateNamespace', 'deleteNamespace', 'updateFileNamespaces',
     'getTweetStatement',
     'extractVideoData', 'extractFileData',
@@ -940,7 +940,7 @@ async function runClientMethodTests() {
           : undefined,
       };
     }
-    if (url === '/tweet/statement' || url === '/extract/video' || url === '/transcribe' || url === '/watch') {
+    if (url === '/tweet/statement' || url === '/extract' || url === '/extract/video' || url === '/transcribe' || url === '/watch') {
       throw new Error(`SDK must never call the synchronous endpoint ${url}`);
     }
     if (method === 'POST' && url === '/tweet/statement/async') {
@@ -956,10 +956,10 @@ async function runClientMethodTests() {
         },
       };
     }
-    if (method === 'POST' && url === '/extract/video/async') {
+    if (method === 'POST' && url === '/extract/async') {
       return { status: 'success', data: { task_id: 'ex-legacy', task_status: 'processing', job_type: 'extract_video' } };
     }
-    if (method === 'GET' && url === '/extract/video/ex-legacy') {
+    if (method === 'GET' && url === '/extract/ex-legacy') {
       return {
         status: 'success',
         data: {
@@ -1058,7 +1058,8 @@ async function runClientMethodTests() {
     include_usage: true,
   });
   const submitCall = calls[callsBefore];
-  assert(submitCall.url === '/extract/video/async', 'extractVideoData submits to /extract/video/async');
+  assert(submitCall.url === '/extract/async', 'extractVideoData submits to /extract/async');
+  assert(calls[calls.length - 1].url === '/extract/ex-legacy', 'extractVideoData polls /extract/{task_id}');
   assert(videoExtraction.data.topic === 'testing', 'extractVideoData returns data from the async result');
   assert(
     videoExtraction.video_info instanceof sdk.VideoInfo && videoExtraction.video_info.title === 'Extracted video',
@@ -1084,7 +1085,7 @@ async function runClientMethodTests() {
     });
     const multipartSubmit = calls[before];
     assert(multipartExtraction.data.topic === 'testing', 'extractVideoData multipart returns data');
-    assert(multipartSubmit.url === '/extract/video/async', 'extractVideoData multipart submits to /extract/video/async');
+    assert(multipartSubmit.url === '/extract/async', 'extractVideoData multipart submits to /extract/async');
     assert(typeof multipartSubmit.data.getHeaders === 'function', 'extractVideoData multipart sends FormData');
     assert(
       multipartSubmit.extraHeaders['content-type'].startsWith('multipart/form-data'),
@@ -1200,11 +1201,11 @@ function makeFakeApi(client) {
   const usageBlock = { charges: [{ service_type: 'transcription_hour', quantity: 0.5, credits: 5 }], total_credits: 5 };
   const pollCounts = {};
 
-  const syncRoutes = ['/transcribe', '/watch', '/extract/video', '/tweet/statement'];
+  const syncRoutes = ['/transcribe', '/watch', '/extract', '/extract/video', '/tweet/statement'];
   const submitRoutes = {
     '/transcribe/async': 'transcribe',
     '/watch/async': 'watch',
-    '/extract/video/async': 'extract_video',
+    '/extract/async': 'extract_video',
     '/tweet/statement/async': 'tweet_statement',
     '/tiktok/profile': 'tiktok_profile',
     '/tiktok/search': 'tiktok_search',
@@ -1215,6 +1216,7 @@ function makeFakeApi(client) {
     calls.push({ method, url, data, params, extraHeaders });
     if (syncRoutes.includes(url)) throw new Error(`SDK must never call the synchronous endpoint ${url}`);
     if (url.startsWith('/analyze/')) throw new Error(`SDK must never call the removed endpoint ${url}`);
+    if (url.startsWith('/extract/video') || /^\/file\/[^/]+\/scenes$/.test(url)) throw new Error(`SDK must call the current path, not the former ${url}`);
 
     if (method === 'POST' && submitRoutes[url]) {
       const job_type = submitRoutes[url];
@@ -1380,7 +1382,7 @@ async function runOperationTests() {
     { video_url: 'https://youtu.be/x', schema: { type: 'object', properties: { topic: { type: 'string', description: 'Topic' } } }, transcribe: false, webhook_url: '' },
     { ...FAST, include_usage: true }
   );
-  const exSubmit = api.calls.filter((c) => c.url === '/extract/video/async').pop();
+  const exSubmit = api.calls.filter((c) => c.url === '/extract/async').pop();
   assert(exSubmit.data.schema.properties.topic.type === 'string', 'extractVideo sends schema');
   assert(exSubmit.data.transcribe === false, 'extractVideo sends transcribe');
   assert(exSubmit.data.webhook_url === '', 'extractVideo passes empty webhook_url (opt-out) through');
@@ -1388,12 +1390,18 @@ async function runOperationTests() {
   assert(ex.usage instanceof sdk.UsageBlock, 'extractVideo result.usage');
   assert(ex.video_info instanceof sdk.VideoInfo && ex.video_info.duration === 212, 'extractVideo result.video_info parsed as VideoInfo');
   assert(ex.schema === undefined, 'extractVideo result has no schema when one was sent');
+  const exPolls = api.calls.filter((c) => c.method === 'GET' && c.url.startsWith('/extract/'));
+  assert(exPolls.length === 2 && exPolls.every((c) => /^\/extract\/extract_video-\d+$/.test(c.url)), 'extractVideo polls /extract/{task_id}', exPolls.map((c) => c.url).join(','));
+  const resumedExtract = client.extractVideo.resume('saved-extract');
+  assert(resumedExtract.job_type === 'extract_video', 'extractVideo.resume() job_type is extract_video');
+  await resumedExtract.refresh().catch(() => undefined);
+  assert(api.last().method === 'GET' && api.last().url === '/extract/saved-extract', 'extractVideo.resume() polls /extract/{task_id}', api.last().url);
 
   // ── extractVideo with what_to_extract alone: the schema written comes back ──
   const written = { type: 'object', required: ['brand'], properties: { brand: { type: 'string', description: 'Brand shown' } } };
   api.plan([{ task_status: 'completed', result: { brand: 'Nike' }, schema: written }]);
   const fromText = await client.extractVideo({ video_url: 'https://youtu.be/x', what_to_extract: 'the brand shown' }, FAST);
-  const textSubmit = api.calls.filter((c) => c.url === '/extract/video/async').pop();
+  const textSubmit = api.calls.filter((c) => c.url === '/extract/async').pop();
   assert(textSubmit.data.schema === undefined, 'extractVideo with what_to_extract alone sends no schema');
   assert(textSubmit.data.what_to_extract === 'the brand shown', 'extractVideo sends what_to_extract');
   assert(fromText.data.brand === 'Nike', 'extractVideo with what_to_extract alone returns the data');
@@ -1419,7 +1427,8 @@ async function runOperationTests() {
       webhook_url: 'https://example.com/hook',
     });
     const form = api.last().data;
-    assert(api.last().url === '/extract/video/async', 'extractVideo multipart submits to /extract/video/async');
+    assert(api.last().url === '/extract/async', 'extractVideo multipart submits to /extract/async');
+    assert(exJob.job_type === 'extract_video' && exJob.check_status_url === `/v1/extract/${exJob.task_id}`, 'extractVideo Job.check_status_url is /v1/extract/{task_id}', exJob.check_status_url);
     assert(typeof form.getHeaders === 'function', 'extractVideo multipart sends FormData');
     assert(api.last().extraHeaders['content-type'].startsWith('multipart/form-data'), 'extractVideo multipart content type');
     const names = formFieldNames(form);
@@ -1727,7 +1736,7 @@ async function runScenesTests() {
   {
     const jobs = new sdk.VidNavigatorClient({ apiKey: 'test-key' });
     const api = makeFakeApi(jobs);
-    const exSubmits = () => api.calls.filter((c) => c.url === '/extract/video/async');
+    const exSubmits = () => api.calls.filter((c) => c.url === '/extract/async');
     api.plan([{ task_status: 'processing' }, { task_status: 'completed', result: fx.extractedRecipe, video_info: fx.videoInfo, frames_analyzed: 30, usage: fx.extractVideoUsage }]);
     const extracted = await jobs.extractVideoData({ video_url: fx.VIDEO_URL, schema: fx.recipeSchema, include_scenes: true, include_usage: true }, FAST);
     assert(exSubmits().pop().data.include_scenes === true && exSubmits().pop().data.include_usage === undefined, 'extractVideoData sends include_scenes on submit');
@@ -1763,8 +1772,8 @@ async function runScenesTests() {
   }
 
   // A failed extraction job asked with include_scenes.
-  http.on('POST /extract/video/async', [202, fx.extractAsyncSubmit]);
-  http.on(`GET /extract/video/${fx.EXTRACT_TASK_ID}`, [200, fx.extractAsyncFailed]);
+  http.on('POST /extract/async', [202, fx.extractAsyncSubmit]);
+  http.on(`GET /extract/${fx.EXTRACT_TASK_ID}`, [200, fx.extractAsyncFailed]);
   const tooLarge = await client.extractVideo({ video_url: fx.VIDEO_URL, schema: fx.recipeSchema, include_scenes: true }, FAST).catch((err) => err);
   assert(tooLarge instanceof sdk.BadRequestError && tooLarge.error_code === 'input_too_large', 'failed extraction job with scenes throws BadRequestError (input_too_large)', tooLarge && `${tooLarge.name}: ${tooLarge.message}`);
   assert(tooLarge.task_id === fx.EXTRACT_TASK_ID, 'failed extraction job error carries task_id');
@@ -1803,19 +1812,47 @@ async function runScenesTests() {
   assert(allScenes(file.scenes) && file.scenes.length === fx.fileScenes.length, 'getFile: scenes are VideoScene once completed');
   assert(file.scenes[3].on_screen_text === 'FRANGO DESFIADO COZIDO 500 g', 'getFile: scene on_screen_text');
 
-  // ── analyzeFileScenes ──
-  const scenesUrl = `/file/${fx.FILE_ID}/scenes`;
-  http.on(`POST ${scenesUrl}`, [202, fx.fileScenesStarted], [200, fx.fileScenesAlreadyThere]);
-  const started = await client.analyzeFileScenes(fx.FILE_ID);
-  assert(http.last().method === 'POST' && http.last().url === scenesUrl && http.last().data === undefined, 'analyzeFileScenes posts /file/{file_id}/scenes without a body');
-  assert(same(started, { file_id: fx.FILE_ID, scenes_status: 'processing', message: 'Scene analysis started.' }), 'analyzeFileScenes: started (202)', JSON.stringify(started));
-  const already = await client.analyzeFileScenes(fx.FILE_ID);
-  assert(already.scenes_status === 'completed' && already.file_id === fx.FILE_ID, 'analyzeFileScenes: already there (200)');
+  // ── watchFile: POST /watch/file with { file_id } ──
+  http.on('POST /watch/file', [202, fx.fileScenesStarted], [200, fx.fileScenesAlreadyThere]);
+  const started = await client.watchFile(fx.FILE_ID);
+  assert(http.last().method === 'POST' && http.last().url === '/watch/file', 'watchFile posts /watch/file', `${http.last().method} ${http.last().url}`);
+  assert(same(http.last().data, { file_id: fx.FILE_ID }), 'watchFile sends { file_id } as the JSON body', JSON.stringify(http.last().data));
+  assert(same(started, { file_id: fx.FILE_ID, scenes_status: 'processing', message: 'Scene analysis started.' }), 'watchFile: started (202)', JSON.stringify(started));
+  const already = await client.watchFile(fx.FILE_ID);
+  assert(already.scenes_status === 'completed' && already.file_id === fx.FILE_ID, 'watchFile: already there (200)');
 
-  http.on(`POST /file/${fx.AUDIO_FILE_ID}/scenes`, [400, fx.fileScenesNoPicture]);
-  const refused = await client.analyzeFileScenes(fx.AUDIO_FILE_ID).catch((err) => err);
-  assert(refused instanceof sdk.BadRequestError && refused.status_code === 400, 'analyzeFileScenes on an audio file throws BadRequestError', refused && `${refused.name}: ${refused.message}`);
-  assert(refused.error_code === 'frames_not_available' && refused.message.includes('no picture'), 'analyzeFileScenes on an audio file: error_code frames_not_available');
+  http.on('POST /watch/file', [400, fx.fileScenesNoPicture]);
+  const refused = await client.watchFile(fx.AUDIO_FILE_ID).catch((err) => err);
+  assert(same(http.last().data, { file_id: fx.AUDIO_FILE_ID }), 'watchFile sends the file_id it is given');
+  assert(refused instanceof sdk.BadRequestError && refused.status_code === 400, 'watchFile on an audio file throws BadRequestError', refused && `${refused.name}: ${refused.message}`);
+  assert(refused.error_code === 'frames_not_available' && refused.message.includes('no picture'), 'watchFile on an audio file: error_code frames_not_available');
+
+  http.on('POST /watch/file', [400, fx.fileScenesCancelled]);
+  const cancelled = await client.watchFile(fx.FILE_ID).catch((err) => err);
+  assert(cancelled instanceof sdk.BadRequestError && cancelled.error_code === 'file_cancelled', 'watchFile on a cancelled upload: BadRequestError file_cancelled', cancelled && `${cancelled.name}: ${cancelled.error_code}`);
+
+  http.on('POST /watch/file', [400, fx.watchFileMissingId]);
+  const missing = await client.watchFile('').catch((err) => err);
+  assert(missing instanceof sdk.BadRequestError && missing.error_code === 'missing_parameter', 'watchFile without a file_id: BadRequestError missing_parameter', missing && `${missing.name}: ${missing.error_code}`);
+
+  http.on('POST /watch/file', [404, fx.watchFileNotFound]);
+  const unknown = await client.watchFile('unknown-file').catch((err) => err);
+  assert(unknown instanceof sdk.NotFoundError && unknown.error_code === 'file_not_found', 'watchFile on an unknown file: NotFoundError file_not_found', unknown && `${unknown.name}: ${unknown.error_code}`);
+
+  // ── analyzeFileScenes: the former name, an alias of watchFile ──
+  http.on('POST /watch/file', [202, fx.fileScenesStarted]);
+  const viaAlias = await client.analyzeFileScenes(fx.FILE_ID);
+  assert(http.last().url === '/watch/file' && same(http.last().data, { file_id: fx.FILE_ID }), 'analyzeFileScenes (alias) posts /watch/file with { file_id }', `${http.last().url} ${JSON.stringify(http.last().data)}`);
+  assert(same(viaAlias, started), 'analyzeFileScenes (alias) returns what watchFile returns', JSON.stringify(viaAlias));
+  http.on('POST /watch/file', [400, fx.fileScenesNoPicture]);
+  const aliasRefused = await client.analyzeFileScenes(fx.AUDIO_FILE_ID).catch((err) => err);
+  assert(aliasRefused instanceof sdk.BadRequestError && aliasRefused.error_code === 'frames_not_available', 'analyzeFileScenes (alias) throws the errors of watchFile');
+  let forwarded;
+  client.watchFile = async (file_id) => { forwarded = file_id; return 'from watchFile'; };
+  const aliasResult = await client.analyzeFileScenes('f-alias');
+  delete client.watchFile;
+  assert(aliasResult === 'from watchFile' && forwarded === 'f-alias', 'analyzeFileScenes forwards to watchFile');
+  assert(!http.calls.some((c) => /^\/file\/[^/]+\/scenes$/.test(c.url)), 'the former POST /file/{file_id}/scenes is never called');
 
   // ── extractFileData with include_scenes: 409 until the file has its scenes ──
   http.on('POST /extract/file', [409, fx.scenesNotAvailable]);

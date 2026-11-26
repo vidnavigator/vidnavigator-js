@@ -188,7 +188,7 @@ export class TooManyActiveJobsError extends RateLimitExceededError {
 /**
  * Raised when `include_scenes` was asked on an uploaded file that has no scenes to read
  * (HTTP 409, `scenes_not_available`). `scenes_status` says where their analysis stands: `none`
- * (never asked for: start it with `analyzeFileScenes(file_id)`), `processing` (call again once
+ * (never asked for: start it with `watchFile(file_id)`), `processing` (call again once
  * `getFile()` reports `completed`) or `failed` (see `scenes_error`).
  */
 export class ScenesNotAvailableError extends VidNavigatorError {
