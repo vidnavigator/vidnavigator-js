@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "VidNavigator Developer API",
-    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\nEvery date in an answer is ISO 8601 in UTC, to the millisecond: `2026-11-23T00:06:04.123Z`.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nRequests are rate limited. Past the limit the API answers `429 rate_limit_exceeded` with a `Retry-After` header: wait that many seconds before the next call. Current limits: https://docs.vidnavigator.com/api-reference/rate-limiting\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe endpoints that transcribe a video or read its picture (`/transcribe`, `/extract/video` with `transcribe=true`, `/tweet/statement`, `/watch`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract/video` | `POST /extract/video/async` | `GET /extract/video/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n| `POST /watch` | `POST /watch/async` | `GET /watch/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints. They take videos of any length, except `POST /watch/async`, which takes up to 2 hours (any length for YouTube). See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/api-reference/errors",
+    "description": "The VidNavigator Developer API provides programmatic access to video analysis, transcription, and search capabilities.\n\nEvery date in an answer is ISO 8601 in UTC, to the millisecond: `2026-11-23T00:06:04.123Z`.\n\n## Authentication\nAll endpoints require API key authentication via the `X-API-Key` header:\n```\nX-API-Key: YOUR_API_KEY\n```\n\n## Rate Limits\nRequests are rate limited. Past the limit the API answers `429 rate_limit_exceeded` with a `Retry-After` header: wait that many seconds before the next call. Current limits: https://docs.vidnavigator.com/api-reference/rate-limiting\n\n## Pricing\nWhat each operation consumes in credits: https://docs.vidnavigator.com/api-reference/usage-costs\n\n## Long videos and async jobs\nThe endpoints that transcribe a video or read its picture (`/transcribe`, `/extract` with `transcribe=true`, `/tweet/statement`, `/watch`) run for as long as the media is long. A synchronous request holds the HTTP connection open for the whole download and transcription, which is reliable for short clips and not for long ones \u2014 clients, reverse proxies and marketplace gateways all time out.\n\n**For media longer than ~10 minutes, use the async twin of the endpoint:**\n\n| Synchronous | Async submit | Poll |\n|---|---|---|\n| `POST /transcribe` | `POST /transcribe/async` | `GET /transcribe/{task_id}` |\n| `POST /extract` | `POST /extract/async` | `GET /extract/{task_id}` |\n| `POST /tweet/statement` | `POST /tweet/statement/async` | `GET /tweet/statement/{task_id}` |\n| `POST /watch` | `POST /watch/async` | `GET /watch/{task_id}` |\n\nThe async endpoint returns `202` with a `task_id` immediately. Poll the `check_status_url` until `task_status` is `completed` or `failed`; results are retained for 1 hour after the job finishes. Polling is free.\n\nThe synchronous endpoints enforce a **10-minute** limit, rejecting longer media with `video_too_long` (HTTP 400).\n\nPast ten minutes a single HTTP connection is not a reliable way to deliver a transcription, so send long media to the async endpoints. They take videos of any length, except `POST /watch/async`, which takes up to 2 hours (any length for YouTube). See https://docs.vidnavigator.com/guides/async-jobs.\n\n## Webhooks\nRather than polling, an async job can call you back. Pass `webhook_url` on the submit request, or configure an account-level default in Studio \u2192 API; the per-request value wins, and passing `\"webhook_url\": \"\"` opts a single job out of the default.\n\nDeliveries are signed with HMAC-SHA256 in the `X-VidNavigator-Signature` header (`t=<unix_ts>,v1=<hex>`, computed over `\"{t}.{raw_body}\"` using your signing secret). Delivery is at-least-once and best effort \u2014 five attempts backing off over ~13 minutes \u2014 so make your receiver idempotent on `X-VidNavigator-Delivery` and treat polling as the source of truth.\n\n**Auto-disable:** an account-level default endpoint that fails 20 deliveries in a row over more than 72 hours is switched off automatically, and the owner is notified in Studio. Both conditions must hold, so a busy afternoon of failures will not disable a healthy endpoint and neither will two failures a week apart; a single successful delivery resets the run. While disabled, jobs still run and results are still available by polling \u2014 only the callback stops. Re-enable it in Studio \u2192 API once the receiver is fixed. A per-request `webhook_url` is never auto-disabled, because it is not stored. Full contract: https://docs.vidnavigator.com/webhooks\n\n## Error Handling\nThe API uses standard HTTP status codes and returns error responses in JSON format:\n```json\n{\n  \"status\": \"error\",\n  \"error\": \"error_type\",\n  \"message\": \"Human readable error message\"\n}\n```\nActionable errors also carry a `docs_url`. Error reference: https://docs.vidnavigator.com/api-reference/errors",
     "version": "1.0.0",
     "contact": {
       "name": "VidNavigator Support",
@@ -1039,25 +1039,34 @@
         }
       }
     },
-    "/file/{file_id}/scenes": {
+    "/watch/file": {
       "post": {
-        "summary": "Analyze the scenes of an uploaded file",
-        "description": "Start the scene analysis of a file already uploaded: what its picture shows, scene by scene, with the text readable on screen, as `POST /watch` does for an online video.\n\nThe scenes of a file are analyzed once and kept with it. Follow `file_info.scenes_status` on `GET /file/{file_id}`: it goes from `processing` to `completed` (the scenes are then in `data.scenes`) or `failed` (see `file_info.scenes_error`). `POST /extract/file` reads them when called with `include_scenes=true`.\n\nCalling it again while the analysis runs, or once it is done, starts nothing new. After a failure it starts the analysis again. A new upload can ask for its scenes directly, with `include_scenes` on `POST /upload/file`.\n\nNo request body.",
-        "operationId": "analyzeFileScenes",
+        "summary": "Watch an uploaded file",
+        "description": "Watch a file already uploaded: what its picture shows, scene by scene, with the text readable on screen, as `POST /watch` does for an online video.\n\nThe scenes of a file are analyzed once and kept with it. Follow `file_info.scenes_status` on `GET /file/{file_id}`: it goes from `processing` to `completed` (the scenes are then in `data.scenes`) or `failed` (see `file_info.scenes_error`). `POST /extract/file` reads them when called with `include_scenes=true`.\n\nCalling it again while the analysis runs, or once it is done, starts nothing new. After a failure it starts the analysis again. A new upload can ask for its scenes directly, with `include_scenes` on `POST /upload/file`.",
+        "operationId": "watchFile",
         "tags": [
           "Watch"
         ],
-        "parameters": [
-          {
-            "name": "file_id",
-            "in": "path",
-            "required": true,
-            "description": "The ID of the file to analyze",
-            "schema": {
-              "type": "string"
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file_id"
+                ],
+                "properties": {
+                  "file_id": {
+                    "type": "string",
+                    "description": "The ID of the uploaded file to watch, as returned by `POST /upload/file`.",
+                    "example": "6745a1b2c3d4e5f607182930"
+                  }
+                }
+              }
             }
           }
-        ],
+        },
         "responses": {
           "202": {
             "description": "The scene analysis was started, or is already running.",
@@ -1132,7 +1141,7 @@
             }
           },
           "400": {
-            "description": "The upload was cancelled (`file_cancelled`), or the file has no picture to read, an audio file (`frames_not_available`).",
+            "description": "`file_id` is missing (`missing_parameter`), the upload was cancelled (`file_cancelled`), or the file has no picture to read, an audio file (`frames_not_available`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1147,6 +1156,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "missing_parameter",
                         "file_cancelled",
                         "frames_not_available"
                       ]
@@ -1209,10 +1219,10 @@
         }
       }
     },
-    "/extract/video": {
+    "/extract": {
       "post": {
         "summary": "Extract structured data from online video",
-        "description": "Extract structured data from an online video, from what it says and, with `include_scenes=true`, what it shows, into the fields of a `schema` or of what `what_to_extract` describes.\n\nProvide a `video_url`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both.\n\n**Auto-transcription:** For videos without an existing transcript (a YouTube video without captions, Instagram, TikTok, Facebook...), the API automatically transcribes the video audio when `transcribe` is `true` (the default). Set `transcribe=false` to disable this behavior.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Evidence:** beside `data`, `evidence` says where each value comes from: for every field that has a value, the moments of the video it was taken from (`start` and `end`, in seconds), and whether it was said (`speech`), shown or written on screen (`picture`, with `include_scenes`) or read in the post's own text (`post`: its title, description...). Use it to check a value, or to jump to the moment in a player.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/video/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs\n\n**Scenes:** set `include_scenes=true` to also read what the video shows: the fields are then extracted from the transcript and the scenes together, and a value shown or written on screen counts as much as one that is said. With scenes, the picture is also looked at a second time with your fields in mind, so that a name on a lower third, a price on a label or a logo in a corner is read even when the scene descriptions leave it out. The response then carries `frames_analyzed`. When the picture cannot be read, the fields are extracted from the transcript alone and `scenes_error` says why. A video without a transcript is extracted from its scenes, and `transcript_error` says why the transcript is missing.",
+        "description": "Extract structured data from an online video, from what it says and, with `include_scenes=true`, what it shows, into the fields of a `schema` or of what `what_to_extract` describes.\n\nProvide a `video_url`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both.\n\n**Auto-transcription:** For videos without an existing transcript (a YouTube video without captions, Instagram, TikTok, Facebook...), the API automatically transcribes the video audio when `transcribe` is `true` (the default). Set `transcribe=false` to disable this behavior.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `video_url` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file (for example, `schema=@fact-check.yaml`). If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `video_url` takes precedence.\n\n**Evidence:** beside `data`, `evidence` says where each value comes from: for every field that has a value, the moments of the video it was taken from (`start` and `end`, in seconds), and whether it was said (`speech`), shown or written on screen (`picture`, with `include_scenes`) or read in the post's own text (`post`: its title, description...). Use it to check a value, or to jump to the moment in a player.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Long videos:** this endpoint is synchronous and holds the connection open for the whole transcription. For media longer than ~10 minutes use `POST /extract/async` instead, which returns a `task_id` and can call your webhook when it finishes. Media longer than 10 minutes is rejected here with `video_too_long` (HTTP 400). Send long media to the async endpoint, which has no cap. See https://docs.vidnavigator.com/guides/async-jobs\n\n**Scenes:** set `include_scenes=true` to also read what the video shows: the fields are then extracted from the transcript and the scenes together, and a value shown or written on screen counts as much as one that is said. With scenes, the picture is also looked at a second time with your fields in mind, so that a name on a lower third, a price on a label or a logo in a corner is read even when the scene descriptions leave it out. The response then carries `frames_analyzed`. When the picture cannot be read, the fields are extracted from the transcript alone and `scenes_error` says why. A video without a transcript is extracted from its scenes, and `transcript_error` says why the transcript is missing.",
         "operationId": "extractVideoData",
         "tags": [
           "Extraction"
@@ -1565,10 +1575,10 @@
         }
       }
     },
-    "/extract/video/async": {
+    "/extract/async": {
       "post": {
         "summary": "Extract structured data from a video asynchronously (long videos)",
-        "description": "Queue a structured-data extraction and return a `task_id` immediately.\n\n**Use this instead of `POST /extract/video` whenever `transcribe` is left on and the video may run past ~10 minutes.** The extraction itself is fast; the speech-to-text step in front of it is what makes a synchronous request time out. This endpoint has no duration cap.\n\nAccepts the same body as `POST /extract/video` \u2014 JSON, YAML and `multipart/form-data` all work here too \u2014 plus `webhook_url`. A schema is validated at submit time, so an invalid schema is rejected on the `POST`, before any transcription. Without a schema, `what_to_extract` is required and the schema written from it comes with the result.\n\n`include_usage` is not accepted here: pass it on `GET /extract/video/{task_id}` once `task_status=completed`.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time check:** the submit endpoint returns `402` instead of a `task_id` when the account has almost no credits left. A job can still fail later with `402` when the media needs more than the remaining balance. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
+        "description": "Queue a structured-data extraction and return a `task_id` immediately.\n\n**Use this instead of `POST /extract` whenever `transcribe` is left on and the video may run past ~10 minutes.** The extraction itself is fast; the speech-to-text step in front of it is what makes a synchronous request time out. This endpoint has no duration cap.\n\nAccepts the same body as `POST /extract` \u2014 JSON, YAML and `multipart/form-data` all work here too \u2014 plus `webhook_url`. A schema is validated at submit time, so an invalid schema is rejected on the `POST`, before any transcription. Without a schema, `what_to_extract` is required and the schema written from it comes with the result.\n\n`include_usage` is not accepted here: pass it on `GET /extract/{task_id}` once `task_status=completed`.\n\nSee https://docs.vidnavigator.com/guides/async-jobs\n\n**Submit-time check:** the submit endpoint returns `402` instead of a `task_id` when the account has almost no credits left. A job can still fail later with `402` when the media needs more than the remaining balance. An invalid or deactivated API key is rejected with `401`, and a key without the endpoint's permission with `403`; no task is created in either case.",
         "operationId": "extractVideoDataAsync",
         "tags": [
           "Extraction"
@@ -1929,10 +1939,10 @@
         }
       }
     },
-    "/extract/video/{task_id}": {
+    "/extract/{task_id}": {
       "get": {
         "summary": "Get async extraction result",
-        "description": "Poll an async extraction job submitted with `POST /extract/video/async`.\n\nPoll while `task_status` is `processing`; a few seconds between polls is plenty. Results are retained for 1 hour **after the job finishes**, not from submission, so a long transcription still leaves a full window to collect it.\n\nOn `completed`, `data.result` holds exactly what the synchronous endpoint would have returned in its `data` block, so the same parsing code works for both. On `failed`, `data.error` carries the synchronous endpoint's own error code and HTTP status.\n\nReading a task does **not** consume or delete it \u2014 poll and re-read the same `task_id` as often as you like until it expires.",
+        "description": "Poll an async extraction job submitted with `POST /extract/async`.\n\nPoll while `task_status` is `processing`; a few seconds between polls is plenty. Results are retained for 1 hour **after the job finishes**, not from submission, so a long transcription still leaves a full window to collect it.\n\nOn `completed`, `data.result` holds exactly what the synchronous endpoint would have returned in its `data` block, so the same parsing code works for both. On `failed`, `data.error` carries the synchronous endpoint's own error code and HTTP status.\n\nReading a task does **not** consume or delete it \u2014 poll and re-read the same `task_id` as often as you like until it expires.",
         "operationId": "getExtractVideoAsyncJob",
         "tags": [
           "Extraction"
@@ -2031,7 +2041,7 @@
     "/extract/file": {
       "post": {
         "summary": "Extract structured data from uploaded file",
-        "description": "Extract structured data from an uploaded file, from what it says and, with `include_scenes=true`, what it shows, into the fields of a `schema` or of what `what_to_extract` describes.\n\nProvide a `file_id`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both. The file must be processed and have a transcript available.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `file_id` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file. If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `file_id` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Scenes:** set `include_scenes=true` to extract from the transcript of the file and its scenes together: a value shown or written on screen counts as much as one that is said. The response then carries `frames_analyzed`. The scenes are the ones kept with the file: they are analyzed beforehand, at the upload with `include_scenes` or with `POST /file/{file_id}/scenes`. A file that has none is answered `409` (`scenes_not_available`). A file without speech is extracted from its scenes, with `transcript_error`.",
+        "description": "Extract structured data from an uploaded file, from what it says and, with `include_scenes=true`, what it shows, into the fields of a `schema` or of what `what_to_extract` describes.\n\nProvide a `file_id`, and a `schema` describing the fields to extract, `what_to_extract` saying in plain words what to extract, or both. The file must be processed and have a transcript available.\n\n**Schema format:** a standard JSON Schema whose root is an object (`{\"type\": \"object\", \"properties\": {...}}`), as produced by Pydantic or Zod. Give each property a `description`. Max 10 fields per level, max 3 nesting levels.\n\n**Without a schema:** send `what_to_extract` alone. The schema is written from it and returned as `schema` beside `data`; pass it back as `schema` to get the same fields in later requests.\n\n**Content-Type:** Accepts `application/json`, YAML (`application/yaml`, `application/x-yaml`, `text/yaml`), or `multipart/form-data`. For multipart requests, send `file_id` as a form field and `schema` as either a JSON/YAML form value or an uploaded JSON/YAML file. If the uploaded schema file contains a full request body with a nested `schema` property, the nested schema is used and the form `file_id` takes precedence.\n\n**Token usage:** Set `include_usage=true` to include prompt/completion token counts in the response.\n\n**Scenes:** set `include_scenes=true` to extract from the transcript of the file and its scenes together: a value shown or written on screen counts as much as one that is said. The response then carries `frames_analyzed`. The scenes are the ones kept with the file: they are analyzed beforehand, at the upload with `include_scenes` or with `POST /watch/file`. A file that has none is answered `409` (`scenes_not_available`). A file without speech is extracted from its scenes, with `transcript_error`.",
         "operationId": "extractFileData",
         "tags": [
           "Extraction"
@@ -2066,7 +2076,7 @@
                   "include_scenes": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /file/{file_id}/scenes`."
+                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /watch/file`."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -2103,7 +2113,7 @@
                   "include_scenes": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /file/{file_id}/scenes`."
+                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /watch/file`."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -2140,7 +2150,7 @@
                   "include_scenes": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /file/{file_id}/scenes`."
+                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /watch/file`."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -2177,7 +2187,7 @@
                   "include_scenes": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /file/{file_id}/scenes`."
+                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /watch/file`."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -2211,7 +2221,7 @@
                   "include_scenes": {
                     "type": "boolean",
                     "default": false,
-                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /file/{file_id}/scenes`."
+                    "description": "When true, the scenes kept with the file (what it shows, with the text readable on screen) are used together with its transcript. The scenes of a file are analyzed beforehand: at its upload with `include_scenes`, or with `POST /watch/file`."
                   },
                   "include_usage": {
                     "type": "boolean",
@@ -2299,7 +2309,7 @@
             }
           },
           "409": {
-            "description": "`scenes_not_available`: `include_scenes=true` was asked and the file has no scenes to read. `scenes_status` says where their analysis stands: `none` (never asked: start it with `POST /file/{file_id}/scenes`), `processing` (call again once it is `completed`) or `failed` (see `scenes_error`).",
+            "description": "`scenes_not_available`: `include_scenes=true` was asked and the file has no scenes to read. `scenes_status` says where their analysis stands: `none` (never asked: start it with `POST /watch/file`), `processing` (call again once it is `completed`) or `failed` (see `scenes_error`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4437,7 +4447,7 @@
     "/upload/file": {
       "post": {
         "summary": "Upload a file for analysis",
-        "description": "Upload a new audio or video file for analysis and start processing.\n\n**Supported formats:**\n- Video: mp4, webm, mov, avi, wmv, flv, mkv\n- Audio: m4a, mp3, mpeg, mpga, wav\n\n**Processing options:**\n- `wait_for_completion=false` (default): Returns immediately, processing happens in background\n- `wait_for_completion=true`: Waits for complete processing before returning response\n\n**Scenes:** set `include_scenes=true` to also analyze the picture of a video file (what it shows, with the text readable on screen), next to its transcription. Follow `file_info.scenes_status` on `GET /file/{file_id}`; the scenes are returned there once it is `completed`. An audio file has no picture: its `scenes_status` ends as `failed` with `frames_not_available`. For a file already uploaded, use `POST /file/{file_id}/scenes`.\n\n**Size:** files up to 500 MB. A larger file is refused with `413`.",
+        "description": "Upload a new audio or video file for analysis and start processing.\n\n**Supported formats:**\n- Video: mp4, webm, mov, avi, wmv, flv, mkv\n- Audio: m4a, mp3, mpeg, mpga, wav\n\n**Processing options:**\n- `wait_for_completion=false` (default): Returns immediately, processing happens in background\n- `wait_for_completion=true`: Waits for complete processing before returning response\n\n**Scenes:** set `include_scenes=true` to also analyze the picture of a video file (what it shows, with the text readable on screen), next to its transcription. Follow `file_info.scenes_status` on `GET /file/{file_id}`; the scenes are returned there once it is `completed`. An audio file has no picture: its `scenes_status` ends as `failed` with `frames_not_available`. For a file already uploaded, use `POST /watch/file`.\n\n**Size:** files up to 500 MB. A larger file is refused with `413`.",
         "operationId": "uploadFile",
         "tags": [
           "Files"
@@ -6123,7 +6133,7 @@
     "schemas": {
       "UsageBlock": {
         "type": "object",
-        "description": "Per-call usage, returned only when the request sets `include_usage=true`: the charges of this request, one entry per `service_type`, the total credits deducted, and the credits left on the account. A waived charge carries `waived: true` and `credits_saved`, with a top-level `waived.credits_saved` summary.\n\nFor endpoints that run an AI analysis (`/extract/video`, `/extract/file`, `/youtube/search`), the `analysis_request` entry carries a nested `tokens` object with the request's token counts.",
+        "description": "Per-call usage, returned only when the request sets `include_usage=true`: the charges of this request, one entry per `service_type`, the total credits deducted, and the credits left on the account. A waived charge carries `waived: true` and `credits_saved`, with a top-level `waived.credits_saved` summary.\n\nFor endpoints that run an AI analysis (`/extract`, `/extract/file`, `/youtube/search`), the `analysis_request` entry carries a nested `tokens` object with the request's token counts.",
         "properties": {
           "charges": {
             "type": "array",
@@ -7003,7 +7013,7 @@
                 "$ref": "#/components/schemas/VideoInfo"
               }
             ],
-            "description": "Video metadata (title, channel, duration, views, etc.). Only present for /extract/video requests."
+            "description": "Video metadata (title, channel, duration, views, etc.). Only present for `POST /extract` (an online video)."
           },
           "file_info": {
             "allOf": [
@@ -8175,7 +8185,7 @@
           },
           "result": {
             "nullable": true,
-            "description": "Present only when `task_status=completed`. Identical to the `data` block of a successful synchronous `POST /extract/video`.",
+            "description": "Present only when `task_status=completed`. Identical to the `data` block of a successful synchronous `POST /extract`.",
             "type": "object"
           },
           "video_info": {
@@ -8184,16 +8194,16 @@
                 "$ref": "#/components/schemas/VideoInfo"
               }
             ],
-            "description": "Present only when `task_status=completed`. The same `video_info` a successful synchronous `POST /extract/video` returns beside `data`."
+            "description": "Present only when `task_status=completed`. The same `video_info` a successful synchronous `POST /extract` returns beside `data`."
           },
           "frames_analyzed": {
             "type": "integer",
-            "description": "Present only when `task_status=completed` and `include_scenes=true`. The same `frames_analyzed` a successful synchronous `POST /extract/video` returns beside `data`.",
+            "description": "Present only when `task_status=completed` and `include_scenes=true`. The same `frames_analyzed` a successful synchronous `POST /extract` returns beside `data`.",
             "example": 23
           },
           "scenes_error": {
             "type": "object",
-            "description": "Present only when `task_status=completed` and `include_scenes=true`. The same `scenes_error` a successful synchronous `POST /extract/video` returns beside `data`.",
+            "description": "Present only when `task_status=completed` and `include_scenes=true`. The same `scenes_error` a successful synchronous `POST /extract` returns beside `data`.",
             "properties": {
               "error": {
                 "type": "string",
@@ -8206,7 +8216,7 @@
           },
           "transcript_error": {
             "type": "object",
-            "description": "Present only when `task_status=completed` and `include_scenes=true`. The same `transcript_error` a successful synchronous `POST /extract/video` returns beside `data`.",
+            "description": "Present only when `task_status=completed` and `include_scenes=true`. The same `transcript_error` a successful synchronous `POST /extract` returns beside `data`.",
             "properties": {
               "error": {
                 "type": "string",
@@ -8226,7 +8236,7 @@
                 "$ref": "#/components/schemas/ExtractionSchema"
               }
             ],
-            "description": "Present only when `task_status=completed` and the request had no `schema`. The same `schema` (a JSON Schema) a successful synchronous `POST /extract/video` returns beside `data`."
+            "description": "Present only when `task_status=completed` and the request had no `schema`. The same `schema` (a JSON Schema) a successful synchronous `POST /extract` returns beside `data`."
           },
           "evidence": {
             "allOf": [
@@ -8234,7 +8244,7 @@
                 "$ref": "#/components/schemas/ExtractionEvidence"
               }
             ],
-            "description": "Present when `task_status=completed`: where each value of `result` comes from, as `evidence` on `POST /extract/video`."
+            "description": "Present when `task_status=completed`: where each value of `result` comes from, as `evidence` on `POST /extract`."
           }
         }
       },
@@ -8359,7 +8369,7 @@
                     "$ref": "#/components/schemas/VideoInfo"
                   }
                 ],
-                "description": "`extract_video` jobs only: the `video_info` the synchronous `POST /extract/video` returns beside `data`. Sent even when `result_truncated` is true."
+                "description": "`extract_video` jobs only: the `video_info` the synchronous `POST /extract` returns beside `data`. Sent even when `result_truncated` is true."
               },
               "result_truncated": {
                 "type": "boolean",
