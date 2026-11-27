@@ -50,7 +50,7 @@ const recipeSchema = {
   },
 };
 
-/** The `data` of POST /extract/video with include_scenes: the quantities are only written on screen. */
+/** The `data` of POST /extract with include_scenes: the quantities are only written on screen. */
 const extractedRecipe = {
   dish: 'PATÊ DE FRANGO CREAMOSO',
   ingredients: [
@@ -72,7 +72,7 @@ const extractVideoUsage = {
   total_credits: 4,
 };
 
-/** POST /extract/video/async (202). */
+/** POST /extract/async (202). */
 const extractAsyncSubmit = {
   status: 'success',
   data: {
@@ -80,14 +80,14 @@ const extractAsyncSubmit = {
     task_status: 'processing',
     job_type: 'extract_video',
     expires_at: '2026-11-16T14:13:44.387431+00:00',
-    check_status_url: `/v1/extract/video/${EXTRACT_TASK_ID}`,
+    check_status_url: `/v1/extract/${EXTRACT_TASK_ID}`,
     webhook_url: null,
     message: 'Job started. Poll check_status_url for the result.',
     docs_url: 'https://docs.vidnavigator.com/guides/async-jobs',
   },
 };
 
-/** GET /extract/video/{task_id} of an extraction with include_scenes that failed. */
+/** GET /extract/{task_id} of an extraction with include_scenes that failed. */
 const extractAsyncFailed = {
   status: 'success',
   data: {
@@ -103,7 +103,7 @@ const extractAsyncFailed = {
     started_at: '2026-11-16T13:13:44.391000',
     completed_at: '2026-11-16T13:13:53.209000',
     expires_at: '2026-11-16T14:13:53.209000',
-    check_status_url: `/v1/extract/video/${EXTRACT_TASK_ID}`,
+    check_status_url: `/v1/extract/${EXTRACT_TASK_ID}`,
     webhook: null,
     error: { error: 'input_too_large', message: 'Video transcript is too long to process.', http_status: 400 },
   },
@@ -238,27 +238,40 @@ const getFileWithScenes = {
   },
 };
 
-/** POST /file/{file_id}/scenes (202): the analysis was started. */
+/** POST /watch/file (202): the analysis was started. Saved from its former path, which answers the same. */
 const fileScenesStarted = {
   status: 'success',
   data: { file_id: FILE_ID, scenes_status: 'processing', message: 'Scene analysis started.' },
 };
 
-/** POST /file/{file_id}/scenes (200): the scenes are already there. */
+/** POST /watch/file (200): the scenes are already there. */
 const fileScenesAlreadyThere = {
   status: 'success',
   data: { file_id: FILE_ID, scenes_status: 'completed', message: 'The scenes of this file are already available.' },
 };
 
-/** Assembled: POST /file/{file_id}/scenes on an audio file (400). */
+/** Assembled: POST /watch/file on an audio file (400). */
 const fileScenesNoPicture = { status: 'error', error_code: NO_PICTURE.error, ...NO_PICTURE };
+
+/** Assembled: POST /watch/file on an upload that was cancelled (400). */
+const fileScenesCancelled = {
+  status: 'error',
+  error: 'file_cancelled',
+  message: 'This upload was cancelled. Retry it before asking for its scenes.',
+};
+
+/** Assembled: POST /watch/file without a file_id (400). */
+const watchFileMissingId = { status: 'error', error: 'missing_parameter', message: 'file_id is required' };
+
+/** Assembled: POST /watch/file with an unknown file_id (404). */
+const watchFileNotFound = { status: 'error', error: 'file_not_found', message: 'File not found' };
 
 /** POST /extract/file with include_scenes on a file whose scenes were never asked for (409). */
 const scenesNotAvailable = {
   status: 'error',
   error: 'scenes_not_available',
   error_code: 'scenes_not_available',
-  message: `This file has no scenes yet. Start their analysis with POST /v1/file/${FILE_ID}/scenes, or upload with include_scenes, then call again.`,
+  message: `This file has no scenes yet. Start their analysis with POST /v1/watch/file {"file_id": "${FILE_ID}"}, or upload with include_scenes, then call again.`,
   scenes_status: 'none',
 };
 
@@ -276,7 +289,7 @@ const scenesFailed = {
   status: 'error',
   error: 'scenes_not_available',
   error_code: 'scenes_not_available',
-  message: `This file has no scenes yet. Start their analysis with POST /v1/file/${AUDIO_FILE_ID}/scenes, or upload with include_scenes, then call again.`,
+  message: `This file has no scenes yet. Start their analysis with POST /v1/watch/file {"file_id": "${AUDIO_FILE_ID}"}, or upload with include_scenes, then call again.`,
   scenes_status: 'failed',
   scenes_error: NO_PICTURE,
 };
@@ -337,6 +350,9 @@ module.exports = {
   fileScenesStarted,
   fileScenesAlreadyThere,
   fileScenesNoPicture,
+  fileScenesCancelled,
+  watchFileMissingId,
+  watchFileNotFound,
   scenesNotAvailable,
   scenesStillProcessing,
   scenesFailed,

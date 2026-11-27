@@ -37,7 +37,7 @@ The official JavaScript/TypeScript SDK for the [VidNavigator Developer API](http
 | Dailymotion | Yes | Yes | Yes | - |
 | Loom | Yes | Yes | Yes | - |
 | Snapchat | Yes, when Snapchat has a transcript | Yes | Yes | Yes (highlights: `img_index`, `all_videos`) |
-| Uploaded files | Yes | Yes | Yes (`include_scenes` at upload, or `analyzeFileScenes()`) | - |
+| Uploaded files | Yes | Yes | Yes (`include_scenes` at upload, or `watchFile()`) | - |
 
 > **Transcript** = fast caption/subtitle extraction. **Transcribe** = speech-to-text via AI models (works when captions are unavailable). **Watch** = what the video shows, scene by scene, next to its transcript, via `vn.watch()`. The same scenes can feed an extraction with `include_scenes: true`.
 
@@ -686,10 +686,10 @@ for (const scene of file.scenes ?? []) {
 }
 ```
 
-For a file that is already uploaded, start the same analysis with `analyzeFileScenes()`, then follow `scenes_status` in the same way:
+For a file that is already uploaded, start the same analysis with `watchFile()`, which calls `POST /v1/watch/file` with `{ file_id }` in the body, then follow `scenes_status` in the same way:
 
 ```ts
-const { scenes_status } = await vn.analyzeFileScenes(file_id);
+const { scenes_status } = await vn.watchFile(file_id);
 // 'processing': started, or already running. 'completed': the scenes are already there.
 ```
 
@@ -712,14 +712,14 @@ try {
   await vn.extractFileData({ file_id, what_to_extract: 'Every ingredient with its quantity', include_scenes: true });
 } catch (err) {
   if (err instanceof ScenesNotAvailableError && err.scenes_status === 'none') {
-    await vn.analyzeFileScenes(file_id); // then wait for scenes_status 'completed' and call again
+    await vn.watchFile(file_id); // then wait for scenes_status 'completed' and call again
   } else {
     throw err;
   }
 }
 ```
 
-An audio file has no picture. `analyzeFileScenes()` throws `BadRequestError` with `error_code` `'frames_not_available'` for it, and an audio file uploaded with `include_scenes` gets `scenes_status` `'failed'` with the same code in `file_info.scenes_error`. A file without speech is extracted from its scenes alone, and the result has a `transcript_error`.
+An audio file has no picture. `watchFile()` throws `BadRequestError` with `error_code` `'frames_not_available'` for it, and an audio file uploaded with `include_scenes` gets `scenes_status` `'failed'` with the same code in `file_info.scenes_error`. A file without speech is extracted from its scenes alone, and the result has a `transcript_error`.
 
 ### 9. Extract structured data
 
@@ -1020,7 +1020,7 @@ Completed profile tasks include `videos`; completed search tasks include `result
 | `getFiles(query?)` | List uploaded files (paginated). Filter by `status` or `namespace_id` |
 | `getFile(file_id, query?)` | Get file info and transcript, and the `scenes` of the file once `file_info.scenes_status` is `'completed'`. Pass `transcript_text: true` for plain text |
 | `uploadFile(options)` | Upload audio/video. Options: `filePath`, `wait_for_completion`, `namespace_ids`, `include_scenes` (also analyze the scenes of a video file) |
-| `analyzeFileScenes(file_id)` | Start the scene analysis of a file already uploaded. Returns `{ file_id, scenes_status, message }`, with `scenes_status` `'processing'` or `'completed'` |
+| `watchFile(file_id)` | Start the scene analysis of a file already uploaded (`POST /v1/watch/file` with `{ file_id }`). Returns `{ file_id, scenes_status, message }`, with `scenes_status` `'processing'` or `'completed'` |
 | `deleteFile(file_id)` | Delete a file |
 | `getFileUrl(file_id)` | Get a signed download URL |
 | `retryFileProcessing(file_id)` | Retry a failed processing job |
@@ -1042,7 +1042,7 @@ Completed profile tasks include `videos`; completed search tasks include `result
 
 | Method | Description |
 |--------|-------------|
-| `extractVideo(input, options?)` | Structured data from an online video of any length. Input: `video_url`, `schema` or `schemaFilePath`, `what_to_extract`, `transcribe`, `include_scenes`, `webhook_url`. Returns `{ data, video_info, frames_analyzed?, schema?, evidence?, usage? }` |
+| `extractVideo(input, options?)` | Structured data from an online video of any length, with `POST /v1/extract/async` then `GET /v1/extract/{task_id}`. Input: `video_url`, `schema` or `schemaFilePath`, `what_to_extract`, `transcribe`, `include_scenes`, `webhook_url`. Returns `{ data, video_info, frames_analyzed?, schema?, evidence?, usage? }` |
 | `extractVideoData(payload, options?)` | Same as `extractVideo()`, with the original payload shape (`include_usage` in the payload) |
 | `extractFileData(payload)` | Extract structured data from an uploaded file transcript, and from its scenes with `include_scenes`. Returns `{ data, file_info, frames_analyzed?, schema?, evidence?, usage? }`. A file that has no scenes throws `ScenesNotAvailableError` with `include_scenes` |
 
@@ -1156,6 +1156,11 @@ All API responses are parsed into typed classes with static `fromJSON()` constru
 | `TikTokLiveRoom` | A LIVE room: author, `stats.viewers`, `hashtags`, `category`, `game_tags`, `started_at` as a `Date`, and `stream_urls` (FLV / HLS by quality, audio only) |
 | `TikTokLiveRoomDetail` | A `TikTokLiveRoom` from `getTikTokLiveRoom`: `status` / `isLive`, `ended_at`, `stats.new_followers`, `author.bio`, `share_url`, `chat_enabled`, `subscribers_only`, `products` |
 | `TweetStatement` | Structured X/Twitter claim analysis, topics, entities, tone, intent, and source text; with `include_scenes`, `frames_analyzed` and `scenes_error` |
+
+## What's new in 3.3.0
+
+- **Extraction from an online video uses the API's new paths:** `POST /v1/extract/async` and `GET /v1/extract/{task_id}` (formerly `/v1/extract/video/async` and `/v1/extract/video/{task_id}`), and a job's `check_status_url` reads `/v1/extract/{task_id}`. `vn.extractVideo()`, `extractVideoData()`, the `extract_video` job type and its webhook events are unchanged.
+- **`watchFile(file_id)`** starts the scene analysis of an uploaded file with `POST /v1/watch/file` and `{ file_id }` in the body (formerly `POST /v1/file/{file_id}/scenes`). Same answer, `{ file_id, scenes_status, message }`, typed `WatchFileResult`, and the same errors. `analyzeFileScenes()` remains as an alias of `watchFile()`.
 
 ## What's new in 3.2.0
 
