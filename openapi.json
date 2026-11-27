@@ -116,7 +116,7 @@
             }
           },
           "400": {
-            "description": "Invalid request: no body (`request_body_required`), no `video_url` (`missing_parameter`), a URL this endpoint does not read (`wrong_endpoint`, `invalid_platform`, `unsupported_platform`), or a `language` that is not a 2-letter ISO code (`invalid_language`).",
+            "description": "Invalid request: no body (`request_body_required`), no `video_url` (`missing_parameter`), a URL this endpoint does not read (`wrong_endpoint`, `invalid_platform`, `unsupported_platform`), a URL of several videos, such as a channel, a playlist or a search page, instead of one video (`unsupported_url`), or a `language` that is not a 2-letter ISO code (`invalid_language`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -136,6 +136,7 @@
                         "wrong_endpoint",
                         "invalid_platform",
                         "unsupported_platform",
+                        "unsupported_url",
                         "invalid_language"
                       ]
                     },
@@ -1461,7 +1462,7 @@
             }
           },
           "400": {
-            "description": "Bad request - missing parameters, invalid schema, input too large, a url with no video (`no_videos_found`) or not from a supported platform (`unsupported_url`)",
+            "description": "Bad request - missing parameters, invalid schema, input too large, a url with no video (`no_videos_found`), or a url not from a supported platform or of several videos, such as a channel, a playlist or a search page (`unsupported_url`)",
             "content": {
               "application/json": {
                 "schema": {
